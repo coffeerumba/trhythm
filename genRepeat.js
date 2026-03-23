@@ -11,20 +11,16 @@
  *   indexes: array where indexes[i] = source index for step i (i itself if not copied)
  *   starts: hierarchy level boundaries (rhythmSize, rhythmSize*2, ...)
  */
-function genRepeat(stepsSize, rhythmSize, possibility) {
-  possibility = possibility || 0;
-  var indexes = Array(stepsSize).fill().map(function(v, i) { return i; });
-  var starts = [rhythmSize];
-  while (starts[starts.length - 1] * 2 < stepsSize) starts.push(starts[starts.length - 1] * 2);
-  for (var i = 0; i < starts.length; i++) {
-    var start = starts[i];
-    var end = i + 1 < starts.length ? starts[i + 1] : stepsSize;
-    for (var start2 = start; start2 < end; start2 += rhythmSize) {
-      var prob = (-2 / stepsSize) * start2 + (start / stepsSize * 4) + possibility;
-      if (Math.random() >= prob) continue;
-      for (var pointer = start2; pointer < Math.min(start2 + rhythmSize, end); pointer++) {
-        indexes[pointer] = indexes[pointer - start];
-      }
+function genRepeat(stepsSize, rhythmSize, possibility = 0) {
+  let indexes = Array(stepsSize).fill().map((v, i) => i);
+  let starts = [rhythmSize];
+  while (starts.at(-1) * 2 < stepsSize) starts.push(starts.at(-1) * 2);
+  for (let i = 0; i < starts.length; i++) {
+    let start = starts[i];
+    let end = i + 1 < starts.length ? starts[i + 1] : stepsSize; //Math.floor(stepsSize / rhythmSize) * rhythmSize
+    for (let start2 = start; start2 < end; start2 += rhythmSize) {
+      if (Math.random() >= (-2 / stepsSize) * start2 + (start / stepsSize * 4) + possibility) continue;
+      for (let pointer = start2; pointer < Math.min(start2 + rhythmSize, end); pointer++) indexes[pointer] = indexes[pointer - start];
     }
   }
   return { indexes: indexes, starts: starts };

@@ -70,19 +70,20 @@ header h1 {
   font-size: 16px;
   word-break: break-all;
 }
-.bpm-control {
+.bpm-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  margin: 4px 0 16px;
 }
-.bpm-control label {
+.bpm-row label {
   font-size: 16px;
   color: var(--text-muted);
+  min-width: 40px;
+  flex-shrink: 0;
 }
-.bpm-control input[type="range"] {
-  width: 200px;
-  height: 6px;
-  accent-color: var(--accent);
+.bpm-row input[type="range"] {
+  flex: 1;
 }
 
 /* --- 8bit square range sliders --- */
@@ -137,6 +138,46 @@ input[type="range"]::-moz-range-thumb {
 .inst-header.kick { color: var(--kick-color); }
 .inst-header.snare { color: var(--snare-color); }
 .inst-header.hihat { color: var(--hihat-color); }
+
+.pattern-bank {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.pattern-bank button {
+  width: 36px;
+  height: 36px;
+  border: 2px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  font-family: var(--pixel-font);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+  box-shadow: 2px 2px 0 #999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pattern-bank button:hover {
+  background: var(--border);
+}
+.pattern-bank button:active {
+  box-shadow: none;
+  transform: translate(2px, 2px);
+}
+.pattern-bank button.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  font-weight: bold;
+  box-shadow: 2px 2px 0 #999;
+}
+.pattern-bank button.has-data {
+  border-color: #666;
+  color: var(--text);
+}
 
 .param-row {
   display: flex;
@@ -261,6 +302,35 @@ input[type="range"]::-moz-range-thumb {
 }
 .btn:hover { filter: brightness(1.2); }
 .btn:active { box-shadow: none; transform: translate(3px, 3px); }
+.mode-toggle {
+  display: flex;
+}
+.mode-btn {
+  padding: 10px 14px;
+  border: 3px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  font-family: var(--pixel-font);
+  font-size: 18px;
+  cursor: pointer;
+  box-shadow: 3px 3px 0 #999;
+  letter-spacing: 1px;
+}
+.mode-btn:first-child {
+  border-right: 1px solid var(--border);
+}
+.mode-btn:last-child {
+  border-left: 1px solid var(--border);
+}
+.mode-btn:hover { filter: brightness(1.2); }
+.mode-btn:active { box-shadow: none; transform: translate(3px, 3px); }
+.mode-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  font-weight: bold;
+  box-shadow: 3px 3px 0 #999;
+}
 .btn-generate {
   background: #ddd;
   border-color: #aaa;
@@ -454,7 +524,7 @@ input[type="range"]::-moz-range-thumb {
   .app-description code { font-size: 16px; }
   .btn { padding: 8px 12px; font-size: 16px; }
   .btn-row { gap: 8px; flex-wrap: wrap; }
-  .bpm-control input[type="range"] { width: 120px; }
+  .bpm-row input[type="range"] { min-width: 0; }
   .param-label { min-width: 60px; font-size: 16px; }
   .param-value { font-size: 16px; min-width: 36px; }
   .grid-step { width: auto; min-width: 14px; height: 20px; font-size: 14px; flex-shrink: 1; }
@@ -479,18 +549,23 @@ input[type="range"]::-moz-range-thumb {
 
   <!-- Buttons -->
   <div class="btn-row">
+    <div class="mode-toggle" id="mode-toggle">
+      <button class="mode-btn active" data-mode="single">個</button>
+      <button class="mode-btn" data-mode="all">全</button>
+    </div>
     <button class="btn btn-generate" id="btn-generate">生成</button>
     <button class="btn btn-play" id="btn-play" disabled>&#9654; 再生</button>
-    <div class="bpm-control">
-      <label>BPM</label>
-      <input type="range" id="bpm" value="120" min="40" max="200" step="1">
-      <span class="param-value" id="bpm-val">120</span>
-    </div>
+  </div>
+  <div class="bpm-row">
+    <label>BPM</label>
+    <input type="range" id="bpm" value="120" min="40" max="200" step="1">
+    <span class="param-value" id="bpm-val">120</span>
   </div>
 
   <!-- Pattern display -->
   <div class="grid-section" id="grid-section">
-    <div class="inst-header">生成されたリズム</div>
+    <div class="inst-header">パターン</div>
+    <div class="pattern-bank" id="pattern-bank"></div>
     <div class="empty-msg" id="empty-msg">「生成」を押してリズムパターンを作成</div>
     <div id="pattern-display" style="display:none;">
       <div class="grid-row">
@@ -510,8 +585,8 @@ input[type="range"]::-moz-range-thumb {
 
   <!-- Default structure + Tree visualization -->
   <div class="tree-viz" id="tree-viz-wrap">
+    <div class="inst-header">既定拍構造</div>
     <div class="param-row" style="margin-bottom:10px;">
-      <span class="param-label" style="min-width:56px;">既定拍構造</span>
       <button class="btn-nav" id="struct-prev">&#9664;</button>
       <select id="default-struct" class="struct-select">
         <optgroup label="★1.0 — 均一">
@@ -930,9 +1005,100 @@ function toggleHelp(btn) {
 }
 
 /* ─── State ─── */
+var patterns = new Array(16).fill(null); // each: {kick, snare, hihat, kickDef, snareDef, hihatDef} or null
+var currentPattern = 0;
 var kickFlat = null, snareFlat = null, hihatFlat = null;
 var isPlaying = false;
 var treeCursor = null;
+var allMode = false;
+
+/* ─── Mode Toggle (個/全) ─── */
+(function() {
+  var btns = document.querySelectorAll('#mode-toggle .mode-btn');
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].addEventListener('click', function() {
+      allMode = this.dataset.mode === 'all';
+      for (var j = 0; j < btns.length; j++) {
+        btns[j].classList.toggle('active', btns[j] === this);
+      }
+    });
+  }
+})();
+
+/* ─── Pattern Bank UI ─── */
+(function() {
+  var bank = document.getElementById('pattern-bank');
+  for (var i = 0; i < 16; i++) {
+    var btn = document.createElement('button');
+    btn.textContent = i;
+    btn.dataset.index = i;
+    if (i === 0) btn.classList.add('active');
+    btn.addEventListener('click', function() {
+      var idx = parseInt(this.dataset.index);
+      if (idx === currentPattern) return;
+      switchPattern(idx);
+    });
+    bank.appendChild(btn);
+  }
+})();
+
+function switchPattern(idx) {
+  // Save current flat data back (in case of click-toggling etc.)
+  if (kickFlat) {
+    patterns[currentPattern] = {
+      kick: kickFlat, snare: snareFlat, hihat: hihatFlat,
+      kickDef: patterns[currentPattern] && patterns[currentPattern].kickDef,
+      snareDef: patterns[currentPattern] && patterns[currentPattern].snareDef,
+      hihatDef: patterns[currentPattern] && patterns[currentPattern].hihatDef
+    };
+  }
+
+  currentPattern = idx;
+
+  // Update button active state
+  var btns = document.getElementById('pattern-bank').children;
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].classList.toggle('active', i === idx);
+  }
+
+  var pat = patterns[idx];
+  if (pat) {
+    kickFlat = pat.kick;
+    snareFlat = pat.snare;
+    hihatFlat = pat.hihat;
+
+    var kickDef = pat.kickDef || getInstStructure('kick');
+    var snareDef = pat.snareDef || getInstStructure('snare');
+    var hihatDef = pat.hihatDef || getInstStructure('hihat');
+
+    renderGrid('grid-kick', kickFlat, 'on-kick', getGroupBoundaries(kickDef.tree), computeLevels(kickDef.tree));
+    renderGrid('grid-snare', snareFlat, 'on-snare', getGroupBoundaries(snareDef.tree), computeLevels(snareDef.tree));
+    renderGrid('grid-hihat', hihatFlat, 'on-hihat', getGroupBoundaries(hihatDef.tree), computeLevels(hihatDef.tree));
+
+    document.getElementById('empty-msg').style.display = 'none';
+    document.getElementById('pattern-display').style.display = '';
+    document.getElementById('btn-play').disabled = false;
+  } else {
+    kickFlat = null; snareFlat = null; hihatFlat = null;
+    document.getElementById('empty-msg').style.display = '';
+    document.getElementById('pattern-display').style.display = 'none';
+    document.getElementById('btn-play').disabled = true;
+  }
+
+  // Restart playback from the beginning if playing
+  if (isPlaying) {
+    stopPlayback();
+    if (kickFlat) startPlayback();
+    else isPlaying = false;
+  }
+}
+
+function updatePatternBankIndicators() {
+  var btns = document.getElementById('pattern-bank').children;
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].classList.toggle('has-data', patterns[i] !== null);
+  }
+}
 
 /* ─── Flatten tree to array ─── */
 function flattenTree(node) {
@@ -1320,29 +1486,44 @@ updateAllBeatsSelects();
 })();
 
 /* ─── Generate ─── */
-document.getElementById('btn-generate').addEventListener('click', function() {
+function generateForSlot(slotIndex) {
   var kickDef = getInstStructure('kick');
   var snareDef = getInstStructure('snare');
   var hihatDef = getInstStructure('hihat');
 
-  var kickTree = generateRhythm(kickDef.tree, kickDef.beatLevel, getParam('kick', 'rate'), getParam('kick', 'center'), getParam('kick', 'fidelity'));
-  var snareTree = generateRhythm(snareDef.tree, snareDef.beatLevel, getParam('snare', 'rate'), getParam('snare', 'center'), getParam('snare', 'fidelity'));
-  var hihatTree = generateRhythm(hihatDef.tree, hihatDef.beatLevel, getParam('hihat', 'rate'), getParam('hihat', 'center'), getParam('hihat', 'fidelity'));
+  var kFlat = flattenTree(generateRhythm(kickDef.tree, kickDef.beatLevel, getParam('kick', 'rate'), getParam('kick', 'center'), getParam('kick', 'fidelity')));
+  var sFlat = flattenTree(generateRhythm(snareDef.tree, snareDef.beatLevel, getParam('snare', 'rate'), getParam('snare', 'center'), getParam('snare', 'fidelity')));
+  var hFlat = flattenTree(generateRhythm(hihatDef.tree, hihatDef.beatLevel, getParam('hihat', 'rate'), getParam('hihat', 'center'), getParam('hihat', 'fidelity')));
 
-  kickFlat = flattenTree(kickTree);
-  snareFlat = flattenTree(snareTree);
-  hihatFlat = flattenTree(hihatTree);
+  patterns[slotIndex] = {
+    kick: kFlat, snare: sFlat, hihat: hFlat,
+    kickDef: kickDef, snareDef: snareDef, hihatDef: hihatDef
+  };
 
-  var kickBounds = getGroupBoundaries(kickDef.tree);
-  var snareBounds = getGroupBoundaries(snareDef.tree);
-  var hihatBounds = getGroupBoundaries(hihatDef.tree);
-  var kickLevels = computeLevels(kickDef.tree);
-  var snareLevels = computeLevels(snareDef.tree);
-  var hihatLevels = computeLevels(hihatDef.tree);
+  return { kickDef: kickDef, snareDef: snareDef, hihatDef: hihatDef };
+}
 
-  renderGrid('grid-kick', kickFlat, 'on-kick', kickBounds, kickLevels);
-  renderGrid('grid-snare', snareFlat, 'on-snare', snareBounds, snareLevels);
-  renderGrid('grid-hihat', hihatFlat, 'on-hihat', hihatBounds, hihatLevels);
+document.getElementById('btn-generate').addEventListener('click', function() {
+  if (allMode) {
+    // Generate all 16 slots
+    for (var i = 0; i < 16; i++) generateForSlot(i);
+    // Display current pattern
+    var pat = patterns[currentPattern];
+    kickFlat = pat.kick; snareFlat = pat.snare; hihatFlat = pat.hihat;
+    var kickDef = pat.kickDef, snareDef = pat.snareDef, hihatDef = pat.hihatDef;
+  } else {
+    // Generate current slot only
+    var defs = generateForSlot(currentPattern);
+    var pat = patterns[currentPattern];
+    kickFlat = pat.kick; snareFlat = pat.snare; hihatFlat = pat.hihat;
+    var kickDef = defs.kickDef, snareDef = defs.snareDef, hihatDef = defs.hihatDef;
+  }
+
+  renderGrid('grid-kick', kickFlat, 'on-kick', getGroupBoundaries(kickDef.tree), computeLevels(kickDef.tree));
+  renderGrid('grid-snare', snareFlat, 'on-snare', getGroupBoundaries(snareDef.tree), computeLevels(snareDef.tree));
+  renderGrid('grid-hihat', hihatFlat, 'on-hihat', getGroupBoundaries(hihatDef.tree), computeLevels(hihatDef.tree));
+
+  updatePatternBankIndicators();
 
   document.getElementById('empty-msg').style.display = 'none';
   document.getElementById('pattern-display').style.display = '';
@@ -1491,11 +1672,54 @@ var instPlayback = [
   { key: 'hihat', gridId: 'grid-hihat', getFlat: function() { return hihatFlat; }, play: playHihatSound }
 ];
 
+var playingAllMode = false; // true when in all-mode playback
+
+function findNextPatternIndex(fromIndex) {
+  // Find the next pattern slot with data, wrapping around
+  for (var i = 1; i <= 16; i++) {
+    var idx = (fromIndex + i) % 16;
+    if (patterns[idx]) return idx;
+  }
+  return -1; // no patterns at all
+}
+
+function loadPatternForPlayback(idx) {
+  currentPattern = idx;
+  var pat = patterns[idx];
+  kickFlat = pat.kick;
+  snareFlat = pat.snare;
+  hihatFlat = pat.hihat;
+
+  var kickDef = pat.kickDef || getInstStructure('kick');
+  var snareDef = pat.snareDef || getInstStructure('snare');
+  var hihatDef = pat.hihatDef || getInstStructure('hihat');
+
+  renderGrid('grid-kick', kickFlat, 'on-kick', getGroupBoundaries(kickDef.tree), computeLevels(kickDef.tree));
+  renderGrid('grid-snare', snareFlat, 'on-snare', getGroupBoundaries(snareDef.tree), computeLevels(snareDef.tree));
+  renderGrid('grid-hihat', hihatFlat, 'on-hihat', getGroupBoundaries(hihatDef.tree), computeLevels(hihatDef.tree));
+
+  // Update pattern bank active button
+  var btns = document.getElementById('pattern-bank').children;
+  for (var i = 0; i < btns.length; i++) btns[i].classList.toggle('active', i === idx);
+
+  document.getElementById('empty-msg').style.display = 'none';
+  document.getElementById('pattern-display').style.display = '';
+}
+
 async function startPlayback() {
   if (!toneStarted) {
     await Tone.start();
     toneStarted = true;
     initAudio();
+  }
+
+  playingAllMode = allMode;
+
+  // In all-mode, start from the first pattern that has data
+  if (playingAllMode) {
+    var firstIdx = patterns[currentPattern] ? currentPattern : findNextPatternIndex(currentPattern);
+    if (firstIdx < 0) return; // no patterns at all
+    if (firstIdx !== currentPattern) loadPatternForPlayback(firstIdx);
   }
 
   var bpm = parseInt(document.getElementById('bpm').value);
@@ -1522,8 +1746,31 @@ async function startPlayback() {
     ip.nextTime = now;
   }
 
+  var needsAdvance = false;
+
   function scheduler() {
     var lookAhead = Tone.now() + 0.1;
+
+    // Check if we need to advance to next pattern (all-mode)
+    if (needsAdvance && playingAllMode) {
+      needsAdvance = false;
+      var nextIdx = findNextPatternIndex(currentPattern);
+      if (nextIdx >= 0) {
+        loadPatternForPlayback(nextIdx);
+        // Re-initialize per-instrument state for new pattern
+        var bpm2 = parseInt(document.getElementById('bpm').value);
+        for (var j = 0; j < instPlayback.length; j++) {
+          var ip2 = instPlayback[j];
+          var def2 = getInstStructure(ip2.key);
+          var levels2 = computeLevels(def2.tree);
+          ip2.step = 0;
+          ip2.count = levels2.length;
+          var beats2 = parseInt(document.getElementById(ip2.key + '-beats').value);
+          ip2.secPerStep = 60.0 * beats2 / bpm2 / ip2.count;
+        }
+      }
+    }
+
     // Advance tree viz cursor independently
     while (treeCursor.nextTime < lookAhead) {
       // Play open hihat at the start of each cycle
@@ -1549,6 +1796,10 @@ async function startPlayback() {
         })(ip.gridId, ip.step);
         ip.nextTime += ip.secPerStep;
         ip.step = (ip.step + 1) % ip.count;
+        // In all-mode, detect cycle completion (step wrapped to 0)
+        if (playingAllMode && ip.step === 0 && i === 0) {
+          needsAdvance = true;
+        }
       }
     }
     schedulerTimer = setTimeout(scheduler, 25);
