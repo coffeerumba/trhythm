@@ -1,0 +1,1643 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>リズムジェネレーター</title>
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #d8d8d8;
+  --surface: #e8e8e8;
+  --border: #999;
+  --text: #1a1a1a;
+  --text-muted: #777;
+  --accent: #d03050;
+  --cursor: #ffcc00;
+  --kick-color: #d03050;
+  --snare-color: #2277cc;
+  --hihat-color: #559955;
+  --pixel-font: 'DotGothic16', sans-serif;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--pixel-font);
+  font-size: 18px;
+  image-rendering: pixelated;
+}
+
+#app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* --- 8bit pixel border utility --- */
+.pixel-box {
+  background: var(--surface);
+  border: 3px solid var(--border);
+  box-shadow: 3px 3px 0 #000, inset 1px 1px 0 rgba(255,255,255,0.08);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+/* --- Header --- */
+header {
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 3px dashed var(--border);
+}
+header h1 {
+  font-size: 24px;
+  color: #222;
+  text-shadow: 2px 2px 0 #ccc;
+  letter-spacing: 1px;
+}
+.app-description {
+  margin-top: 10px;
+  font-size: 16px;
+  line-height: 1.8;
+  color: var(--text-muted);
+  word-break: break-all;
+  overflow-wrap: break-word;
+}
+.app-description code {
+  font-size: 16px;
+  word-break: break-all;
+}
+.bpm-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.bpm-control label {
+  font-size: 16px;
+  color: var(--text-muted);
+}
+.bpm-control input[type="range"] {
+  width: 200px;
+  height: 6px;
+  accent-color: var(--accent);
+}
+
+/* --- 8bit square range sliders --- */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  background: var(--border);
+  border: 1px solid #777;
+}
+input[type="range"]::-moz-range-track {
+  height: 6px;
+  background: var(--border);
+  border: 1px solid #777;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  margin-top: -10px;
+  background: var(--surface);
+  border: 2px solid #555;
+  box-shadow: 1px 1px 0 #000;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  background: var(--surface);
+  border: 2px solid #555;
+  border-radius: 0;
+  box-shadow: 1px 1px 0 #000;
+}
+
+/* --- Instrument params --- */
+.inst-section {
+  background: var(--surface);
+  border: 3px solid var(--border);
+  box-shadow: 3px 3px 0 #999;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+.inst-header {
+  font-size: 18px;
+  margin-bottom: 8px;
+  text-shadow: 1px 1px 0 rgba(0,0,0,0.1);
+  letter-spacing: 1px;
+}
+.inst-header.kick { color: var(--kick-color); }
+.inst-header.snare { color: var(--snare-color); }
+.inst-header.hihat { color: var(--hihat-color); }
+
+.param-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.param-row:last-child { margin-bottom: 0; }
+.param-label {
+  font-size: 16px;
+  color: var(--text-muted);
+  min-width: 80px;
+}
+.help-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 16px;
+  font-family: var(--pixel-font);
+  background: var(--bg);
+  border: 2px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: 2px;
+  vertical-align: middle;
+}
+.help-btn:hover { background: var(--border); color: #fff; }
+.help-popup {
+  display: none;
+  background: #333;
+  color: #eee;
+  font-size: 16px;
+  font-family: var(--pixel-font);
+  padding: 8px 10px;
+  border: 2px solid #555;
+  box-shadow: 3px 3px 0 #000;
+  margin-top: 4px;
+  margin-bottom: 4px;
+  line-height: 1.6;
+}
+.help-popup.open { display: block; }
+.param-group { margin-bottom: 6px; }
+.param-group:last-child { margin-bottom: 0; }
+.param-group .param-row { margin-bottom: 0; }
+.param-row input[type="range"] {
+  flex: 1;
+  height: 6px;
+  accent-color: var(--accent);
+}
+.param-value {
+  font-size: 16px;
+  font-family: var(--pixel-font);
+  min-width: 48px;
+  text-align: right;
+}
+.param-row select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  border-radius: 0;
+  width: 50px;
+  padding: 3px 4px;
+  background: var(--bg);
+  border: 2px solid var(--border);
+  color: var(--text);
+  font-family: var(--pixel-font);
+  font-size: 16px;
+}
+.param-row .struct-select {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  padding: 4px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.param-row .beats-select {
+  width: 80px;
+  padding: 4px 6px;
+  flex-shrink: 0;
+}
+.param-row .beats-select:disabled {
+  opacity: 0.4;
+}
+.btn-nav {
+  background: var(--bg);
+  border: 2px solid var(--border);
+  box-shadow: 2px 2px 0 #999;
+  color: var(--text);
+  font-family: var(--pixel-font);
+  font-size: 18px;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.btn-nav:hover { background: var(--border); }
+.btn-nav:active { box-shadow: none; transform: translate(2px, 2px); }
+
+/* --- Buttons --- */
+.btn-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+}
+.btn {
+  padding: 10px 20px;
+  border: 3px solid;
+  font-family: var(--pixel-font);
+  font-size: 18px;
+  cursor: pointer;
+  box-shadow: 3px 3px 0 #999;
+  text-shadow: none;
+  letter-spacing: 1px;
+}
+.btn:hover { filter: brightness(1.2); }
+.btn:active { box-shadow: none; transform: translate(3px, 3px); }
+.btn-generate {
+  background: #ddd;
+  border-color: #aaa;
+  color: #222;
+}
+.btn-play {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+  min-width: 100px;
+}
+.btn-play.playing {
+  background: var(--cursor);
+  border-color: #bb9900;
+  color: #222;
+}
+
+/* --- Pattern Grid --- */
+.grid-section {
+  background: var(--surface);
+  border: 3px solid var(--border);
+  box-shadow: 3px 3px 0 #999;
+  padding: 14px;
+  margin-bottom: 14px;
+  overflow-x: auto;
+}
+.grid-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.grid-row:last-child { margin-bottom: 0; }
+.grid-label {
+  font-size: 16px;
+  min-width: 40px;
+}
+.grid-label.kick { color: var(--kick-color); }
+.grid-label.snare { color: var(--snare-color); }
+.grid-label.hihat { color: var(--hihat-color); }
+.grid-label.level { color: var(--text-muted); }
+
+.grid-steps {
+  display: flex;
+  width: 100%;
+}
+.step-cell {
+  flex: 1;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  min-width: 0;
+}
+.step-cell.bar-line {
+  margin-left: 4px;
+}
+.grid-step {
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--border);
+  background: var(--bg);
+  font-size: 16px;
+  font-family: var(--pixel-font);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.grid-step.on-kick { background: var(--kick-color); border-color: var(--kick-color); color: #fff; }
+.grid-step.on-snare { background: var(--snare-color); border-color: var(--snare-color); color: #fff; }
+.grid-step.on-hihat { background: var(--hihat-color); border-color: var(--hihat-color); color: #fff; }
+.grid-step.cursor-on { box-shadow: 0 0 0 2px var(--cursor); }
+
+/* --- Probability chart --- */
+.prob-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 2px dashed var(--border);
+  height: 90px;
+}
+.prob-bar-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 22px;
+  justify-content: flex-end;
+  height: 100%;
+}
+.prob-bar-wrap.bar-line { margin-left: 6px; }
+.prob-bar {
+  width: 12px;
+  min-height: 1px;
+}
+.prob-bar.kick { background: var(--kick-color); }
+.prob-bar.snare { background: var(--snare-color); }
+.prob-bar.hihat { background: var(--hihat-color); }
+.prob-bar.muted { background: #bbb; }
+.prob-level {
+  font-size: 16px;
+  font-family: var(--pixel-font);
+  color: var(--text-muted);
+  margin-top: 2px;
+  line-height: 1;
+}
+
+/* --- Tree visualization (tournament bracket) --- */
+.tree-viz {
+  background: var(--surface);
+  border: 3px solid var(--border);
+  box-shadow: 3px 3px 0 #999;
+  padding: 14px;
+  margin-bottom: 14px;
+  overflow-x: auto;
+}
+.tv-fork {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+.tv-arms {
+  display: flex;
+}
+.tv-arm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  padding-top: 18px;
+  padding-left: 2px;
+  padding-right: 2px;
+}
+/* Horizontal connector across sibling arms */
+.tv-arm::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  border-top: 2px solid var(--fc, #555);
+}
+.tv-arm:first-child::before { left: 50%; }
+.tv-arm:last-child::before { right: 50%; }
+.tv-arm:only-child::before { display: none; }
+/* Vertical stem from horizontal line down to child */
+.tv-arm::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: calc(50% - 1px);
+  height: 18px;
+  border-left: 2px solid var(--fc, #555);
+}
+.tv-arm:only-child::after { display: none; }
+/* Leaf group */
+.tv-leaves {
+  display: flex;
+  gap: 2px;
+  margin: 0 4px;
+}
+.tv-leaf {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-family: var(--pixel-font);
+  border: 2px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.tv-leaf.beat { color: #fff; background: var(--accent); border-color: #a02040; }
+.tv-leaf.cursor-on { box-shadow: 0 0 0 2px var(--cursor); background: rgba(255,204,0,0.4); }
+
+/* --- Empty state --- */
+.empty-msg {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 16px;
+  padding: 20px;
+  letter-spacing: 1px;
+}
+/* --- Responsive --- */
+@media (max-width: 600px) {
+  #app { padding: 10px; }
+  header h1 { font-size: 18px; }
+  .app-description { font-size: 16px; }
+  .app-description code { font-size: 16px; }
+  .btn { padding: 8px 12px; font-size: 16px; }
+  .btn-row { gap: 8px; flex-wrap: wrap; }
+  .bpm-control input[type="range"] { width: 120px; }
+  .param-label { min-width: 60px; font-size: 16px; }
+  .param-value { font-size: 16px; min-width: 36px; }
+  .grid-step { width: auto; min-width: 14px; height: 20px; font-size: 14px; flex-shrink: 1; }
+  .step-cell.bar-line { margin-left: 2px; }
+  .tv-leaf { width: 18px; height: 18px; font-size: 14px; }
+  .tv-arm { padding-top: 14px; }
+  .tv-arm::after { height: 14px; }
+  .prob-chart { gap: 2px; }
+  .prob-bar-wrap { width: auto; min-width: 8px; flex-shrink: 1; }
+  .prob-bar { width: 6px; }
+  .prob-level { font-size: 12px; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <h1>リズムジェネレーター</h1>
+    <p class="app-description">このアプリは、拍構造をもとにドラムパターンを自動生成します。拍構造は <code>[[2,2],[2,2]]</code> のようなカッコの入れ子で表され、拍の強弱が構造的に決まります。その拍構造に対して「打率・重心・忠実度」を設定することでさまざまなリズムパターンを生成します。キック・スネア・ハイハットそれぞれに違うパラメータを設定でき、拍構造も楽器ごとに変えられるので、ポリリズムやポリメーターも表現できます。</p>
+  </header>
+
+  <!-- Buttons -->
+  <div class="btn-row">
+    <button class="btn btn-generate" id="btn-generate">生成</button>
+    <button class="btn btn-play" id="btn-play" disabled>&#9654; 再生</button>
+    <div class="bpm-control">
+      <label>BPM</label>
+      <input type="range" id="bpm" value="120" min="40" max="200" step="1">
+      <span class="param-value" id="bpm-val">120</span>
+    </div>
+  </div>
+
+  <!-- Pattern display -->
+  <div class="grid-section" id="grid-section">
+    <div class="inst-header">生成されたリズム</div>
+    <div class="empty-msg" id="empty-msg">「生成」を押してリズムパターンを作成</div>
+    <div id="pattern-display" style="display:none;">
+      <div class="grid-row">
+        <span class="grid-label kick">K</span>
+        <div class="grid-steps" id="grid-kick"></div>
+      </div>
+      <div class="grid-row">
+        <span class="grid-label snare">S</span>
+        <div class="grid-steps" id="grid-snare"></div>
+      </div>
+      <div class="grid-row">
+        <span class="grid-label hihat">H</span>
+        <div class="grid-steps" id="grid-hihat"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Default structure + Tree visualization -->
+  <div class="tree-viz" id="tree-viz-wrap">
+    <div class="param-row" style="margin-bottom:10px;">
+      <span class="param-label" style="min-width:56px;">既定拍構造</span>
+      <button class="btn-nav" id="struct-prev">&#9664;</button>
+      <select id="default-struct" class="struct-select">
+        <optgroup label="★1.0 — 均一">
+          <option value="p-4">2拍子 (2レベル, 4ステップ, 2拍)</option>
+          <option value="p-6a">6/8拍子 (2レベル, 6ステップ, 2拍)</option>
+          <option value="p-6b">3拍子 (2レベル, 6ステップ, 3拍)</option>
+          <option value="p-8">8ビート (3レベル, 8ステップ, 4拍)</option>
+          <option value="p-9">9/8拍子 (2レベル, 9ステップ, 3拍)</option>
+          <option value="p-12a">12/8拍子 (3レベル, 12ステップ, 4拍)</option>
+          <option value="p-12b">6拍子 (3レベル, 12ステップ, 6拍)</option>
+          <option value="p-12c">6拍子B (3レベル, 12ステップ, 6拍)</option>
+          <option value="p-16" selected>16ビート (4レベル, 16ステップ, 4拍)</option>
+          <option value="p-18a">6拍3連 (3レベル, 18ステップ, 6拍)</option>
+          <option value="p-18b">6拍3連B (3レベル, 18ステップ, 6拍)</option>
+          <option value="p-18c">9拍子 (3レベル, 18ステップ, 9拍)</option>
+          <option value="p-24a">12/8 ×2 (4レベル, 24ステップ, 4拍)</option>
+          <option value="p-24b">6拍子 ×2 (4レベル, 24ステップ, 4拍)</option>
+          <option value="p-24c">6拍子B ×2 (4レベル, 24ステップ, 6拍)</option>
+          <option value="p-24d">8ビート ×3 (4レベル, 24ステップ, 6拍)</option>
+          <option value="p-27">9拍3連 (3レベル, 27ステップ, 9拍)</option>
+          <option value="p-32">32ビート (5レベル, 32ステップ, 8拍)</option>
+        </optgroup>
+        <optgroup label="★0.67 — 不均一">
+          <option value="u-5a">5/8(2+3) (2レベル, 5ステップ, 2拍)</option>
+          <option value="u-5b">5/8(3+2) (2レベル, 5ステップ, 2拍)</option>
+          <option value="u-7a">7/8(2+2+3) (2レベル, 7ステップ, 3拍)</option>
+          <option value="u-7b">7/8(2+3+2) (2レベル, 7ステップ, 3拍)</option>
+          <option value="u-7c">7/8(3+2+2) (2レベル, 7ステップ, 3拍)</option>
+          <option value="u-8a">トレシーロ (2レベル, 8ステップ, 3拍)</option>
+          <option value="u-8b">逆トレシーロ (2レベル, 8ステップ, 3拍)</option>
+          <option value="u-8c">8/8(3+2+3) (2レベル, 8ステップ, 3拍)</option>
+          <option value="u-10a">10/8(2+3) ×2 (3レベル, 10ステップ, 4拍)</option>
+          <option value="u-10b">10/8(3+2) ×2 (3レベル, 10ステップ, 4拍)</option>
+          <option value="u-16a">トレシーロ ×2 (3レベル, 16ステップ, 6拍)</option>
+          <option value="u-16b">逆トレシーロ ×2 (3レベル, 16ステップ, 6拍)</option>
+          <option value="u-16c">8/8(3+2+3) ×2 (3レベル, 16ステップ, 6拍)</option>
+          <option value="u-20a">4+6拍子 (4レベル, 20ステップ, 5拍)</option>
+          <option value="u-32a">トレシーロ ×4 (4レベル, 32ステップ, 4拍)</option>
+          <option value="u-32b">トレシーロ+逆 (4レベル, 32ステップ, 4拍)</option>
+        </optgroup>
+        <optgroup label="★0.5 — 混合均一">
+          <option value="m-12a">ヘミオラ (3レベル, 12ステップ, 5拍)</option>
+          <option value="m-12b">逆ヘミオラ (3レベル, 12ステップ, 5拍)</option>
+          <option value="m-18">ヘミオラ挟み (3レベル, 18ステップ, 7拍)</option>
+        </optgroup>
+        <optgroup label="★0.33 — 混合不均一">
+          <option value="x-9">4+5拍 (3レベル, 9ステップ, 4拍)</option>
+          <option value="x-10a">4+6拍 (3レベル, 10ステップ, 4拍)</option>
+          <option value="x-10b">6+4拍 (3レベル, 10ステップ, 4拍)</option>
+          <option value="x-10c">4+6拍B (3レベル, 10ステップ, 5拍)</option>
+          <option value="x-14">6+8拍 (3レベル, 14ステップ, 5拍)</option>
+          <option value="x-15">6+9拍 (3レベル, 15ステップ, 5拍)</option>
+          <option value="x-16a">9+7拍 (3レベル, 16ステップ, 6拍)</option>
+          <option value="x-16b">6+6+4拍 (3レベル, 16ステップ, 6拍)</option>
+        </optgroup>
+      </select>
+      <button class="btn-nav" id="struct-next">&#9654;</button>
+    </div>
+    <div id="tree-struct-label" style="text-align:center; font-size:16px; font-family:var(--pixel-font); color:var(--text-muted); margin-bottom:10px;"></div>
+    <div style="display:flex;"><div id="tree-viz" style="margin:0 auto;"></div></div>
+  </div>
+
+  <!-- Kick -->
+  <div class="inst-section">
+    <div class="inst-header kick">Kick</div>
+    <div class="param-group">
+    <div class="param-row">
+      <span class="param-label">拍構造<button class="help-btn" onclick="toggleHelp(this)">?</button></span>
+      <select id="kick-struct" class="struct-select">
+        <option value="default" selected>既定</option>
+        <optgroup label="★1.0 — 均一">
+          <option value="p-4">2拍子 (2レベル, 4ステップ, 2拍)</option>
+          <option value="p-6a">6/8拍子 (2レベル, 6ステップ, 2拍)</option>
+          <option value="p-6b">3拍子 (2レベル, 6ステップ, 3拍)</option>
+          <option value="p-8">8ビート (3レベル, 8ステップ, 4拍)</option>
+          <option value="p-9">9/8拍子 (2レベル, 9ステップ, 3拍)</option>
+          <option value="p-12a">12/8拍子 (3レベル, 12ステップ, 4拍)</option>
+          <option value="p-12b">6拍子 (3レベル, 12ステップ, 6拍)</option>
+          <option value="p-12c">6拍子B (3レベル, 12ステップ, 6拍)</option>
+          <option value="p-16">16ビート (4レベル, 16ステップ, 4拍)</option>
+          <option value="p-18a">6拍3連 (3レベル, 18ステップ, 6拍)</option>
+          <option value="p-18b">6拍3連B (3レベル, 18ステップ, 6拍)</option>
+          <option value="p-18c">9拍子 (3レベル, 18ステップ, 9拍)</option>
+          <option value="p-24a">12/8 ×2 (4レベル, 24ステップ, 4拍)</option>
+          <option value="p-24b">6拍子 ×2 (4レベル, 24ステップ, 4拍)</option>
+          <option value="p-24c">6拍子B ×2 (4レベル, 24ステップ, 6拍)</option>
+          <option value="p-24d">8ビート ×3 (4レベル, 24ステップ, 6拍)</option>
+          <option value="p-27">9拍3連 (3レベル, 27ステップ, 9拍)</option>
+          <option value="p-32">32ビート (5レベル, 32ステップ, 8拍)</option>
+        </optgroup>
+        <optgroup label="★0.67 — 不均一">
+          <option value="u-5a">5/8(2+3) (2レベル, 5ステップ, 2拍)</option>
+          <option value="u-5b">5/8(3+2) (2レベル, 5ステップ, 2拍)</option>
+          <option value="u-7a">7/8(2+2+3) (2レベル, 7ステップ, 3拍)</option>
+          <option value="u-7b">7/8(2+3+2) (2レベル, 7ステップ, 3拍)</option>
+          <option value="u-7c">7/8(3+2+2) (2レベル, 7ステップ, 3拍)</option>
+          <option value="u-8a">トレシーロ (2レベル, 8ステップ, 3拍)</option>
+          <option value="u-8b">逆トレシーロ (2レベル, 8ステップ, 3拍)</option>
+          <option value="u-8c">8/8(3+2+3) (2レベル, 8ステップ, 3拍)</option>
+          <option value="u-10a">10/8(2+3) ×2 (3レベル, 10ステップ, 4拍)</option>
+          <option value="u-10b">10/8(3+2) ×2 (3レベル, 10ステップ, 4拍)</option>
+          <option value="u-16a">トレシーロ ×2 (3レベル, 16ステップ, 6拍)</option>
+          <option value="u-16b">逆トレシーロ ×2 (3レベル, 16ステップ, 6拍)</option>
+          <option value="u-16c">8/8(3+2+3) ×2 (3レベル, 16ステップ, 6拍)</option>
+          <option value="u-20a">4+6拍子 (4レベル, 20ステップ, 5拍)</option>
+          <option value="u-32a">トレシーロ ×4 (4レベル, 32ステップ, 4拍)</option>
+          <option value="u-32b">トレシーロ+逆 (4レベル, 32ステップ, 4拍)</option>
+        </optgroup>
+        <optgroup label="★0.5 — 混合均一">
+          <option value="m-12a">ヘミオラ (3レベル, 12ステップ, 5拍)</option>
+          <option value="m-12b">逆ヘミオラ (3レベル, 12ステップ, 5拍)</option>
+          <option value="m-18">ヘミオラ挟み (3レベル, 18ステップ, 7拍)</option>
+        </optgroup>
+        <optgroup label="★0.33 — 混合不均一">
+          <option value="x-9">4+5拍 (3レベル, 9ステップ, 4拍)</option>
+          <option value="x-10a">4+6拍 (3レベル, 10ステップ, 4拍)</option>
+          <option value="x-10b">6+4拍 (3レベル, 10ステップ, 4拍)</option>
+          <option value="x-10c">4+6拍B (3レベル, 10ステップ, 5拍)</option>
+          <option value="x-14">6+8拍 (3レベル, 14ステップ, 5拍)</option>
+          <option value="x-15">6+9拍 (3レベル, 15ステップ, 5拍)</option>
+          <option value="x-16a">9+7拍 (3レベル, 16ステップ, 6拍)</option>
+          <option value="x-16b">6+6+4拍 (3レベル, 16ステップ, 6拍)</option>
+        </optgroup>
+      </select>
+      <select id="kick-beats" class="beats-select" disabled>
+        <option value="4" selected>4拍</option>
+      </select>
+    </div>
+    <div class="help-popup">楽器ごとに拍構造を変えられます。「既定」を選ぶと既定拍構造を使います。異なる拍構造を選ぶと拍数が変わり、「非同期」でポリメーター再生ができます。</div>
+    </div>
+    <div class="param-group">
+    <div class="param-row">
+      <span class="param-label">打率<button class="help-btn" onclick="toggleHelp(this)">?</button></span>
+      <input type="range" id="kick-rate" min="0" max="1" step="0.01" value="0.50">
+      <span class="param-value" id="kick-rate-val">0.50</span>
+    </div>
+    <div class="help-popup">各ステップを鳴らすかどうかの確率です。全ステップに対して独立にコイントスするので、同じ設定でも生成のたびに結果が変わります。0なら全ミュート、0.5なら平均して拍数ぶん鳴り、1なら全ステップが鳴ります。</div>
+    </div>
+    <div class="param-group">
+    <div class="param-row">
+      <span class="param-label">重心<button class="help-btn" onclick="toggleHelp(this)">?</button></span>
+      <input type="range" id="kick-center" min="0" max="1" step="0.01" value="0.00">
+      <span class="param-value" id="kick-center-val">0.00</span>
+    </div>
+    <div class="help-popup">音を鳴らす位置の傾向を決めます。0で最も強い拍（1拍目など）に集中し、1で最も弱い拍（裏拍）に集中します。0.5はその中間で、拍レベルの位置をピークに表拍側も裏拍側も均等に落ちます。</div>
+    </div>
+    <div class="param-group">
+    <div class="param-row">
+      <span class="param-label">忠実度<button class="help-btn" onclick="toggleHelp(this)">?</button></span>
+      <input type="range" id="kick-fidelity" min="0" max="1" step="0.01" value="0.75">
+      <span class="param-value" id="kick-fidelity-val">0.75</span>
+    </div>
+    <div class="help-popup">拍構造にどれだけ忠実にパターンを生成するかを決めます。1だと重みの高い位置から順に確実に選ばれ、0だとどの位置が選ばれるか完全にランダムになります。中間値でほどよい揺らぎが生まれます。</div>
+    </div>
+    <div class="prob-chart" id="prob-kick"></div>
+  </div>
+
+  <!-- Snare -->
+  <div class="inst-section">
+    <div class="inst-header snare">Snare</div>
+    <div class="param-group">
+    <div class="param-row">
+      <span class="param-label">拍構造<button class="help-btn" onclick="toggleHelp(this)">?</button></span>
+      <select id="snare-struct" class="struct-select">
+        <option value="default" selected>既定</option>
+        <optgroup label="★1.0 — 均一">
+          <option value="p-4">2拍子 (2レベル, 4ステップ, 2拍)</option>
+          <option value="p-6a">6/8拍子 (2レベル, 6ステップ, 2拍)</option>
+          <option value="p-6b">3拍子 (2レベル, 6ステップ, 3拍)</option>
+          <option value="p-8">8ビート (3レベル, 8ステップ, 4拍)</option>
+          <option value="p-9">9/8拍子 (2レベル, 9ステップ, 3拍)</option>
+          <option value="p-12a">12/8拍子 (3レベル, 12ステップ, 4拍)</option>
+          <option value="p-12b">6拍子 (3レベル, 12ステップ, 6拍)</option>
+          <option value="p-12c">6拍子B (3レベル, 12ステップ, 6拍)</option>
+          <option value="p-16">16ビート (4レベル, 16ステップ, 4拍)</option>
+          <option value="p-18a">6拍3連 (3レベル, 18ステップ, 6拍)</option>
+          <option value="p-18b">6拍3連B (3レベル, 18ステップ, 6拍)</option>
+          <option value="p-18c">9拍子 (3レベル, 18ステップ, 9拍)</option>
+          <option value="p-24a">12/8 ×2 (4レベル, 24ステップ, 4拍)</option>
+          <option value="p-24b">6拍子 ×2 (4レベル, 24ステップ, 4拍)</option>
+          <option value="p-24c">6拍子B ×2 (4レベル, 24ステップ, 6拍)</option>
+          <option value="p-24d">8ビート ×3 (4レベル, 24ステップ, 6拍)</option>
+          <option value="p-27">9拍3連 (3レベル, 27ステップ, 9拍)</option>
+          <option value="p-32">32ビート (5レベル, 32ステップ, 8拍)</option>
+        </optgroup>
+        <optgroup label="★0.67 — 不均一">
+          <option value="u-5a">5/8(2+3) (2レベル, 5ステップ, 2拍)</option>
+          <option value="u-5b">5/8(3+2) (2レベル, 5ステップ, 2拍)</option>
+          <option value="u-7a">7/8(2+2+3) (2レベル, 7ステップ, 3拍)</option>
+          <option value="u-7b">7/8(2+3+2) (2レベル, 7ステップ, 3拍)</option>
+          <option value="u-7c">7/8(3+2+2) (2レベル, 7ステップ, 3拍)</option>
+          <option value="u-8a">トレシーロ (2レベル, 8ステップ, 3拍)</option>
+          <option value="u-8b">逆トレシーロ (2レベル, 8ステップ, 3拍)</option>
+          <option value="u-8c">8/8(3+2+3) (2レベル, 8ステップ, 3拍)</option>
+          <option value="u-10a">10/8(2+3) ×2 (3レベル, 10ステップ, 4拍)</option>
+          <option value="u-10b">10/8(3+2) ×2 (3レベル, 10ステップ, 4拍)</option>
+          <option value="u-16a">トレシーロ ×2 (3レベル, 16ステップ, 6拍)</option>
+          <option value="u-16b">逆トレシーロ ×2 (3レベル, 16ステップ, 6拍)</option>
+          <option value="u-16c">8/8(3+2+3) ×2 (3レベル, 16ステップ, 6拍)</option>
+          <option value="u-20a">4+6拍子 (4レベル, 20ステップ, 5拍)</option>
+          <option value="u-32a">トレシーロ ×4 (4レベル, 32ステップ, 4拍)</option>
+          <option value="u-32b">トレシーロ+逆 (4レベル, 32ステップ, 4拍)</option>
+        </optgroup>
+        <optgroup label="★0.5 — 混合均一">
+          <option value="m-12a">ヘミオラ (3レベル, 12ステップ, 5拍)</option>
+          <option value="m-12b">逆ヘミオラ (3レベル, 12ステップ, 5拍)</option>
+          <option value="m-18">ヘミオラ挟み (3レベル, 18ステップ, 7拍)</option>
+        </optgroup>
+        <optgroup label="★0.33 — 混合不均一">
+          <option value="x-9">4+5拍 (3レベル, 9ステップ, 4拍)</option>
+          <option value="x-10a">4+6拍 (3レベル, 10ステップ, 4拍)</option>
+          <option value="x-10b">6+4拍 (3レベル, 10ステップ, 4拍)</option>
+          <option value="x-10c">4+6拍B (3レベル, 10ステップ, 5拍)</option>
+          <option value="x-14">6+8拍 (3レベル, 14ステップ, 5拍)</option>
+          <option value="x-15">6+9拍 (3レベル, 15ステップ, 5拍)</option>
+          <option value="x-16a">9+7拍 (3レベル, 16ステップ, 6拍)</option>
+          <option value="x-16b">6+6+4拍 (3レベル, 16ステップ, 6拍)</option>
+        </optgroup>
+      </select>
+      <select id="snare-beats" class="beats-select" disabled>
+        <option value="4" selected>4拍</option>
+      </select>
+    </div>
+    <div class="help-popup">楽器ごとに拍構造を変えられます。「既定」を選ぶと既定拍構造を使います。異なる拍構造を選ぶと拍数が変わり、「非同期」でポリメーター再生ができます。</div>
+    </div>
+    <div class="param-group">
+    <div class="param-row">
+      <span class="param-label">打率<button class="help-btn" onclick="toggleHelp(this)">?</button></span>
+      <input type="range" id="snare-rate" min="0" max="1" step="0.01" value="0.33">
+      <span class="param-value" id="snare-rate-val">0.33</span>
+    </div>
+    <div class="help-popup">各ステップを鳴らすかどうかの確率です。全ステップに対して独立にコイントスするので、同じ設定でも生成のたびに結果が変わります。0なら全ミュート、0.5なら平均して拍数ぶん鳴り、1なら全ステップが鳴ります。</div>
+    </div>
+    <div class="param-group">
+    <div class="param-row">
+      <span class="param-label">重心<button class="help-btn" onclick="toggleHelp(this)">?</button></span>
+      <input type="range" id="snare-center" min="0" max="1" step="0.01" value="0.50">
+      <span class="param-value" id="snare-center-val">0.50</span>
+    </div>
+    <div class="help-popup">音を鳴らす位置の傾向を決めます。0で最も強い拍（1拍目など）に集中し、1で最も弱い拍（裏拍）に集中します。0.5はその中間で、拍レベルの位置をピークに表拍側も裏拍側も均等に落ちます。</div>
+    </div>
+    <div class="param-group">
+    <div class="param-row">
+      <span class="param-label">忠実度<button class="help-btn" onclick="toggleHelp(this)">?</button></span>
+      <input type="range" id="snare-fidelity" min="0" max="1" step="0.01" value="0.5">
+      <span class="param-value" id="snare-fidelity-val">0.50</span>
+    </div>
+    <div class="help-popup">拍構造にどれだけ忠実にパターンを生成するかを決めます。1だと重みの高い位置から順に確実に選ばれ、0だとどの位置が選ばれるか完全にランダムになります。中間値でほどよい揺らぎが生まれます。</div>
+    </div>
+    <div class="prob-chart" id="prob-snare"></div>
+  </div>
+
+  <!-- HiHat -->
+  <div class="inst-section">
+    <div class="inst-header hihat">HiHat</div>
+    <div class="param-group">
+    <div class="param-row">
+      <span class="param-label">拍構造<button class="help-btn" onclick="toggleHelp(this)">?</button></span>
+      <select id="hihat-struct" class="struct-select">
+        <option value="default" selected>既定</option>
+        <optgroup label="★1.0 — 均一">
+          <option value="p-4">2拍子 (2レベル, 4ステップ, 2拍)</option>
+          <option value="p-6a">6/8拍子 (2レベル, 6ステップ, 2拍)</option>
+          <option value="p-6b">3拍子 (2レベル, 6ステップ, 3拍)</option>
+          <option value="p-8">8ビート (3レベル, 8ステップ, 4拍)</option>
+          <option value="p-9">9/8拍子 (2レベル, 9ステップ, 3拍)</option>
+          <option value="p-12a">12/8拍子 (3レベル, 12ステップ, 4拍)</option>
+          <option value="p-12b">6拍子 (3レベル, 12ステップ, 6拍)</option>
+          <option value="p-12c">6拍子B (3レベル, 12ステップ, 6拍)</option>
+          <option value="p-16">16ビート (4レベル, 16ステップ, 4拍)</option>
+          <option value="p-18a">6拍3連 (3レベル, 18ステップ, 6拍)</option>
+          <option value="p-18b">6拍3連B (3レベル, 18ステップ, 6拍)</option>
+          <option value="p-18c">9拍子 (3レベル, 18ステップ, 9拍)</option>
+          <option value="p-24a">12/8 ×2 (4レベル, 24ステップ, 4拍)</option>
+          <option value="p-24b">6拍子 ×2 (4レベル, 24ステップ, 4拍)</option>
+          <option value="p-24c">6拍子B ×2 (4レベル, 24ステップ, 6拍)</option>
+          <option value="p-24d">8ビート ×3 (4レベル, 24ステップ, 6拍)</option>
+          <option value="p-27">9拍3連 (3レベル, 27ステップ, 9拍)</option>
+          <option value="p-32">32ビート (5レベル, 32ステップ, 8拍)</option>
+        </optgroup>
+        <optgroup label="★0.67 — 不均一">
+          <option value="u-5a">5/8(2+3) (2レベル, 5ステップ, 2拍)</option>
+          <option value="u-5b">5/8(3+2) (2レベル, 5ステップ, 2拍)</option>
+          <option value="u-7a">7/8(2+2+3) (2レベル, 7ステップ, 3拍)</option>
+          <option value="u-7b">7/8(2+3+2) (2レベル, 7ステップ, 3拍)</option>
+          <option value="u-7c">7/8(3+2+2) (2レベル, 7ステップ, 3拍)</option>
+          <option value="u-8a">トレシーロ (2レベル, 8ステップ, 3拍)</option>
+          <option value="u-8b">逆トレシーロ (2レベル, 8ステップ, 3拍)</option>
+          <option value="u-8c">8/8(3+2+3) (2レベル, 8ステップ, 3拍)</option>
+          <option value="u-10a">10/8(2+3) ×2 (3レベル, 10ステップ, 4拍)</option>
+          <option value="u-10b">10/8(3+2) ×2 (3レベル, 10ステップ, 4拍)</option>
+          <option value="u-16a">トレシーロ ×2 (3レベル, 16ステップ, 6拍)</option>
+          <option value="u-16b">逆トレシーロ ×2 (3レベル, 16ステップ, 6拍)</option>
+          <option value="u-16c">8/8(3+2+3) ×2 (3レベル, 16ステップ, 6拍)</option>
+          <option value="u-20a">4+6拍子 (4レベル, 20ステップ, 5拍)</option>
+          <option value="u-32a">トレシーロ ×4 (4レベル, 32ステップ, 4拍)</option>
+          <option value="u-32b">トレシーロ+逆 (4レベル, 32ステップ, 4拍)</option>
+        </optgroup>
+        <optgroup label="★0.5 — 混合均一">
+          <option value="m-12a">ヘミオラ (3レベル, 12ステップ, 5拍)</option>
+          <option value="m-12b">逆ヘミオラ (3レベル, 12ステップ, 5拍)</option>
+          <option value="m-18">ヘミオラ挟み (3レベル, 18ステップ, 7拍)</option>
+        </optgroup>
+        <optgroup label="★0.33 — 混合不均一">
+          <option value="x-9">4+5拍 (3レベル, 9ステップ, 4拍)</option>
+          <option value="x-10a">4+6拍 (3レベル, 10ステップ, 4拍)</option>
+          <option value="x-10b">6+4拍 (3レベル, 10ステップ, 4拍)</option>
+          <option value="x-10c">4+6拍B (3レベル, 10ステップ, 5拍)</option>
+          <option value="x-14">6+8拍 (3レベル, 14ステップ, 5拍)</option>
+          <option value="x-15">6+9拍 (3レベル, 15ステップ, 5拍)</option>
+          <option value="x-16a">9+7拍 (3レベル, 16ステップ, 6拍)</option>
+          <option value="x-16b">6+6+4拍 (3レベル, 16ステップ, 6拍)</option>
+        </optgroup>
+      </select>
+      <select id="hihat-beats" class="beats-select" disabled>
+        <option value="4" selected>4拍</option>
+      </select>
+    </div>
+    <div class="help-popup">楽器ごとに拍構造を変えられます。「既定」を選ぶと既定拍構造を使います。異なる拍構造を選ぶと拍数が変わり、「非同期」でポリメーター再生ができます。</div>
+    </div>
+    <div class="param-group">
+    <div class="param-row">
+      <span class="param-label">打率<button class="help-btn" onclick="toggleHelp(this)">?</button></span>
+      <input type="range" id="hihat-rate" min="0" max="1" step="0.01" value="0.67">
+      <span class="param-value" id="hihat-rate-val">0.67</span>
+    </div>
+    <div class="help-popup">各ステップを鳴らすかどうかの確率です。全ステップに対して独立にコイントスするので、同じ設定でも生成のたびに結果が変わります。0なら全ミュート、0.5なら平均して拍数ぶん鳴り、1なら全ステップが鳴ります。</div>
+    </div>
+    <div class="param-group">
+    <div class="param-row">
+      <span class="param-label">重心<button class="help-btn" onclick="toggleHelp(this)">?</button></span>
+      <input type="range" id="hihat-center" min="0" max="1" step="0.01" value="1.00">
+      <span class="param-value" id="hihat-center-val">1.00</span>
+    </div>
+    <div class="help-popup">音を鳴らす位置の傾向を決めます。0で最も強い拍（1拍目など）に集中し、1で最も弱い拍（裏拍）に集中します。0.5はその中間で、拍レベルの位置をピークに表拍側も裏拍側も均等に落ちます。</div>
+    </div>
+    <div class="param-group">
+    <div class="param-row">
+      <span class="param-label">忠実度<button class="help-btn" onclick="toggleHelp(this)">?</button></span>
+      <input type="range" id="hihat-fidelity" min="0" max="1" step="0.01" value="0.25">
+      <span class="param-value" id="hihat-fidelity-val">0.25</span>
+    </div>
+    <div class="help-popup">拍構造にどれだけ忠実にパターンを生成するかを決めます。1だと重みの高い位置から順に確実に選ばれ、0だとどの位置が選ばれるか完全にランダムになります。中間値でほどよい揺らぎが生まれます。</div>
+    </div>
+    <div class="prob-chart" id="prob-hihat"></div>
+  </div>
+
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/tone@15.1.22/build/Tone.js"></script>
+<script src="genRhythm.js"></script>
+<script>
+/* ─── Structures ─── */
+/* All patterns are 均衡木 (balanced-depth trees) with 2-or-3 children per node.
+   Score = 1/(cellTypes × spanRatio). See structures.tsv for full catalog. */
+var STRUCTURES = {
+  // ── ★1.0 — Pure (cellTypes=1, spanRatio=1.0) — all 18 ──
+  'p-4':     { tree: [2,2], beatLevel: 1 },
+  'p-6a':    { tree: [3,3], beatLevel: 1 },
+  'p-6b':    { tree: [2,2,2], beatLevel: 1 },
+  'p-8':     { tree: [[2,2],[2,2]], beatLevel: 1 },
+  'p-9':     { tree: [3,3,3], beatLevel: 1 },
+  'p-12a':   { tree: [[3,3],[3,3]], beatLevel: 1 },
+  'p-12b':   { tree: [[2,2,2],[2,2,2]], beatLevel: 1 },
+  'p-12c':   { tree: [[2,2],[2,2],[2,2]], beatLevel: 1 },
+  'p-16':    { tree: [[[2,2],[2,2]],[[2,2],[2,2]]], beatLevel: 2 },
+  'p-18a':   { tree: [[3,3,3],[3,3,3]], beatLevel: 1 },
+  'p-18b':   { tree: [[3,3],[3,3],[3,3]], beatLevel: 1 },
+  'p-18c':   { tree: [[2,2,2],[2,2,2],[2,2,2]], beatLevel: 1 },
+  'p-24a':   { tree: [[[3,3],[3,3]],[[3,3],[3,3]]], beatLevel: 2 },
+  'p-24b':   { tree: [[[2,2,2],[2,2,2]],[[2,2,2],[2,2,2]]], beatLevel: 2 },
+  'p-24c':   { tree: [[[2,2],[2,2],[2,2]],[[2,2],[2,2],[2,2]]], beatLevel: 2 },
+  'p-24d':   { tree: [[[2,2],[2,2]],[[2,2],[2,2]],[[2,2],[2,2]]], beatLevel: 2 },
+  'p-27':    { tree: [[3,3,3],[3,3,3],[3,3,3]], beatLevel: 1 },
+  'p-32':    { tree: [[[[2,2],[2,2]],[[2,2],[2,2]]],[[[2,2],[2,2]],[[2,2],[2,2]]]], beatLevel: 2 },
+  // ── ★0.67 — Uneven (cellTypes=1, spanRatio=1.5) ──
+  'u-5a':    { tree: [2,3], beatLevel: 1 },
+  'u-5b':    { tree: [3,2], beatLevel: 1 },
+  'u-7a':    { tree: [2,2,3], beatLevel: 1 },
+  'u-7b':    { tree: [2,3,2], beatLevel: 1 },
+  'u-7c':    { tree: [3,2,2], beatLevel: 1 },
+  'u-8a':    { tree: [3,3,2], beatLevel: 1 },
+  'u-8b':    { tree: [2,3,3], beatLevel: 1 },
+  'u-8c':    { tree: [3,2,3], beatLevel: 1 },
+  'u-10a':   { tree: [[2,3],[2,3]], beatLevel: 1 },
+  'u-10b':   { tree: [[3,2],[3,2]], beatLevel: 1 },
+  'u-16a':   { tree: [[3,3,2],[3,3,2]], beatLevel: 1 },
+  'u-16b':   { tree: [[2,3,3],[2,3,3]], beatLevel: 1 },
+  'u-16c':   { tree: [[3,2,3],[3,2,3]], beatLevel: 1 },
+  'u-20a':   { tree: [[[2,2],[2,2]],[[2,2],[2,2],[2,2]]], beatLevel: 2 },
+  'u-32a':   { tree: [[[3,3,2],[3,3,2]],[[3,3,2],[3,3,2]]], beatLevel: 2 },
+  'u-32b':   { tree: [[[3,3,2],[3,3,2]],[[2,3,3],[2,3,3]]], beatLevel: 2 },
+  // ── ★0.5 — Mixed balanced (cellTypes=2, spanRatio=1.0) ──
+  'm-12a':   { tree: [[3,3],[2,2,2]], beatLevel: 1 },
+  'm-12b':   { tree: [[2,2,2],[3,3]], beatLevel: 1 },
+  'm-18':    { tree: [[3,3],[2,2,2],[3,3]], beatLevel: 1 },
+  // ── ★0.33 — Mixed uneven (cellTypes=2, spanRatio=1.5) ──
+  'x-9':     { tree: [[2,2],[2,3]], beatLevel: 1 },
+  'x-10a':   { tree: [[2,2],[3,3]], beatLevel: 1 },
+  'x-10b':   { tree: [[3,3],[2,2]], beatLevel: 1 },
+  'x-10c':   { tree: [[2,2],[2,2,2]], beatLevel: 1 },
+  'x-14':    { tree: [[3,3],[2,3,3]], beatLevel: 1 },
+  'x-15':    { tree: [[3,3],[3,3,3]], beatLevel: 1 },
+  'x-16a':   { tree: [[3,3,3],[2,2,3]], beatLevel: 1 },
+  'x-16b':   { tree: [[3,3],[3,3],[2,2]], beatLevel: 1 }
+};
+
+/* ─── Help popup toggle ─── */
+function toggleHelp(btn) {
+  var group = btn.closest('.param-group');
+  if (group) {
+    var popup = group.querySelector('.help-popup');
+    if (popup) popup.classList.toggle('open');
+  }
+}
+
+/* ─── State ─── */
+var kickFlat = null, snareFlat = null, hihatFlat = null;
+var isPlaying = false;
+var treeCursor = null;
+
+/* ─── Flatten tree to array ─── */
+function flattenTree(node) {
+  if (!Array.isArray(node)) return [node];
+  var result = [];
+  for (var i = 0; i < node.length; i++)
+    result = result.concat(flattenTree(node[i]));
+  return result;
+}
+
+/* ─── Compute levels for display ─── */
+function computeLevels(structure) {
+  var levels = [];
+  function walk(node) {
+    if (!Array.isArray(node)) {
+      var firstIdx = levels.length;
+      for (var j = 0; j < node; j++) levels.push(0);
+      if (node > 1) levels[firstIdx] += 1;
+      return;
+    }
+    for (var i = 0; i < node.length; i++) {
+      var firstIdx = levels.length;
+      walk(node[i]);
+      if (i === 0) levels[firstIdx] += 1;
+    }
+  }
+  walk(structure);
+  return levels;
+}
+
+/* ─── Count leaves in a tree node ─── */
+function countLeaves(node) {
+  if (!Array.isArray(node)) return node;
+  var count = 0;
+  for (var i = 0; i < node.length; i++) count += countLeaves(node[i]);
+  return count;
+}
+
+/* ─── Compute group boundaries from top-level structure ─── */
+function getGroupBoundaries(structure) {
+  var boundaries = {};
+  var pos = 0;
+  for (var i = 0; i < structure.length; i++) {
+    if (i > 0) boundaries[pos] = true;
+    pos += countLeaves(structure[i]);
+  }
+  return boundaries;
+}
+
+/* ─── UI Helpers ─── */
+function getParam(inst, param) {
+  var el = document.getElementById(inst + '-' + param);
+  return parseFloat(el.value);
+}
+
+/* ─── Slider value display ─── */
+function setupSlider(id) {
+  var slider = document.getElementById(id);
+  var display = document.getElementById(id + '-val');
+  slider.addEventListener('input', function() {
+    display.textContent = parseFloat(slider.value).toFixed(2);
+  });
+}
+setupSlider('kick-rate');
+setupSlider('kick-fidelity');
+setupSlider('kick-center');
+setupSlider('snare-rate');
+setupSlider('snare-fidelity');
+setupSlider('snare-center');
+setupSlider('hihat-rate');
+setupSlider('hihat-fidelity');
+setupSlider('hihat-center');
+
+/* ─── Per-instrument structure helper ─── */
+function getInstStructure(inst) {
+  var key = document.getElementById(inst + '-struct').value;
+  if (key === 'default') key = document.getElementById('default-struct').value;
+  return STRUCTURES[key];
+}
+
+/* ─── Compute beats from beatLevel ─── */
+function computeBeats(def) {
+  var levels = computeLevels(def.tree);
+  var beats = 0;
+  for (var i = 0; i < levels.length; i++) {
+    if (levels[i] >= def.beatLevel) beats++;
+  }
+  return beats;
+}
+
+/* ─── Update beats select for an instrument ─── */
+function updateBeatsSelect(inst) {
+  var def = getInstStructure(inst);
+  var naturalBeats = computeBeats(def);
+  var sel = document.getElementById(inst + '-beats');
+  var defaultBeats = computeBeats(STRUCTURES[document.getElementById('default-struct').value]);
+
+  if (naturalBeats === defaultBeats) {
+    // Same as default → always sync, disabled
+    sel.innerHTML = '<option value="' + defaultBeats + '" selected>同期</option>';
+    sel.disabled = true;
+  } else {
+    // Different from default → choose sync (default beats) or async (natural beats)
+    sel.innerHTML = '<option value="' + defaultBeats + '" selected>同期</option>' +
+                    '<option value="' + naturalBeats + '">非同期</option>';
+    sel.disabled = false;
+  }
+}
+
+function updateAllBeatsSelects() {
+  updateBeatsSelect('kick');
+  updateBeatsSelect('snare');
+  updateBeatsSelect('hihat');
+}
+
+/* ─── Probability visualization ─── */
+function computeProbs(s, levels, center, beatLevel) {
+  if (center === undefined) center = 0;
+  if (beatLevel === undefined) beatLevel = 1;
+  var N = levels.length;
+  // Apply level center of gravity (0=downbeats, 1=beat level, 2=offbeats)
+  var maxLevel = 0;
+  for (var i = 0; i < N; i++) {
+    if (levels[i] > maxLevel) maxLevel = levels[i];
+  }
+  var target;
+  if (center <= 0.5) {
+    target = maxLevel - center * 2 * (maxLevel - beatLevel);
+  } else {
+    target = beatLevel * (1 - center) * 2;
+  }
+  var weights = [];
+  for (var i = 0; i < N; i++) {
+    weights.push(maxLevel - Math.abs(levels[i] - target));
+  }
+  var tau = (s >= 1) ? 1e-9 : (s <= 0) ? 1e9 : (1 - s) / s;
+  var scores = [];
+  var maxScore = -Infinity;
+  for (var i = 0; i < N; i++) {
+    var score = weights[i] / tau;
+    scores.push(score);
+    if (score > maxScore) maxScore = score;
+  }
+  var expSum = 0;
+  var exps = [];
+  for (var i = 0; i < N; i++) {
+    var e = Math.exp(scores[i] - maxScore);
+    exps.push(e);
+    expSum += e;
+  }
+  var probs = [];
+  for (var i = 0; i < N; i++) probs.push(exps[i] / expSum);
+  return probs;
+}
+
+function renderProbChart(inst) {
+  var def = getInstStructure(inst);
+  var levels = computeLevels(def.tree);
+  var center = getParam(inst, 'center');
+  var rate = getParam(inst, 'rate');
+  var boundaries = getGroupBoundaries(def.tree);
+  var N = levels.length;
+
+  // Compute weights (same as generateRhythm)
+  var maxLevel = 0;
+  var beatsCount = 0;
+  for (var i = 0; i < N; i++) {
+    if (levels[i] > maxLevel) maxLevel = levels[i];
+    if (levels[i] >= def.beatLevel) beatsCount++;
+  }
+  var target;
+  if (center <= 0.5) {
+    target = maxLevel - center * 2 * (maxLevel - def.beatLevel);
+  } else {
+    target = def.beatLevel * (1 - center) * 2;
+  }
+  var weights = [];
+  for (var i = 0; i < N; i++) {
+    weights.push(maxLevel - Math.abs(levels[i] - target));
+  }
+
+  var fidelity = getParam(inst, 'fidelity');
+
+  // Expected hit count from rate
+  var p;
+  if (rate <= 0.5) {
+    p = rate * 2 * beatsCount / N;
+  } else {
+    var base = beatsCount / N;
+    p = base + (rate - 0.5) * 2 * (1 - base);
+  }
+  var expectedHits = Math.round(N * p);
+
+  // Rank positions by weight descending to determine top-d
+  var ranked = [];
+  for (var i = 0; i < N; i++) ranked.push(i);
+  ranked.sort(function(a, b) { return weights[b] - weights[a] || a - b; });
+  var hitSet = {};
+  for (var i = 0; i < expectedHits && i < N; i++) hitSet[ranked[i]] = true;
+
+  // Color blending: fidelity=1 → binary (top-d colored, rest gray)
+  //                 fidelity=0 → weight-proportional coloring
+  var instColors = {
+    kick:  [208, 48, 80],
+    snare: [34, 119, 204],
+    hihat: [85, 153, 85]
+  };
+  var mutedRGB = [187, 187, 187];
+  var instRGB = instColors[inst];
+
+  // Uniform blend for fidelity=0 (all positions equal probability)
+  var uniformBlend = expectedHits / N;
+
+  var maxWeight = 0;
+  for (var i = 0; i < N; i++) {
+    if (weights[i] > maxWeight) maxWeight = weights[i];
+  }
+
+  var BAR_MAX = 60;
+  var el = document.getElementById('prob-' + inst);
+  var html = '';
+  for (var i = 0; i < N; i++) {
+    var bar = boundaries[i] ? ' bar-line' : '';
+    var h = maxWeight > 0 ? Math.round(weights[i] / maxWeight * BAR_MAX) : 1;
+    if (h < 1) h = 1;
+    // Interpolate: fidelity=1 → hard (0 or 1), fidelity=0 → softBlend
+    var hard = hitSet[i] ? 1 : 0;
+    var blend = fidelity * hard + (1 - fidelity) * uniformBlend;
+    var r = Math.round(mutedRGB[0] + (instRGB[0] - mutedRGB[0]) * blend);
+    var g = Math.round(mutedRGB[1] + (instRGB[1] - mutedRGB[1]) * blend);
+    var b = Math.round(mutedRGB[2] + (instRGB[2] - mutedRGB[2]) * blend);
+    html += '<div class="prob-bar-wrap' + bar + '">' +
+      '<div class="prob-bar" style="height:' + h + 'px;background:rgb(' + r + ',' + g + ',' + b + ')"></div>' +
+      '<span class="prob-level">' + (hitSet[i] ? '*' : '&nbsp;') + '</span>' +
+      '</div>';
+  }
+  el.innerHTML = html;
+}
+
+function renderAllProbCharts() {
+  renderProbChart('kick');
+  renderProbChart('snare');
+  renderProbChart('hihat');
+}
+
+/* ─── Prob chart event listeners ─── */
+var INSTRUMENTS = ['kick', 'snare', 'hihat'];
+for (var ii = 0; ii < INSTRUMENTS.length; ii++) {
+  (function(inst) {
+    document.getElementById(inst + '-rate').addEventListener('input', function() {
+      renderProbChart(inst);
+    });
+    document.getElementById(inst + '-fidelity').addEventListener('input', function() {
+      renderProbChart(inst);
+    });
+    document.getElementById(inst + '-center').addEventListener('input', function() {
+      renderProbChart(inst);
+    });
+    document.getElementById(inst + '-struct').addEventListener('change', function() {
+      renderProbChart(inst);
+      updateBeatsSelect(inst);
+    });
+  })(INSTRUMENTS[ii]);
+}
+
+/* ─── Tree visualization (tournament bracket) ─── */
+function renderTreeViz() {
+  var key = document.getElementById('default-struct').value;
+  var def = STRUCTURES[key];
+  // Compute label max depth (depth where numbers appear)
+  var maxDepth = 0;
+  function getMaxDepth(node, d) {
+    if (!Array.isArray(node)) { if (d > maxDepth) maxDepth = d; return; }
+    for (var i = 0; i < node.length; i++) getMaxDepth(node[i], d + 1);
+  }
+  getMaxDepth(def.tree, 0);
+
+  // beatColorDepth: which label depth to color red
+  // beatLevel=1 → numbers, beatLevel=2 → innermost brackets, etc.
+  var beatColorDepth = maxDepth - def.beatLevel + 1;
+  function structLabel(node, depth) {
+    if (!Array.isArray(node)) {
+      if (depth === beatColorDepth) {
+        return '<span style="color:var(--accent)">' + node + '</span>';
+      }
+      return String(node);
+    }
+    var inner = '';
+    for (var i = 0; i < node.length; i++) {
+      if (i > 0) inner += ',';
+      inner += structLabel(node[i], depth + 1);
+    }
+    if (depth === beatColorDepth) {
+      return '<span style="color:var(--accent)">[</span>' + inner + '<span style="color:var(--accent)">]</span>';
+    }
+    return '[' + inner + ']';
+  }
+  document.getElementById('tree-struct-label').innerHTML = structLabel(def.tree, 0);
+
+  var el = document.getElementById('tree-viz');
+  var colors = ['#666', '#888', '#aaa', '#bbb', '#ccc'];
+  var levels = computeLevels(def.tree);
+  var leafIdx = 0;
+
+  function build(node, depth) {
+    // Red lines at beatColorDepth (only when it's a fork depth, not leaf depth)
+    var color = (depth === beatColorDepth && depth < maxDepth) ? 'var(--accent)' : colors[depth % colors.length];
+    if (!Array.isArray(node)) {
+      var cells = '';
+      for (var j = 0; j < node; j++) {
+        var isBeat = levels[leafIdx] >= def.beatLevel;
+        cells += '<div class="tv-leaf' + (isBeat ? ' beat' : '') + '">' +
+                 levels[leafIdx] + '</div>';
+        leafIdx++;
+      }
+      return '<div class="tv-leaves">' + cells + '</div>';
+    }
+    var arms = '';
+    for (var i = 0; i < node.length; i++) {
+      arms += '<div class="tv-arm">' + build(node[i], depth + 1) + '</div>';
+    }
+    return '<div class="tv-fork" style="--fc:' + color + '">' +
+           '<div class="tv-arms">' + arms + '</div></div>';
+  }
+
+  el.innerHTML = build(def.tree, 0);
+
+}
+
+/* ─── Default structure change → re-render charts and tree for instruments using default ─── */
+document.getElementById('default-struct').addEventListener('change', function() {
+  renderAllProbCharts();
+  renderTreeViz();
+  updateAllBeatsSelects();
+  document.getElementById('btn-generate').click();
+});
+
+/* ─── Prev/Next structure navigation ─── */
+function navigateStruct(delta) {
+  var sel = document.getElementById('default-struct');
+  // Collect all option values (skip optgroup)
+  var options = sel.options;
+  var idx = sel.selectedIndex;
+  var newIdx = idx + delta;
+  if (newIdx < 0) newIdx = options.length - 1;
+  if (newIdx >= options.length) newIdx = 0;
+  sel.selectedIndex = newIdx;
+  sel.dispatchEvent(new Event('change'));
+  document.getElementById('btn-generate').click();
+}
+document.getElementById('struct-prev').addEventListener('click', function() { navigateStruct(-1); });
+document.getElementById('struct-next').addEventListener('click', function() { navigateStruct(1); });
+
+/* ─── Initial render ─── */
+renderAllProbCharts();
+renderTreeViz();
+updateAllBeatsSelects();
+
+
+/* ─── BPM slider ─── */
+(function() {
+  var slider = document.getElementById('bpm');
+  var display = document.getElementById('bpm-val');
+  slider.addEventListener('input', function() {
+    display.textContent = slider.value;
+    // Update playback tempo in real-time
+    if (isPlaying) {
+      var bpm = parseInt(slider.value);
+      // Update tree viz cursor tempo
+      if (treeCursor) {
+        var defaultDef = STRUCTURES[document.getElementById('default-struct').value];
+        var dLeaves = computeLevels(defaultDef.tree).length;
+        var dBeats = computeBeats(defaultDef);
+        treeCursor.secPerStep = 60.0 * dBeats / bpm / dLeaves;
+      }
+      for (var i = 0; i < instPlayback.length; i++) {
+        var ip = instPlayback[i];
+        var def = getInstStructure(ip.key);
+        var leaves = computeLevels(def.tree).length;
+        var beats = parseInt(document.getElementById(ip.key + '-beats').value);
+        ip.secPerStep = 60.0 * beats / bpm / leaves;
+      }
+    }
+  });
+})();
+
+/* ─── Generate ─── */
+document.getElementById('btn-generate').addEventListener('click', function() {
+  var kickDef = getInstStructure('kick');
+  var snareDef = getInstStructure('snare');
+  var hihatDef = getInstStructure('hihat');
+
+  var kickTree = generateRhythm(kickDef.tree, kickDef.beatLevel, getParam('kick', 'rate'), getParam('kick', 'center'), getParam('kick', 'fidelity'));
+  var snareTree = generateRhythm(snareDef.tree, snareDef.beatLevel, getParam('snare', 'rate'), getParam('snare', 'center'), getParam('snare', 'fidelity'));
+  var hihatTree = generateRhythm(hihatDef.tree, hihatDef.beatLevel, getParam('hihat', 'rate'), getParam('hihat', 'center'), getParam('hihat', 'fidelity'));
+
+  kickFlat = flattenTree(kickTree);
+  snareFlat = flattenTree(snareTree);
+  hihatFlat = flattenTree(hihatTree);
+
+  var kickBounds = getGroupBoundaries(kickDef.tree);
+  var snareBounds = getGroupBoundaries(snareDef.tree);
+  var hihatBounds = getGroupBoundaries(hihatDef.tree);
+  var kickLevels = computeLevels(kickDef.tree);
+  var snareLevels = computeLevels(snareDef.tree);
+  var hihatLevels = computeLevels(hihatDef.tree);
+
+  renderGrid('grid-kick', kickFlat, 'on-kick', kickBounds, kickLevels);
+  renderGrid('grid-snare', snareFlat, 'on-snare', snareBounds, snareLevels);
+  renderGrid('grid-hihat', hihatFlat, 'on-hihat', hihatBounds, hihatLevels);
+
+  document.getElementById('empty-msg').style.display = 'none';
+  document.getElementById('pattern-display').style.display = '';
+  document.getElementById('btn-play').disabled = false;
+
+  // If playing, restart with new pattern
+  if (isPlaying) {
+    stopPlayback();
+    startPlayback();
+  }
+});
+
+
+/* ─── Render grid row (levels shown inside circles) ─── */
+function renderGrid(id, flat, onClass, boundaries, levels) {
+  var el = document.getElementById(id);
+  var html = '';
+  for (var i = 0; i < flat.length; i++) {
+    var bar = boundaries[i] ? ' bar-line' : '';
+    var cls = flat[i] ? 'grid-step ' + onClass : 'grid-step';
+    html += '<div class="step-cell' + bar + '"><span class="' + cls + '"></span></div>';
+  }
+  el.innerHTML = html;
+}
+
+/* ─── Audio Engine (Tone.js) ─── */
+var schedulerTimer = null;
+var toneStarted = false;
+var masterGain = null;
+var noiseBuffer = null;
+
+function initAudio() {
+  if (masterGain) return;
+  var ctx = Tone.getContext().rawContext;
+
+  masterGain = ctx.createGain();
+  masterGain.gain.value = 6.0;
+
+  var limiter = ctx.createDynamicsCompressor();
+  limiter.threshold.value = -1;
+  limiter.knee.value = 0;
+  limiter.ratio.value = 20;
+  limiter.attack.value = 0.001;
+  limiter.release.value = 0.02;
+
+  masterGain.connect(limiter);
+  limiter.connect(ctx.destination);
+
+  // Pre-generate noise buffer
+  var sr = ctx.sampleRate;
+  var len = sr * 2;
+  noiseBuffer = ctx.createBuffer(1, len, sr);
+  var data = noiseBuffer.getChannelData(0);
+  for (var i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+}
+
+function playKickSound(time) {
+  var ctx = Tone.getContext().rawContext;
+  var osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(150, time);
+  osc.frequency.exponentialRampToValueAtTime(40, time + 0.08);
+  var gain = ctx.createGain();
+  gain.gain.setValueAtTime(2.0, time);
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.3);
+  osc.connect(gain); gain.connect(masterGain);
+  osc.start(time); osc.stop(time + 0.35);
+  // Subtle square click
+  var sq = ctx.createOscillator();
+  sq.type = 'square';
+  sq.frequency.setValueAtTime(160, time);
+  sq.frequency.exponentialRampToValueAtTime(30, time + 0.04);
+  var sg = ctx.createGain();
+  sg.gain.setValueAtTime(0.3, time);
+  sg.gain.linearRampToValueAtTime(0, time + 0.05);
+  sq.connect(sg); sg.connect(masterGain);
+  sq.start(time); sq.stop(time + 0.06);
+}
+
+function playSnareSound(time) {
+  var ctx = Tone.getContext().rawContext;
+  var src = ctx.createBufferSource();
+  src.buffer = noiseBuffer;
+  src.start(time, Math.random()); src.stop(time + 0.15);
+  var filt = ctx.createBiquadFilter();
+  filt.type = 'highpass'; filt.frequency.value = 1000;
+  var ng = ctx.createGain();
+  ng.gain.setValueAtTime(1.2, time);
+  ng.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
+  src.connect(filt); filt.connect(ng); ng.connect(masterGain);
+  // Sine+square mix body
+  var osc = ctx.createOscillator();
+  osc.type = 'sine'; osc.frequency.value = 200;
+  var og = ctx.createGain();
+  og.gain.setValueAtTime(0.8, time);
+  og.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
+  osc.connect(og); og.connect(masterGain);
+  osc.start(time); osc.stop(time + 0.15);
+  var sq = ctx.createOscillator();
+  sq.type = 'square'; sq.frequency.value = 210;
+  var sqg = ctx.createGain();
+  sqg.gain.setValueAtTime(0.3, time);
+  sqg.gain.linearRampToValueAtTime(0, time + 0.07);
+  sq.connect(sqg); sqg.connect(masterGain);
+  sq.start(time); sq.stop(time + 0.1);
+}
+
+function playHihatSound(time) {
+  var ctx = Tone.getContext().rawContext;
+  var src = ctx.createBufferSource();
+  src.buffer = noiseBuffer;
+  src.start(time, Math.random()); src.stop(time + 0.06);
+  var filt = ctx.createBiquadFilter();
+  filt.type = 'highpass'; filt.frequency.value = 7000;
+  var g = ctx.createGain();
+  g.gain.setValueAtTime(0.7, time);
+  g.gain.exponentialRampToValueAtTime(0.001, time + 0.05);
+  src.connect(filt); filt.connect(g); g.connect(masterGain);
+  // Faint square shimmer
+  var sq = ctx.createOscillator();
+  sq.type = 'square'; sq.frequency.value = 6800;
+  var sg = ctx.createGain();
+  sg.gain.setValueAtTime(0.1, time);
+  sg.gain.linearRampToValueAtTime(0, time + 0.03);
+  sq.connect(sg); sg.connect(masterGain);
+  sq.start(time); sq.stop(time + 0.03);
+}
+
+function playOpenHihatSound(time) {
+  var ctx = Tone.getContext().rawContext;
+  var src = ctx.createBufferSource();
+  src.buffer = noiseBuffer;
+  src.start(time, Math.random()); src.stop(time + 0.25);
+  var filt = ctx.createBiquadFilter();
+  filt.type = 'highpass'; filt.frequency.value = 5000;
+  var g = ctx.createGain();
+  g.gain.setValueAtTime(0.3, time);
+  g.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
+  src.connect(filt); filt.connect(g); g.connect(masterGain);
+}
+
+/* ─── Playback Scheduler (per-instrument independent timing) ─── */
+var instPlayback = [
+  { key: 'kick',  gridId: 'grid-kick',  getFlat: function() { return kickFlat; },  play: playKickSound },
+  { key: 'snare', gridId: 'grid-snare', getFlat: function() { return snareFlat; }, play: playSnareSound },
+  { key: 'hihat', gridId: 'grid-hihat', getFlat: function() { return hihatFlat; }, play: playHihatSound }
+];
+
+async function startPlayback() {
+  if (!toneStarted) {
+    await Tone.start();
+    toneStarted = true;
+    initAudio();
+  }
+
+  var bpm = parseInt(document.getElementById('bpm').value);
+  var now = Tone.now() + 0.05;
+
+  // Initialize tree viz cursor (independent of instruments)
+  var defaultDef = STRUCTURES[document.getElementById('default-struct').value];
+  var defaultLeaves = computeLevels(defaultDef.tree).length;
+  var defaultBeats = computeBeats(defaultDef);
+  var defaultCycle = 60.0 * defaultBeats / bpm;
+  treeCursor = { step: 0, count: defaultLeaves, secPerStep: defaultCycle / defaultLeaves, nextTime: now };
+
+  // Initialize per-instrument state
+  for (var i = 0; i < instPlayback.length; i++) {
+    var ip = instPlayback[i];
+    var def = getInstStructure(ip.key);
+    var levels = computeLevels(def.tree);
+    var leaves = levels.length;
+    var beats = parseInt(document.getElementById(ip.key + '-beats').value);
+    var cycle = 60.0 * beats / bpm;
+    ip.step = 0;
+    ip.count = leaves;
+    ip.secPerStep = cycle / leaves;
+    ip.nextTime = now;
+  }
+
+  function scheduler() {
+    var lookAhead = Tone.now() + 0.1;
+    // Advance tree viz cursor independently
+    while (treeCursor.nextTime < lookAhead) {
+      // Play open hihat at the start of each cycle
+      if (treeCursor.step === 0) {
+        playOpenHihatSound(treeCursor.nextTime);
+      }
+      var delay = Math.max(0, (treeCursor.nextTime - Tone.now()) * 1000);
+      (function(step) {
+        setTimeout(function() { showTreeCursor(step); }, delay);
+      })(treeCursor.step);
+      treeCursor.nextTime += treeCursor.secPerStep;
+      treeCursor.step = (treeCursor.step + 1) % treeCursor.count;
+    }
+    // Advance per-instrument cursors
+    for (var i = 0; i < instPlayback.length; i++) {
+      var ip = instPlayback[i];
+      while (ip.nextTime < lookAhead) {
+        var flat = ip.getFlat();
+        if (flat && flat[ip.step]) ip.play(ip.nextTime);
+        var delay = Math.max(0, (ip.nextTime - Tone.now()) * 1000);
+        (function(gridId, step) {
+          setTimeout(function() { showInstCursor(gridId, step); }, delay);
+        })(ip.gridId, ip.step);
+        ip.nextTime += ip.secPerStep;
+        ip.step = (ip.step + 1) % ip.count;
+      }
+    }
+    schedulerTimer = setTimeout(scheduler, 25);
+  }
+  scheduler();
+  isPlaying = true;
+  updatePlayBtn();
+}
+
+function stopPlayback() {
+  if (schedulerTimer !== null) { clearTimeout(schedulerTimer); schedulerTimer = null; }
+  isPlaying = false;
+  clearCursor();
+  updatePlayBtn();
+}
+
+// iOS sleep recovery: always reset audio on wake
+function resetAudio() {
+  if (isPlaying) stopPlayback();
+  masterGain = null;
+  noiseBuffer = null;
+  toneStarted = false;
+  try {
+    Tone.getContext().rawContext.close();
+  } catch(e) {}
+  Tone.setContext(new (window.AudioContext || window.webkitAudioContext)());
+}
+
+document.addEventListener('visibilitychange', function() {
+  if (document.hidden) return;
+  var rawCtx = Tone.getContext().rawContext;
+  if (rawCtx.state !== 'running') {
+    resetAudio();
+  }
+});
+
+function showInstCursor(gridId, step) {
+  var el = document.getElementById(gridId);
+  if (!el) return;
+  var dots = el.querySelectorAll('.grid-step');
+  for (var i = 0; i < dots.length; i++) dots[i].classList.remove('cursor-on');
+  if (dots[step]) dots[step].classList.add('cursor-on');
+}
+
+function showTreeCursor(step) {
+  var leaves = document.querySelectorAll('#tree-viz .tv-leaf');
+  for (var i = 0; i < leaves.length; i++) leaves[i].classList.remove('cursor-on');
+  if (leaves[step]) leaves[step].classList.add('cursor-on');
+}
+
+function clearCursor() {
+  var all = document.querySelectorAll('.cursor-on');
+  for (var i = 0; i < all.length; i++) all[i].classList.remove('cursor-on');
+}
+
+function updatePlayBtn() {
+  var btn = document.getElementById('btn-play');
+  if (isPlaying) {
+    btn.textContent = '\u25A0 停止';
+    btn.classList.add('playing');
+  } else {
+    btn.textContent = '\u25B6 再生';
+    btn.classList.remove('playing');
+  }
+}
+
+/* ─── Play/Stop button ─── */
+document.getElementById('btn-play').addEventListener('click', function() {
+  if (isPlaying) {
+    stopPlayback();
+  } else {
+    startPlayback();
+  }
+});
+
+/* ─── Keyboard shortcut: Space = play/stop ─── */
+document.addEventListener('keydown', function(e) {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.code === 'Space') {
+    e.preventDefault();
+    if (kickFlat) {
+      if (isPlaying) stopPlayback();
+      else startPlayback();
+    }
+  }
+});
+
+/* ─── Auto-generate on load ─── */
+document.getElementById('btn-generate').click();
+</script>
+</body>
+</html>
