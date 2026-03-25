@@ -963,6 +963,7 @@ input[type="range"]::-moz-range-thumb {
 
 <script src="https://cdn.jsdelivr.net/npm/tone@15.1.22/build/Tone.js"></script>
 <script src="genRhythm.js"></script>
+<script src="genRepeat.js"></script>
 <script>
 /* ─── Structures ─── */
 /* All patterns are 均衡木 (balanced-depth trees) with 2-or-3 children per node.
@@ -1075,8 +1076,8 @@ var repeatFilterEnabled = false;
     chunkRow.className = 'param-row';
     chunkRow.innerHTML =
       '<span class="param-label">chunkRatio</span>' +
-      '<input type="range" id="rf-chunk-' + inst.key + '" min="0" max="1" step="0.01" value="0.25" style="flex:1;">' +
-      '<span class="param-value" id="rf-chunk-val-' + inst.key + '">0.25</span>';
+      '<input type="range" id="rf-chunk-' + inst.key + '" min="0" max="1" step="' + (1 / PATTERN_COUNT) + '" value="' + (1 / PATTERN_COUNT) + '" style="flex:1;">' +
+      '<span class="param-value" id="rf-chunk-val-' + inst.key + '">' + (1 / PATTERN_COUNT).toFixed(4) + '</span>';
     body.appendChild(chunkRow);
 
     // bias slider
@@ -1094,10 +1095,10 @@ var repeatFilterEnabled = false;
     blockRow.id = 'rf-blocks-' + inst.key;
     blockRow.style.cssText = 'grid-template-columns: repeat(' + PATTERN_COUNT + ', 36px); margin-top:4px;';
     for (var n = 0; n < PATTERN_COUNT; n++) {
-      var btn = document.createElement('button');
-      btn.textContent = n;
-      btn.dataset.value = n;
-      blockRow.appendChild(btn);
+      var cell = document.createElement('span');
+      cell.textContent = n;
+      cell.dataset.value = n;
+      blockRow.appendChild(cell);
     }
     body.appendChild(blockRow);
 
@@ -1105,16 +1106,32 @@ var repeatFilterEnabled = false;
     (function(key) {
       var chunkSlider = document.getElementById('rf-chunk-' + key);
       var chunkVal = document.getElementById('rf-chunk-val-' + key);
-      chunkSlider.addEventListener('input', function() { chunkVal.textContent = parseFloat(this.value).toFixed(2); });
+      chunkSlider.addEventListener('input', function() {
+        chunkVal.textContent = parseFloat(this.value).toFixed(2);
+        updateRepeatFilter(key);
+      });
 
       var biasSlider = document.getElementById('rf-bias-' + key);
       var biasVal = document.getElementById('rf-bias-val-' + key);
       biasSlider.addEventListener('input', function() {
         biasVal.textContent = parseFloat(this.value).toFixed(2);
+        updateRepeatFilter(key);
       });
+
+      updateRepeatFilter(key);
     })(inst.key);
   }
 })();
+
+function updateRepeatFilter(key) {
+  var chunkRatio = parseFloat(document.getElementById('rf-chunk-' + key).value);
+  var bias = parseFloat(document.getElementById('rf-bias-' + key).value);
+  var result = genRepeat(PATTERN_COUNT, chunkRatio, bias);
+  var cells = document.getElementById('rf-blocks-' + key).children;
+  for (var i = 0; i < cells.length; i++) {
+    cells[i].textContent = result.indexes[i];
+  }
+}
 
 /* ─── Mode Toggle (個/全) ─── */
 (function() {
