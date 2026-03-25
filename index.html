@@ -141,13 +141,13 @@ input[type="range"]::-moz-range-thumb {
 
 .pattern-bank {
   display: grid;
-  grid-template-columns: repeat(16, 36px);
+  grid-template-columns: repeat(var(--pattern-count, 16), 36px);
   justify-content: space-between;
   margin-bottom: 10px;
 }
 @media (max-width: 700px) {
   .pattern-bank {
-    grid-template-columns: repeat(8, 36px);
+    grid-template-columns: repeat(calc(var(--pattern-count, 16) / 2), 36px);
   }
 }
 .pattern-bank button {
@@ -577,6 +577,7 @@ input[type="range"]::-moz-range-thumb {
   <div class="grid-section" id="grid-section">
     <div class="inst-header">パターン</div>
     <div class="pattern-bank" id="pattern-bank"></div>
+    <hr style="border:none; border-top:2px dashed var(--border); margin:8px 0;">
     <div class="empty-msg" id="empty-msg">「生成」を押してリズムパターンを作成</div>
     <div id="pattern-display" style="display:none;">
       <div class="grid-row">
@@ -592,6 +593,18 @@ input[type="range"]::-moz-range-thumb {
         <div class="grid-steps" id="grid-hihat"></div>
       </div>
     </div>
+  </div>
+
+  <!-- Repeat Filter -->
+  <div class="grid-section" id="repeat-filter-section">
+    <div class="inst-header" style="display:flex; align-items:center; gap:8px;">
+      リピートフィルター
+      <div class="mode-toggle" id="repeat-toggle">
+        <button class="mode-btn active" data-mode="off" style="padding:4px 10px; font-size:14px; box-shadow:2px 2px 0 #999;">無効</button>
+        <button class="mode-btn" data-mode="on" style="padding:4px 10px; font-size:14px; box-shadow:2px 2px 0 #999;">有効</button>
+      </div>
+    </div>
+    <div id="repeat-filter-body" style="display:none;"></div>
   </div>
 
   <!-- Default structure + Tree visualization -->
@@ -1016,12 +1029,92 @@ function toggleHelp(btn) {
 }
 
 /* ─── State ─── */
-var patterns = new Array(16).fill(null); // each: {kick, snare, hihat, kickDef, snareDef, hihatDef} or null
+var PATTERN_COUNT = 16;
+document.documentElement.style.setProperty('--pattern-count', PATTERN_COUNT);
+var patterns = new Array(PATTERN_COUNT).fill(null); // each: {kick, snare, hihat, kickDef, snareDef, hihatDef} or null
 var currentPattern = 0;
 var kickFlat = null, snareFlat = null, hihatFlat = null;
 var isPlaying = false;
 var treeCursor = null;
 var allMode = false;
+var repeatFilterEnabled = false;
+
+/* ─── Repeat Filter UI ─── */
+(function() {
+  var toggle = document.querySelectorAll('#repeat-toggle .mode-btn');
+  var body = document.getElementById('repeat-filter-body');
+  for (var i = 0; i < toggle.length; i++) {
+    toggle[i].addEventListener('click', function() {
+      repeatFilterEnabled = this.dataset.mode === 'on';
+      for (var j = 0; j < toggle.length; j++) {
+        toggle[j].classList.toggle('active', toggle[j] === this);
+      }
+      body.style.display = repeatFilterEnabled ? '' : 'none';
+    });
+  }
+
+  var instruments = [
+    { key: 'kick', label: 'K', color: 'var(--kick-color)' },
+    { key: 'snare', label: 'S', color: 'var(--snare-color)' },
+    { key: 'hihat', label: 'H', color: 'var(--hihat-color)' }
+  ];
+  var maxChunk = PATTERN_COUNT - 1;
+
+  for (var i = 0; i < instruments.length; i++) {
+    var inst = instruments[i];
+
+    // Label
+    var header = document.createElement('div');
+    header.className = 'grid-label ' + inst.key;
+    header.style.cssText = 'margin-top:10px; margin-bottom:6px;';
+    header.textContent = inst.label;
+    body.appendChild(header);
+
+    // chunkRatio slider
+    var chunkRow = document.createElement('div');
+    chunkRow.className = 'param-row';
+    chunkRow.innerHTML =
+      '<span class="param-label">chunkRatio</span>' +
+      '<input type="range" id="rf-chunk-' + inst.key + '" min="0" max="1" step="0.01" value="0.25" style="flex:1;">' +
+      '<span class="param-value" id="rf-chunk-val-' + inst.key + '">0.25</span>';
+    body.appendChild(chunkRow);
+
+    // bias slider
+    var biasRow = document.createElement('div');
+    biasRow.className = 'param-row';
+    biasRow.innerHTML =
+      '<span class="param-label">bias</span>' +
+      '<input type="range" id="rf-bias-' + inst.key + '" min="-1" max="1" step="0.01" value="0" style="flex:1;">' +
+      '<span class="param-value" id="rf-bias-val-' + inst.key + '">0.00</span>';
+    body.appendChild(biasRow);
+
+    // Number blocks (1 ~ PATTERN_COUNT - 1)
+    var blockRow = document.createElement('div');
+    blockRow.className = 'pattern-bank';
+    blockRow.id = 'rf-blocks-' + inst.key;
+    blockRow.style.cssText = 'grid-template-columns: repeat(' + PATTERN_COUNT + ', 36px); margin-top:4px;';
+    for (var n = 0; n < PATTERN_COUNT; n++) {
+      var btn = document.createElement('button');
+      btn.textContent = n;
+      btn.dataset.value = n;
+      blockRow.appendChild(btn);
+    }
+    body.appendChild(blockRow);
+
+    // Wire up sliders
+    (function(key) {
+      var chunkSlider = document.getElementById('rf-chunk-' + key);
+      var chunkVal = document.getElementById('rf-chunk-val-' + key);
+      chunkSlider.addEventListener('input', function() { chunkVal.textContent = parseFloat(this.value).toFixed(2); });
+
+      var biasSlider = document.getElementById('rf-bias-' + key);
+      var biasVal = document.getElementById('rf-bias-val-' + key);
+      biasSlider.addEventListener('input', function() {
+        biasVal.textContent = parseFloat(this.value).toFixed(2);
+      });
+    })(inst.key);
+  }
+})();
 
 /* ─── Mode Toggle (個/全) ─── */
 (function() {
@@ -1039,7 +1132,7 @@ var allMode = false;
 /* ─── Pattern Bank UI ─── */
 (function() {
   var bank = document.getElementById('pattern-bank');
-  for (var i = 0; i < 16; i++) {
+  for (var i = 0; i < PATTERN_COUNT; i++) {
     var btn = document.createElement('button');
     btn.textContent = i;
     btn.dataset.index = i;
@@ -1518,8 +1611,8 @@ function generateForSlot(slotIndex) {
 
 document.getElementById('btn-generate').addEventListener('click', function() {
   if (allMode) {
-    // Generate all 16 slots
-    for (var i = 0; i < 16; i++) generateForSlot(i);
+    // Generate all slots
+    for (var i = 0; i < PATTERN_COUNT; i++) generateForSlot(i);
     // Display current pattern
     var pat = patterns[currentPattern];
     kickFlat = pat.kick; snareFlat = pat.snare; hihatFlat = pat.hihat;
@@ -1697,8 +1790,8 @@ var playingAllMode = false; // true when in all-mode playback
 
 function findNextPatternIndex(fromIndex) {
   // Find the next pattern slot with data, wrapping around
-  for (var i = 1; i <= 16; i++) {
-    var idx = (fromIndex + i) % 16;
+  for (var i = 1; i <= PATTERN_COUNT; i++) {
+    var idx = (fromIndex + i) % PATTERN_COUNT;
     if (patterns[idx]) return idx;
   }
   return -1; // no patterns at all
@@ -1883,7 +1976,7 @@ function collectPatternsForRender() {
   // Returns array of {kick, snare, hihat, kickDef, snareDef, hihatDef} to render
   if (allMode) {
     var list = [];
-    for (var i = 0; i < 16; i++) {
+    for (var i = 0; i < PATTERN_COUNT; i++) {
       if (patterns[i]) list.push(patterns[i]);
     }
     return list;
