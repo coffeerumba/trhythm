@@ -1804,6 +1804,14 @@ var instPlayback = [
 ];
 
 var playingAllMode = false; // true when in all-mode playback
+var useRepeatFilter = false; // true when all-mode + repeat filter enabled
+
+function getRepeatFilterIndexes(key) {
+  var cells = document.getElementById('rf-blocks-' + key).children;
+  var indexes = [];
+  for (var i = 0; i < cells.length; i++) indexes.push(parseInt(cells[i].textContent));
+  return indexes;
+}
 
 function findNextPatternIndex(fromIndex) {
   // Find the next pattern slot with data, wrapping around
@@ -1845,6 +1853,7 @@ async function startPlayback() {
   }
 
   playingAllMode = allMode;
+  useRepeatFilter = playingAllMode && repeatFilterEnabled;
 
   // In all-mode, start from the first pattern that has data
   if (playingAllMode) {
@@ -1875,6 +1884,16 @@ async function startPlayback() {
     ip.count = leaves;
     ip.secPerStep = cycle / leaves;
     ip.nextTime = now;
+    ip.flatKey = ip.key; // 'kick', 'snare', 'hihat'
+    if (useRepeatFilter) {
+      ip.repeatIndexes = getRepeatFilterIndexes(ip.key);
+      // Apply filter to initial pattern
+      var filteredIdx = ip.repeatIndexes[currentPattern];
+      ip.currentFlat = patterns[filteredIdx] ? patterns[filteredIdx][ip.flatKey] : null;
+    } else {
+      ip.repeatIndexes = null;
+      ip.currentFlat = null;
+    }
   }
 
   var needsAdvance = false;
@@ -1898,6 +1917,11 @@ async function startPlayback() {
           ip2.count = levels2.length;
           var beats2 = parseInt(document.getElementById(ip2.key + '-beats').value);
           ip2.secPerStep = 60.0 * beats2 / bpm2 / ip2.count;
+          // Apply repeat filter: override flat data per track
+          if (useRepeatFilter) {
+            var filteredIdx = ip2.repeatIndexes[nextIdx];
+            ip2.currentFlat = patterns[filteredIdx] ? patterns[filteredIdx][ip2.flatKey] : null;
+          }
         }
       }
     }
@@ -1919,7 +1943,7 @@ async function startPlayback() {
     for (var i = 0; i < instPlayback.length; i++) {
       var ip = instPlayback[i];
       while (ip.nextTime < lookAhead) {
-        var flat = ip.getFlat();
+        var flat = useRepeatFilter ? ip.currentFlat : ip.getFlat();
         if (flat && flat[ip.step]) ip.play(ip.nextTime);
         var delay = Math.max(0, (ip.nextTime - Tone.now()) * 1000);
         (function(gridId, step) {
