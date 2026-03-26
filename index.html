@@ -179,6 +179,11 @@ input[type="range"]::-moz-range-thumb {
   font-weight: bold;
   box-shadow: 2px 2px 0 #999;
 }
+.pattern-bank span.active {
+  background: var(--accent);
+  color: #fff;
+  font-weight: bold;
+}
 .pattern-bank button.has-data {
   border-color: #666;
   color: var(--text);
@@ -603,6 +608,7 @@ input[type="range"]::-moz-range-thumb {
         <button class="mode-btn active" data-mode="off" style="padding:4px 10px; font-size:14px; box-shadow:2px 2px 0 #999;">無効</button>
         <button class="mode-btn" data-mode="on" style="padding:4px 10px; font-size:14px; box-shadow:2px 2px 0 #999;">有効</button>
       </div>
+      <button class="btn btn-generate" id="btn-regen-filter" style="padding:4px 10px; font-size:14px;">再生成</button>
     </div>
     <div id="repeat-filter-body" style="display:none;"></div>
   </div>
@@ -1055,9 +1061,9 @@ var repeatFilterEnabled = false;
   }
 
   var instruments = [
-    { key: 'kick', label: 'K', color: 'var(--kick-color)' },
-    { key: 'snare', label: 'S', color: 'var(--snare-color)' },
-    { key: 'hihat', label: 'H', color: 'var(--hihat-color)' }
+    { key: 'kick', label: 'K', color: 'var(--kick-color)', defaultBias: 0.5 },
+    { key: 'snare', label: 'S', color: 'var(--snare-color)', defaultBias: 0.25 },
+    { key: 'hihat', label: 'H', color: 'var(--hihat-color)', defaultBias: 0 }
   ];
   var maxChunk = PATTERN_COUNT - 1;
 
@@ -1085,8 +1091,8 @@ var repeatFilterEnabled = false;
     biasRow.className = 'param-row';
     biasRow.innerHTML =
       '<span class="param-label">bias</span>' +
-      '<input type="range" id="rf-bias-' + inst.key + '" min="-1" max="1" step="0.01" value="0" style="flex:1;">' +
-      '<span class="param-value" id="rf-bias-val-' + inst.key + '">0.00</span>';
+      '<input type="range" id="rf-bias-' + inst.key + '" min="-1" max="1" step="0.01" value="' + inst.defaultBias + '" style="flex:1;">' +
+      '<span class="param-value" id="rf-bias-val-' + inst.key + '">' + inst.defaultBias.toFixed(2) + '</span>';
     body.appendChild(biasRow);
 
     // Number blocks (1 ~ PATTERN_COUNT - 1)
@@ -1132,6 +1138,12 @@ function updateRepeatFilter(key) {
     cells[i].textContent = result.indexes[i];
   }
 }
+
+document.getElementById('btn-regen-filter').addEventListener('click', function() {
+  updateRepeatFilter('kick');
+  updateRepeatFilter('snare');
+  updateRepeatFilter('hihat');
+});
 
 /* ─── Mode Toggle (個/全) ─── */
 (function() {
@@ -1181,6 +1193,7 @@ function switchPattern(idx) {
   for (var i = 0; i < btns.length; i++) {
     btns[i].classList.toggle('active', i === idx);
   }
+  updateRepeatFilterHighlight(idx);
 
   var pat = patterns[idx];
   if (pat) {
@@ -1213,6 +1226,16 @@ function switchPattern(idx) {
     stopPlayback();
     if (kickFlat) startPlayback();
     else isPlaying = false;
+  }
+}
+
+function updateRepeatFilterHighlight(idx) {
+  var keys = ['kick', 'snare', 'hihat'];
+  for (var k = 0; k < keys.length; k++) {
+    var cells = document.getElementById('rf-blocks-' + keys[k]).children;
+    for (var i = 0; i < cells.length; i++) {
+      cells[i].classList.toggle('active', i === idx);
+    }
   }
 }
 
@@ -1840,6 +1863,7 @@ function loadPatternForPlayback(idx) {
   // Update pattern bank active button
   var btns = document.getElementById('pattern-bank').children;
   for (var i = 0; i < btns.length; i++) btns[i].classList.toggle('active', i === idx);
+  updateRepeatFilterHighlight(idx);
 
   document.getElementById('empty-msg').style.display = 'none';
   document.getElementById('pattern-display').style.display = '';
@@ -2016,11 +2040,33 @@ function encodeWAV(audioBuffer) {
 function collectPatternsForRender() {
   // Returns array of {kick, snare, hihat, kickDef, snareDef, hihatDef} to render
   if (allMode) {
-    var list = [];
-    for (var i = 0; i < PATTERN_COUNT; i++) {
-      if (patterns[i]) list.push(patterns[i]);
+    if (repeatFilterEnabled) {
+      // Apply repeat filter: each track may reference a different pattern per slot
+      var kickIndexes = getRepeatFilterIndexes('kick');
+      var snareIndexes = getRepeatFilterIndexes('snare');
+      var hihatIndexes = getRepeatFilterIndexes('hihat');
+      var list = [];
+      for (var i = 0; i < PATTERN_COUNT; i++) {
+        var basePat = patterns[i];
+        if (!basePat) continue;
+        var kPat = patterns[kickIndexes[i]];
+        var sPat = patterns[snareIndexes[i]];
+        var hPat = patterns[hihatIndexes[i]];
+        list.push({
+          kick: kPat ? kPat.kick : basePat.kick,
+          snare: sPat ? sPat.snare : basePat.snare,
+          hihat: hPat ? hPat.hihat : basePat.hihat,
+          kickDef: basePat.kickDef, snareDef: basePat.snareDef, hihatDef: basePat.hihatDef
+        });
+      }
+      return list;
+    } else {
+      var list = [];
+      for (var i = 0; i < PATTERN_COUNT; i++) {
+        if (patterns[i]) list.push(patterns[i]);
+      }
+      return list;
     }
-    return list;
   } else {
     if (!kickFlat) return [];
     var pat = patterns[currentPattern];
