@@ -103,7 +103,7 @@ TR.startPlayback = async function() {
   function scheduler() {
     var lookAhead = Tone.now() + TR.SCHEDULER_LOOKAHEAD;
 
-    if (needsAdvance && TR.state.playingAllMode) {
+    if (needsAdvance && TR.state.allMode) {
       needsAdvance = false;
       var nextIdx = TR.findNextPatternIndex(TR.state.currentPattern);
       if (nextIdx >= 0) {
@@ -120,7 +120,7 @@ TR.startPlayback = async function() {
           ip2.count = levels2.length;
           ip2.beats = nextPat[beatsKey2] || TR.computeBeats(def2);
           ip2.secPerStep = 60.0 * ip2.beats / bpm2 / ip2.count;
-          if (TR.state.useRepeatFilter) {
+          if (TR.state.allMode && TR.state.repeatFilterEnabled) {
             var filteredIdx = ip2.repeatIndexes[nextIdx];
             ip2.currentFlat = TR.state.patterns[filteredIdx] ? TR.state.patterns[filteredIdx][ip2.flatKey] : null;
           }
@@ -138,11 +138,15 @@ TR.startPlayback = async function() {
       })(TR.state.treeCursor.step);
       TR.state.treeCursor.nextTime += TR.state.treeCursor.secPerStep;
       TR.state.treeCursor.step = (TR.state.treeCursor.step + 1) % TR.state.treeCursor.count;
+      // Cycle complete when default structure cursor wraps to 0
+      if (TR.state.allMode && TR.state.treeCursor.step === 0) {
+        needsAdvance = true;
+      }
     }
     for (var i = 0; i < TR.state.instPlayback.length; i++) {
       var ip = TR.state.instPlayback[i];
       while (ip.nextTime < lookAhead) {
-        var flat = TR.state.useRepeatFilter ? ip.currentFlat : ip.getFlat();
+        var flat = (TR.state.allMode && TR.state.repeatFilterEnabled) ? ip.currentFlat : ip.getFlat();
         if (flat && flat[ip.step]) ip.play(ip.nextTime);
         var delay = Math.max(0, (ip.nextTime - Tone.now()) * 1000);
         (function(gridId, step) {
@@ -150,9 +154,6 @@ TR.startPlayback = async function() {
         })(ip.gridId, ip.step);
         ip.nextTime += ip.secPerStep;
         ip.step = (ip.step + 1) % ip.count;
-        if (TR.state.playingAllMode && ip.step === 0 && i === 0) {
-          needsAdvance = true;
-        }
       }
     }
     TR.state.schedulerTimer = setTimeout(scheduler, TR.SCHEDULER_INTERVAL);
