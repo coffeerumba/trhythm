@@ -578,8 +578,8 @@ input[type="range"]::-moz-range-thumb {
   <!-- Buttons -->
   <div class="btn-row">
     <div class="mode-toggle" id="mode-toggle">
-      <button class="mode-btn active" data-mode="single">個</button>
-      <button class="mode-btn" data-mode="all">全</button>
+      <button class="mode-btn" data-mode="single">個</button>
+      <button class="mode-btn active" data-mode="all">全</button>
     </div>
     <button class="btn btn-generate" id="btn-generate">生成</button>
     <button class="btn btn-play" id="btn-play" disabled>&#9654; 再生</button>
@@ -1061,7 +1061,7 @@ var currentPattern = 0;
 var kickFlat = null, snareFlat = null, hihatFlat = null;
 var isPlaying = false;
 var treeCursor = null;
-var allMode = false;
+var allMode = true;
 var repeatFilterEnabled = false;
 
 /* ─── Repeat Filter UI ─── */
@@ -1640,10 +1640,7 @@ updateAllBeatsSelects();
       }
       for (var i = 0; i < instPlayback.length; i++) {
         var ip = instPlayback[i];
-        var def = getInstStructure(ip.key);
-        var leaves = computeLevels(def.tree).length;
-        var beats = parseInt(document.getElementById(ip.key + '-beats').value);
-        ip.secPerStep = 60.0 * beats / bpm / leaves;
+        ip.secPerStep = 60.0 * ip.beats / bpm / ip.count;
       }
     }
   });
@@ -1659,9 +1656,14 @@ function generateForSlot(slotIndex) {
   var sFlat = flattenTree(generateRhythm(snareDef.tree, snareDef.beatLevel, getParam('snare', 'rate'), getParam('snare', 'center'), getParam('snare', 'fidelity')));
   var hFlat = flattenTree(generateRhythm(hihatDef.tree, hihatDef.beatLevel, getParam('hihat', 'rate'), getParam('hihat', 'center'), getParam('hihat', 'fidelity')));
 
+  var kickBeats = parseInt(document.getElementById('kick-beats').value);
+  var snareBeats = parseInt(document.getElementById('snare-beats').value);
+  var hihatBeats = parseInt(document.getElementById('hihat-beats').value);
+
   patterns[slotIndex] = {
     kick: kFlat, snare: sFlat, hihat: hFlat,
-    kickDef: kickDef, snareDef: snareDef, hihatDef: hihatDef
+    kickDef: kickDef, snareDef: snareDef, hihatDef: hihatDef,
+    kickBeats: kickBeats, snareBeats: snareBeats, hihatBeats: hihatBeats
   };
 
   return { kickDef: kickDef, snareDef: snareDef, hihatDef: hihatDef };
@@ -1914,16 +1916,20 @@ async function startPlayback() {
   var defaultCycle = 60.0 * defaultBeats / bpm;
   treeCursor = { step: 0, count: defaultLeaves, secPerStep: defaultCycle / defaultLeaves, nextTime: now };
 
-  // Initialize per-instrument state
+  // Initialize per-instrument state from pattern's saved structure
+  var curPat = patterns[currentPattern];
   for (var i = 0; i < instPlayback.length; i++) {
     var ip = instPlayback[i];
-    var def = getInstStructure(ip.key);
+    var defKey = ip.key + 'Def'; // 'kickDef', 'snareDef', 'hihatDef'
+    var def = curPat[defKey];
     var levels = computeLevels(def.tree);
     var leaves = levels.length;
-    var beats = parseInt(document.getElementById(ip.key + '-beats').value);
+    var beatsKey = ip.key + 'Beats'; // 'kickBeats', 'snareBeats', 'hihatBeats'
+    var beats = curPat[beatsKey] || computeBeats(def);
     var cycle = 60.0 * beats / bpm;
     ip.step = 0;
     ip.count = leaves;
+    ip.beats = beats;
     ip.secPerStep = cycle / leaves;
     ip.nextTime = now;
     ip.flatKey = ip.key; // 'kick', 'snare', 'hihat'
@@ -1949,16 +1955,19 @@ async function startPlayback() {
       var nextIdx = findNextPatternIndex(currentPattern);
       if (nextIdx >= 0) {
         loadPatternForPlayback(nextIdx);
-        // Re-initialize per-instrument state for new pattern
+        // Re-initialize per-instrument state from pattern's saved structure
         var bpm2 = parseInt(document.getElementById('bpm').value);
+        var nextPat = patterns[nextIdx];
         for (var j = 0; j < instPlayback.length; j++) {
           var ip2 = instPlayback[j];
-          var def2 = getInstStructure(ip2.key);
+          var defKey = ip2.key + 'Def'; // 'kickDef', 'snareDef', 'hihatDef'
+          var def2 = nextPat[defKey];
           var levels2 = computeLevels(def2.tree);
+          var beatsKey2 = ip2.key + 'Beats';
           ip2.step = 0;
           ip2.count = levels2.length;
-          var beats2 = parseInt(document.getElementById(ip2.key + '-beats').value);
-          ip2.secPerStep = 60.0 * beats2 / bpm2 / ip2.count;
+          ip2.beats = nextPat[beatsKey2] || computeBeats(def2);
+          ip2.secPerStep = 60.0 * ip2.beats / bpm2 / ip2.count;
           // Apply repeat filter: override flat data per track
           if (useRepeatFilter) {
             var filteredIdx = ip2.repeatIndexes[nextIdx];
@@ -2418,9 +2427,9 @@ async function renderOffline() {
     var snareLeaves = computeLevels(snareDef.tree).length;
     var hihatLeaves = computeLevels(hihatDef.tree).length;
 
-    var kickBeats = computeBeats(kickDef);
-    var snareBeats = computeBeats(snareDef);
-    var hihatBeats = computeBeats(hihatDef);
+    var kickBeats = pat.kickBeats || computeBeats(kickDef);
+    var snareBeats = pat.snareBeats || computeBeats(snareDef);
+    var hihatBeats = pat.hihatBeats || computeBeats(hihatDef);
 
     var kickSecPerStep = 60.0 * kickBeats / bpm / kickLeaves;
     var snareSecPerStep = 60.0 * snareBeats / bpm / snareLeaves;
