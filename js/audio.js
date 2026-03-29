@@ -1,0 +1,146 @@
+(function(TR) {
+/* ─── Audio Engine ─── */
+TR.audio = {};
+
+TR.audio.init = function() {
+  if (TR.state.masterGain) return;
+  var ctx = Tone.getContext().rawContext;
+
+  TR.state.masterGain = ctx.createGain();
+  TR.state.masterGain.gain.value = 6.0;
+
+  var limiter = ctx.createDynamicsCompressor();
+  limiter.threshold.value = -1;
+  limiter.knee.value = 0;
+  limiter.ratio.value = 20;
+  limiter.attack.value = 0.001;
+  limiter.release.value = 0.02;
+
+  TR.state.masterGain.connect(limiter);
+  limiter.connect(ctx.destination);
+
+  // Pre-generate noise buffer
+  var sr = ctx.sampleRate;
+  var len = sr * 2;
+  TR.state.noiseBuffer = ctx.createBuffer(1, len, sr);
+  var data = TR.state.noiseBuffer.getChannelData(0);
+  for (var i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+};
+
+TR.audio.playKick = function(time, _ctx, _master) {
+  var ctx = _ctx || Tone.getContext().rawContext;
+  var master = _master || TR.state.masterGain;
+  var osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(150, time);
+  osc.frequency.exponentialRampToValueAtTime(40, time + 0.08);
+  var gain = ctx.createGain();
+  gain.gain.setValueAtTime(2.0, time);
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.3);
+  osc.connect(gain); gain.connect(master);
+  osc.start(time); osc.stop(time + 0.35);
+  // Subtle square click
+  var sq = ctx.createOscillator();
+  sq.type = 'square';
+  sq.frequency.setValueAtTime(160, time);
+  sq.frequency.exponentialRampToValueAtTime(30, time + 0.04);
+  var sg = ctx.createGain();
+  sg.gain.setValueAtTime(0.3, time);
+  sg.gain.linearRampToValueAtTime(0, time + 0.05);
+  sq.connect(sg); sg.connect(master);
+  sq.start(time); sq.stop(time + 0.06);
+};
+
+TR.audio.playSnare = function(time, _ctx, _master, _noiseBuf) {
+  var ctx = _ctx || Tone.getContext().rawContext;
+  var master = _master || TR.state.masterGain;
+  var nb = _noiseBuf || TR.state.noiseBuffer;
+  var src = ctx.createBufferSource();
+  src.buffer = nb;
+  src.start(time, Math.random()); src.stop(time + 0.15);
+  var filt = ctx.createBiquadFilter();
+  filt.type = 'highpass'; filt.frequency.value = 1000;
+  var ng = ctx.createGain();
+  ng.gain.setValueAtTime(1.2, time);
+  ng.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
+  src.connect(filt); filt.connect(ng); ng.connect(master);
+  // Sine+square mix body
+  var osc = ctx.createOscillator();
+  osc.type = 'sine'; osc.frequency.value = 200;
+  var og = ctx.createGain();
+  og.gain.setValueAtTime(0.8, time);
+  og.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
+  osc.connect(og); og.connect(master);
+  osc.start(time); osc.stop(time + 0.15);
+  var sq = ctx.createOscillator();
+  sq.type = 'square'; sq.frequency.value = 210;
+  var sqg = ctx.createGain();
+  sqg.gain.setValueAtTime(0.3, time);
+  sqg.gain.linearRampToValueAtTime(0, time + 0.07);
+  sq.connect(sqg); sqg.connect(master);
+  sq.start(time); sq.stop(time + 0.1);
+};
+
+TR.audio.playHihat = function(time, _ctx, _master, _noiseBuf) {
+  var ctx = _ctx || Tone.getContext().rawContext;
+  var master = _master || TR.state.masterGain;
+  var nb = _noiseBuf || TR.state.noiseBuffer;
+  var src = ctx.createBufferSource();
+  src.buffer = nb;
+  src.start(time, Math.random()); src.stop(time + 0.06);
+  var filt = ctx.createBiquadFilter();
+  filt.type = 'highpass'; filt.frequency.value = 7000;
+  var g = ctx.createGain();
+  g.gain.setValueAtTime(0.7, time);
+  g.gain.exponentialRampToValueAtTime(0.001, time + 0.05);
+  src.connect(filt); filt.connect(g); g.connect(master);
+  // Faint square shimmer
+  var sq = ctx.createOscillator();
+  sq.type = 'square'; sq.frequency.value = 6800;
+  var sg = ctx.createGain();
+  sg.gain.setValueAtTime(0.1, time);
+  sg.gain.linearRampToValueAtTime(0, time + 0.03);
+  sq.connect(sg); sg.connect(master);
+  sq.start(time); sq.stop(time + 0.03);
+};
+
+TR.audio.playOpenHihat = function(time, _ctx, _master, _noiseBuf) {
+  var ctx = _ctx || Tone.getContext().rawContext;
+  var master = _master || TR.state.masterGain;
+  var nb = _noiseBuf || TR.state.noiseBuffer;
+  var src = ctx.createBufferSource();
+  src.buffer = nb;
+  src.start(time, Math.random()); src.stop(time + 0.25);
+  var filt = ctx.createBiquadFilter();
+  filt.type = 'highpass'; filt.frequency.value = 5000;
+  var g = ctx.createGain();
+  g.gain.setValueAtTime(0.3, time);
+  g.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
+  src.connect(filt); filt.connect(g); g.connect(master);
+};
+
+TR.audio.reset = function() {
+  if (TR.state.isPlaying) TR.stopPlayback();
+  TR.state.masterGain = null;
+  TR.state.noiseBuffer = null;
+  TR.state.toneStarted = false;
+  try {
+    Tone.getContext().rawContext.close();
+  } catch(e) {}
+  Tone.setContext(new (window.AudioContext || window.webkitAudioContext)());
+};
+
+// iOS sleep recovery: always reset audio on wake
+document.addEventListener('visibilitychange', function() {
+  if (document.hidden) return;
+  var rawCtx = Tone.getContext().rawContext;
+  if (rawCtx.state !== 'running') {
+    TR.audio.reset();
+  }
+});
+
+// Wire up instPlayback play functions
+TR.state.instPlayback[0].play = TR.audio.playKick;
+TR.state.instPlayback[1].play = TR.audio.playSnare;
+TR.state.instPlayback[2].play = TR.audio.playHihat;
+})(window.TR);
