@@ -41,7 +41,6 @@ TR.loadPatternForPlayback = function(idx) {
 
   var btns = document.getElementById('pattern-bank').children;
   for (var i = 0; i < btns.length; i++) btns[i].classList.toggle('active', i === idx);
-  TR.updateRepeatFilterHighlight(idx);
 
   document.getElementById('empty-msg').style.display = 'none';
   document.getElementById('pattern-display').style.display = '';
@@ -55,7 +54,6 @@ TR.startPlayback = async function() {
   }
 
   TR.state.playingAllMode = TR.state.allMode;
-  TR.state.useRepeatFilter = TR.state.playingAllMode && TR.state.repeatFilterEnabled;
 
   if (TR.state.playingAllMode) {
     var firstIdx = TR.state.patterns[TR.state.currentPattern] ? TR.state.currentPattern : TR.findNextPatternIndex(TR.state.currentPattern);
@@ -88,14 +86,6 @@ TR.startPlayback = async function() {
     ip.secPerStep = cycle / leaves;
     ip.nextTime = now;
     ip.flatKey = ip.key;
-    if (TR.state.useRepeatFilter) {
-      ip.repeatIndexes = TR.getRepeatFilterIndexes(ip.key);
-      var filteredIdx = ip.repeatIndexes[TR.state.currentPattern];
-      ip.currentFlat = TR.state.patterns[filteredIdx] ? TR.state.patterns[filteredIdx][ip.flatKey] : null;
-    } else {
-      ip.repeatIndexes = null;
-      ip.currentFlat = null;
-    }
   }
 
   var needsAdvance = false;
@@ -120,10 +110,6 @@ TR.startPlayback = async function() {
           ip2.count = levels2.length;
           ip2.beats = nextPat[beatsKey2] || TR.computeBeats(def2);
           ip2.secPerStep = 60.0 * ip2.beats / bpm2 / ip2.count;
-          if (TR.state.allMode && TR.state.repeatFilterEnabled) {
-            var filteredIdx = ip2.repeatIndexes[nextIdx];
-            ip2.currentFlat = TR.state.patterns[filteredIdx] ? TR.state.patterns[filteredIdx][ip2.flatKey] : null;
-          }
         }
       }
     }
@@ -146,7 +132,7 @@ TR.startPlayback = async function() {
     for (var i = 0; i < TR.state.instPlayback.length; i++) {
       var ip = TR.state.instPlayback[i];
       while (ip.nextTime < lookAhead) {
-        var flat = (TR.state.allMode && TR.state.repeatFilterEnabled) ? ip.currentFlat : ip.getFlat();
+        var flat = ip.getFlat();
         if (flat && flat[ip.step]) ip.play(ip.nextTime);
         var delay = Math.max(0, (ip.nextTime - Tone.now()) * 1000);
         (function(gridId, step) {

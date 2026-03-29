@@ -29,8 +29,6 @@ TR.updateRepeatFilter = function(key) {
     { key: 'snare', label: 'S', color: 'var(--snare-color)', defaultBias: 0.25 },
     { key: 'hihat', label: 'H', color: 'var(--hihat-color)', defaultBias: 0 }
   ];
-  var maxChunk = TR.PATTERN_COUNT - 1;
-
   for (var i = 0; i < instruments.length; i++) {
     var inst = instruments[i];
 
@@ -67,7 +65,6 @@ TR.updateRepeatFilter = function(key) {
     for (var n = 0; n < TR.PATTERN_COUNT; n++) {
       var cell = document.createElement('span');
       cell.textContent = n;
-      cell.dataset.value = n;
       blockRow.appendChild(cell);
     }
     body.appendChild(blockRow);
@@ -98,16 +95,6 @@ TR.getRepeatFilterIndexes = function(key) {
   var indexes = [];
   for (var i = 0; i < cells.length; i++) indexes.push(parseInt(cells[i].textContent));
   return indexes;
-};
-
-TR.updateRepeatFilterHighlight = function(idx) {
-  var keys = ['kick', 'snare', 'hihat'];
-  for (var k = 0; k < keys.length; k++) {
-    var cells = document.getElementById('rf-blocks-' + keys[k]).children;
-    for (var i = 0; i < cells.length; i++) {
-      cells[i].classList.toggle('active', i === idx);
-    }
-  }
 };
 
 document.getElementById('btn-regen-filter').addEventListener('click', function() {

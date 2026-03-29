@@ -45,7 +45,6 @@ TR.switchPattern = function(idx) {
   for (var i = 0; i < btns.length; i++) {
     btns[i].classList.toggle('active', i === idx);
   }
-  TR.updateRepeatFilterHighlight(idx);
 
   var pat = TR.state.patterns[idx];
   if (pat) {

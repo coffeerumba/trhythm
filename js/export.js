@@ -43,32 +43,11 @@ TR.encodeWAV = function(audioBuffer) {
 
 TR.collectPatternsForRender = function() {
   if (TR.state.allMode) {
-    if (TR.state.repeatFilterEnabled) {
-      var kickIndexes = TR.getRepeatFilterIndexes('kick');
-      var snareIndexes = TR.getRepeatFilterIndexes('snare');
-      var hihatIndexes = TR.getRepeatFilterIndexes('hihat');
-      var list = [];
-      for (var i = 0; i < TR.PATTERN_COUNT; i++) {
-        var basePat = TR.state.patterns[i];
-        if (!basePat) continue;
-        var kPat = TR.state.patterns[kickIndexes[i]];
-        var sPat = TR.state.patterns[snareIndexes[i]];
-        var hPat = TR.state.patterns[hihatIndexes[i]];
-        list.push({
-          kick: kPat ? kPat.kick : basePat.kick,
-          snare: sPat ? sPat.snare : basePat.snare,
-          hihat: hPat ? hPat.hihat : basePat.hihat,
-          kickDef: basePat.kickDef, snareDef: basePat.snareDef, hihatDef: basePat.hihatDef
-        });
-      }
-      return list;
-    } else {
-      var list = [];
-      for (var i = 0; i < TR.PATTERN_COUNT; i++) {
-        if (TR.state.patterns[i]) list.push(TR.state.patterns[i]);
-      }
-      return list;
+    var list = [];
+    for (var i = 0; i < TR.PATTERN_COUNT; i++) {
+      if (TR.state.patterns[i]) list.push(TR.state.patterns[i]);
     }
+    return list;
   } else {
     if (!TR.state.kickFlat) return [];
     var pat = TR.state.patterns[TR.state.currentPattern];

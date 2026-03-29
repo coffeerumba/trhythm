@@ -19,8 +19,7 @@ TR.state = {
     { key: 'snare', gridId: 'grid-snare', getFlat: function() { return TR.state.snareFlat; }, play: null },
     { key: 'hihat', gridId: 'grid-hihat', getFlat: function() { return TR.state.hihatFlat; }, play: null }
   ],
-  playingAllMode: false,
-  useRepeatFilter: false
+  playingAllMode: false
 };
 
 document.documentElement.style.setProperty('--pattern-count', TR.PATTERN_COUNT);
