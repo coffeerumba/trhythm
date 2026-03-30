@@ -101,4 +101,41 @@ document.getElementById('btn-regen-map').addEventListener('click', function() {
   TR.updateRepeatMap('snare');
   TR.updateRepeatMap('hihat');
 });
+
+/* ─── Apply repeat map to saved patterns ─── */
+TR.applyRepeatMap = function() {
+  var kickIdx = TR.getRepeatMapIndexes('kick');
+  var snareIdx = TR.getRepeatMapIndexes('snare');
+  var hihatIdx = TR.getRepeatMapIndexes('hihat');
+  var pats = TR.state.patterns;
+
+  for (var i = 0; i < TR.PATTERN_COUNT; i++) {
+    if (!pats[i]) continue;
+    if (kickIdx[i] !== i && pats[kickIdx[i]]) {
+      pats[i].kick = pats[kickIdx[i]].kick.slice();
+      pats[i].kickDef = pats[kickIdx[i]].kickDef;
+      pats[i].kickBeats = pats[kickIdx[i]].kickBeats;
+    }
+    if (snareIdx[i] !== i && pats[snareIdx[i]]) {
+      pats[i].snare = pats[snareIdx[i]].snare.slice();
+      pats[i].snareDef = pats[snareIdx[i]].snareDef;
+      pats[i].snareBeats = pats[snareIdx[i]].snareBeats;
+    }
+    if (hihatIdx[i] !== i && pats[hihatIdx[i]]) {
+      pats[i].hihat = pats[hihatIdx[i]].hihat.slice();
+      pats[i].hihatDef = pats[hihatIdx[i]].hihatDef;
+      pats[i].hihatBeats = pats[hihatIdx[i]].hihatBeats;
+    }
+  }
+
+  var cur = pats[TR.state.currentPattern];
+  if (cur) {
+    TR.state.kickFlat = cur.kick;
+    TR.state.snareFlat = cur.snare;
+    TR.state.hihatFlat = cur.hihat;
+    TR.renderAllGrids(cur);
+  }
+};
+
+document.getElementById('btn-apply-map').addEventListener('click', TR.applyRepeatMap);
 })(window.TR);
