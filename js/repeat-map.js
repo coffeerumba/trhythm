@@ -12,7 +12,16 @@ TR.updateRepeatMap = function(key) {
 
 /* ─── Repeat Map UI ─── */
 (function() {
+  var toggle = document.querySelectorAll('#repeat-map-toggle .mode-btn');
   var body = document.getElementById('repeat-map-body');
+  for (var i = 0; i < toggle.length; i++) {
+    toggle[i].addEventListener('click', function() {
+      for (var j = 0; j < toggle.length; j++) {
+        toggle[j].classList.toggle('active', toggle[j] === this);
+      }
+      body.style.display = this.dataset.mode === 'on' ? '' : 'none';
+    });
+  }
 
   var instruments = [
     { key: 'kick', label: 'K', defaultBias: 0.5 },

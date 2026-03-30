@@ -30,13 +30,12 @@
 })();
 
 TR.switchPattern = function(idx) {
-  if (TR.state.kickFlat) {
-    TR.state.patterns[TR.state.currentPattern] = {
-      kick: TR.state.kickFlat, snare: TR.state.snareFlat, hihat: TR.state.hihatFlat,
-      kickDef: TR.state.patterns[TR.state.currentPattern] && TR.state.patterns[TR.state.currentPattern].kickDef,
-      snareDef: TR.state.patterns[TR.state.currentPattern] && TR.state.patterns[TR.state.currentPattern].snareDef,
-      hihatDef: TR.state.patterns[TR.state.currentPattern] && TR.state.patterns[TR.state.currentPattern].hihatDef
-    };
+  // Save current flat data back (in case of click-toggling etc.)
+  var curPat = TR.state.patterns[TR.state.currentPattern];
+  if (curPat && TR.state.kickFlat) {
+    curPat.kick = TR.state.kickFlat;
+    curPat.snare = TR.state.snareFlat;
+    curPat.hihat = TR.state.hihatFlat;
   }
 
   TR.state.currentPattern = idx;
