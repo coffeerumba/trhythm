@@ -508,7 +508,6 @@ input[type="range"]::-moz-range-thumb {
   flex-shrink: 0;
 }
 .tv-leaf.beat { color: #fff; background: var(--accent); border-color: #a02040; }
-.tv-leaf.cursor-on { box-shadow: 0 0 0 2px var(--cursor); background: rgba(255,204,0,0.4); }
 
 /* --- Empty state --- */
 .empty-msg {

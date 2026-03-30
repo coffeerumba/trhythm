@@ -1,4 +1,5 @@
-/* ─── Global namespace & Constants ─── */
+(function() {
+/* ═══ Global namespace & Constants ═══ */
 window.TR = {};
 
 /* All patterns are balanced-depth trees with 2-or-3 children per node.
@@ -91,3 +92,86 @@ TR.buildStructOptions = function(includeDefault) {
   }
   return html;
 };
+
+/* ═══ State ═══ */
+TR.state = {
+  patterns: new Array(TR.PATTERN_COUNT).fill(null),
+  currentPattern: 0,
+  kickFlat: null,
+  snareFlat: null,
+  hihatFlat: null,
+  isPlaying: false,
+  allMode: true,
+  schedulerTimer: null,
+  toneStarted: false,
+  masterGain: null,
+  noiseBuffer: null,
+  instPlayback: [
+    { key: 'kick',  gridId: 'grid-kick',  getFlat: function() { return TR.state.kickFlat; },  play: null },
+    { key: 'snare', gridId: 'grid-snare', getFlat: function() { return TR.state.snareFlat; }, play: null },
+    { key: 'hihat', gridId: 'grid-hihat', getFlat: function() { return TR.state.hihatFlat; }, play: null }
+  ],
+  playingAllMode: false
+};
+
+document.documentElement.style.setProperty('--pattern-count', TR.PATTERN_COUNT);
+
+/* ═══ Tree utilities ═══ */
+/* ─── Flatten tree to array ─── */
+TR.flattenTree = function(node) {
+  if (!Array.isArray(node)) return [node];
+  var result = [];
+  for (var i = 0; i < node.length; i++)
+    result = result.concat(TR.flattenTree(node[i]));
+  return result;
+};
+
+/* ─── Compute levels for display ─── */
+TR.computeLevels = function(structure) {
+  var levels = [];
+  function walk(node) {
+    if (!Array.isArray(node)) {
+      var firstIdx = levels.length;
+      for (var j = 0; j < node; j++) levels.push(0);
+      if (node > 1) levels[firstIdx] += 1;
+      return;
+    }
+    for (var i = 0; i < node.length; i++) {
+      var firstIdx = levels.length;
+      walk(node[i]);
+      if (i === 0) levels[firstIdx] += 1;
+    }
+  }
+  walk(structure);
+  return levels;
+};
+
+/* ─── Count leaves in a tree node ─── */
+TR.countLeaves = function(node) {
+  if (!Array.isArray(node)) return node;
+  var count = 0;
+  for (var i = 0; i < node.length; i++) count += TR.countLeaves(node[i]);
+  return count;
+};
+
+/* ─── Compute group boundaries from top-level structure ─── */
+TR.getGroupBoundaries = function(structure) {
+  var boundaries = {};
+  var pos = 0;
+  for (var i = 0; i < structure.length; i++) {
+    if (i > 0) boundaries[pos] = true;
+    pos += TR.countLeaves(structure[i]);
+  }
+  return boundaries;
+};
+
+/* ─── Compute beats from beatLevel ─── */
+TR.computeBeats = function(def) {
+  var levels = TR.computeLevels(def.tree);
+  var beats = 0;
+  for (var i = 0; i < levels.length; i++) {
+    if (levels[i] >= def.beatLevel) beats++;
+  }
+  return beats;
+};
+})();
