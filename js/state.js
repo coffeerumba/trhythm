@@ -9,7 +9,6 @@ TR.state = {
   isPlaying: false,
   treeCursor: null,
   allMode: true,
-  repeatFilterEnabled: false,
   schedulerTimer: null,
   toneStarted: false,
   masterGain: null,

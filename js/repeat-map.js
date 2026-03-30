@@ -1,6 +1,6 @@
 (function(TR) {
 
-TR.updateRepeatFilter = function(key) {
+TR.updateRepeatMap = function(key) {
   var chunkRatio = parseFloat(document.getElementById('rf-chunk-' + key).value);
   var bias = parseFloat(document.getElementById('rf-bias-' + key).value);
   var result = genRepeat(TR.PATTERN_COUNT, chunkRatio, bias);
@@ -10,24 +10,14 @@ TR.updateRepeatFilter = function(key) {
   }
 };
 
-/* ─── Repeat Filter UI ─── */
+/* ─── Repeat Map UI ─── */
 (function() {
-  var toggle = document.querySelectorAll('#repeat-toggle .mode-btn');
-  var body = document.getElementById('repeat-filter-body');
-  for (var i = 0; i < toggle.length; i++) {
-    toggle[i].addEventListener('click', function() {
-      TR.state.repeatFilterEnabled = this.dataset.mode === 'on';
-      for (var j = 0; j < toggle.length; j++) {
-        toggle[j].classList.toggle('active', toggle[j] === this);
-      }
-      body.style.display = TR.state.repeatFilterEnabled ? '' : 'none';
-    });
-  }
+  var body = document.getElementById('repeat-map-body');
 
   var instruments = [
-    { key: 'kick', label: 'K', color: 'var(--kick-color)', defaultBias: 0.5 },
-    { key: 'snare', label: 'S', color: 'var(--snare-color)', defaultBias: 0.25 },
-    { key: 'hihat', label: 'H', color: 'var(--hihat-color)', defaultBias: 0 }
+    { key: 'kick', label: 'K', defaultBias: 0.5 },
+    { key: 'snare', label: 'S', defaultBias: 0.25 },
+    { key: 'hihat', label: 'H', defaultBias: 0 }
   ];
   for (var i = 0; i < instruments.length; i++) {
     var inst = instruments[i];
@@ -75,31 +65,31 @@ TR.updateRepeatFilter = function(key) {
       var chunkVal = document.getElementById('rf-chunk-val-' + key);
       chunkSlider.addEventListener('input', function() {
         chunkVal.textContent = parseFloat(this.value).toFixed(2);
-        TR.updateRepeatFilter(key);
+        TR.updateRepeatMap(key);
       });
 
       var biasSlider = document.getElementById('rf-bias-' + key);
       var biasVal = document.getElementById('rf-bias-val-' + key);
       biasSlider.addEventListener('input', function() {
         biasVal.textContent = parseFloat(this.value).toFixed(2);
-        TR.updateRepeatFilter(key);
+        TR.updateRepeatMap(key);
       });
 
-      TR.updateRepeatFilter(key);
+      TR.updateRepeatMap(key);
     })(inst.key);
   }
 })();
 
-TR.getRepeatFilterIndexes = function(key) {
+TR.getRepeatMapIndexes = function(key) {
   var cells = document.getElementById('rf-blocks-' + key).children;
   var indexes = [];
   for (var i = 0; i < cells.length; i++) indexes.push(parseInt(cells[i].textContent));
   return indexes;
 };
 
-document.getElementById('btn-regen-filter').addEventListener('click', function() {
-  TR.updateRepeatFilter('kick');
-  TR.updateRepeatFilter('snare');
-  TR.updateRepeatFilter('hihat');
+document.getElementById('btn-regen-map').addEventListener('click', function() {
+  TR.updateRepeatMap('kick');
+  TR.updateRepeatMap('snare');
+  TR.updateRepeatMap('hihat');
 });
 })(window.TR);
