@@ -374,16 +374,7 @@ TR.updateRepeatMap = function(key) {
 
 /* ─── Repeat Map UI ─── */
 (function() {
-  var toggle = document.querySelectorAll('#repeat-map-toggle .mode-btn');
   var body = document.getElementById('repeat-map-body');
-  for (var i = 0; i < toggle.length; i++) {
-    toggle[i].addEventListener('click', function() {
-      for (var j = 0; j < toggle.length; j++) {
-        toggle[j].classList.toggle('active', toggle[j] === this);
-      }
-      body.style.display = this.dataset.mode === 'on' ? '' : 'none';
-    });
-  }
 
   var instruments = [
     { key: 'kick', label: 'K', defaultBias: 0.5 },
@@ -458,12 +449,6 @@ TR.getRepeatMapIndexes = function(key) {
   return indexes;
 };
 
-document.getElementById('btn-regen-map').addEventListener('click', function() {
-  TR.updateRepeatMap('kick');
-  TR.updateRepeatMap('snare');
-  TR.updateRepeatMap('hihat');
-});
-
 /* ─── Apply repeat map to saved patterns ─── */
 TR.applyRepeatMap = function() {
   var kickIdx = TR.getRepeatMapIndexes('kick');
@@ -490,14 +475,26 @@ TR.applyRepeatMap = function() {
     }
   }
 
+  // Update current flat arrays
   var cur = pats[TR.state.currentPattern];
   if (cur) {
     TR.state.kickFlat = cur.kick;
     TR.state.snareFlat = cur.snare;
     TR.state.hihatFlat = cur.hihat;
-    TR.renderAllGrids(cur);
   }
 };
 
-document.getElementById('btn-apply-map').addEventListener('click', TR.applyRepeatMap);
+TR.isRepeatMapEnabled = function() {
+  return TR.state.allMode;
+};
+
+TR.updateRepeatMapState = function() {
+  var section = document.getElementById('repeat-map-section');
+  if (TR.state.allMode) {
+    section.classList.remove('disabled');
+  } else {
+    section.classList.add('disabled');
+  }
+};
+TR.updateRepeatMapState();
 })(window.TR);

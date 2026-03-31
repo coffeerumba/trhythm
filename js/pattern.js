@@ -8,6 +8,7 @@
       for (var j = 0; j < btns.length; j++) {
         btns[j].classList.toggle('active', btns[j] === this);
       }
+      TR.updateRepeatMapState();
     });
   }
 })();
@@ -114,6 +115,14 @@ document.getElementById('btn-generate').addEventListener('click', function() {
     TR.generateForSlot(TR.state.currentPattern);
     var pat = TR.state.patterns[TR.state.currentPattern];
     TR.state.kickFlat = pat.kick; TR.state.snareFlat = pat.snare; TR.state.hihatFlat = pat.hihat;
+  }
+
+  // Regenerate and apply repeat map if enabled
+  if (TR.isRepeatMapEnabled()) {
+    TR.updateRepeatMap('kick');
+    TR.updateRepeatMap('snare');
+    TR.updateRepeatMap('hihat');
+    TR.applyRepeatMap();
   }
 
   TR.renderAllGrids(TR.state.patterns[TR.state.currentPattern]);

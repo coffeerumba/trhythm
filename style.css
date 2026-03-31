@@ -517,6 +517,11 @@ input[type="range"]::-moz-range-thumb {
   padding: 20px;
   letter-spacing: 1px;
 }
+/* --- Repeat Map disabled state --- */
+#repeat-map-section.disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
 /* --- Responsive --- */
 @media (max-width: 600px) {
   #app { padding: 10px; }
