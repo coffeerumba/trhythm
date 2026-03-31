@@ -327,8 +327,6 @@ input[type="range"]::-moz-range-thumb {
   display: block;
   width: 100%;
   aspect-ratio: 16 / 9;
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
 }
 
 /* --- Pattern Grid --- */

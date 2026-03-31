@@ -61,12 +61,6 @@ TR.INSTRUMENTS = ['kick', 'snare', 'hihat'];
 TR.SCHEDULER_LOOKAHEAD = 0.1;
 TR.SCHEDULER_INTERVAL = 25;
 
-TR.INST_DEFAULTS = {
-  kick:  { rate: 0.50, center: 0.00, fidelity: 0.75 },
-  snare: { rate: 0.33, center: 0.50, fidelity: 0.50 },
-  hihat: { rate: 0.67, center: 1.00, fidelity: 0.25 }
-};
-
 TR.STRUCT_GROUPS = [
   { prefix: 'p-', label: '\u2605 1.0 \u2014 \u5747\u4e00' },
   { prefix: 'u-', label: '\u2605 0.67 \u2014 \u4e0d\u5747\u4e00' },

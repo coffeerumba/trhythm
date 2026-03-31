@@ -43,7 +43,7 @@ TR.vizOnHit = function(key, step, level) {
 
 TR.vizResize = function() {
   var wrap = document.getElementById('viz-wrap');
-  w = Math.floor(wrap.clientWidth / 2);
+  w = wrap.clientWidth;
   h = Math.floor(w * 9 / 16);
   canvas.width = w;
   canvas.height = h;

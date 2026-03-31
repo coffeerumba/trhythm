@@ -43,7 +43,7 @@ function vizGetCursor(key) {
 }
 function vizCell(x, y, r, g, b) {
   ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
-  ctx.fillRect(Math.floor(x / CELL) * CELL, Math.floor(y / CELL) * CELL, CELL - 1, CELL - 1);
+  ctx.fillRect(Math.floor(x / CELL) * CELL, Math.floor(y / CELL) * CELL, CELL, CELL);
 }
 function vizWrap(x, y) {
   return [((x % vizW) + vizW) % vizW, ((y % vizH) + vizH) % vizH];
@@ -86,10 +86,10 @@ function vizDrawTraces() {
       var x0 = pts[p - 1].x, y0 = pts[p - 1].y, x1 = pts[p].x, y1 = pts[p].y;
       if (x0 === x1) {
         for (var y = Math.min(y0, y1); y <= Math.max(y0, y1); y += CELL * 3)
-          ctx.fillRect(Math.floor(x0 / CELL) * CELL, Math.floor(y / CELL) * CELL, CELL - 1, 1);
+          ctx.fillRect(Math.floor(x0 / CELL) * CELL, Math.floor(y / CELL) * CELL, CELL, 1);
       } else {
         for (var x = Math.min(x0, x1); x <= Math.max(x0, x1); x += CELL * 3)
-          ctx.fillRect(Math.floor(x / CELL) * CELL, Math.floor(y0 / CELL) * CELL, 1, CELL - 1);
+          ctx.fillRect(Math.floor(x / CELL) * CELL, Math.floor(y0 / CELL) * CELL, 1, CELL);
       }
     }
     for (var si = traces[t].signals.length - 1; si >= 0; si--) {

@@ -1,96 +1,27 @@
 /* ═══════════════════════════════════════════════════════════════
-   FRACTAL TREE VISUALIZER — rhythm structure as a growing tree
+   FRACTAL TREE VISUALIZER — 80s Macintosh monochrome style
    ═══════════════════════════════════════════════════════════════ */
 TR.registerVisualizer((function(TR) {
 var ctx, vizW, vizH;
-var CELL = 8;
 
-/* ── Palette (shared with circuit board) ── */
-var BG = [10, 26, 10];
-var DIM = [26, 42, 26];
-var PAL = {
-  kick:  { dark: [108, 0, 32], mid: [208, 48, 80], bright: [255, 128, 144] },
-  snare: { dark: [12, 48, 96], mid: [34, 119, 204], bright: [96, 187, 255] },
-  hihat: { dark: [26, 64, 32], mid: [85, 153, 85], bright: [144, 221, 144] }
-};
-var TRUNK_COLOR = [60, 90, 60];
-var CURSOR_COLOR = [255, 204, 0];
+/* ── Monochrome palette ── */
+var WHITE = '#fff';
+var BLACK = '#000';
+var GRAY  = '#999';
+var LIGHT = '#ccc';
 
-function palColor(key, shade) {
-  var p = PAL[key];
-  return shade <= 0 ? p.dark : shade >= 2 ? p.bright : p.mid;
-}
-
-function cell(x, y, r, g, b) {
-  var gx = Math.floor(x / CELL) * CELL;
-  var gy = Math.floor(y / CELL) * CELL;
-  if (gx < 0 || gx >= vizW || gy < 0 || gy >= vizH) return;
-  ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
-  ctx.fillRect(gx, gy, CELL - 1, CELL - 1);
-}
-
-/* ── Tree structure layout ── */
-var branches = []; // [{x, y, depth, leafIdx, isLeaf, children, key, lit, litAge}]
-var leaves = [];   // references to leaf nodes in branches
+/* ── Tree state ── */
+var nodes = [];    // all nodes (branches + leaves)
+var leaves = [];   // leaf nodes only
 var trunkX, trunkBaseY;
 
-function buildBranch(node, x, y, depth, spread, key) {
-  if (!Array.isArray(node)) {
-    // Leaf group: node = number of leaves (2 or 3)
-    var leafNodes = [];
-    for (var i = 0; i < node; i++) {
-      var lx = x + (i - (node - 1) / 2) * spread * 0.4;
-      var ly = y;
-      var leaf = { x: lx, y: ly, depth: depth, leafIdx: leaves.length, isLeaf: true, children: [], key: key, lit: 0, litAge: 0 };
-      branches.push(leaf);
-      leaves.push(leaf);
-      leafNodes.push(leaf);
-    }
-    return leafNodes;
-  }
-  // Internal node: create branch point and recurse
-  var branchNode = { x: x, y: y, depth: depth, leafIdx: -1, isLeaf: false, children: [], key: key, lit: 0, litAge: 0 };
-  branches.push(branchNode);
-  var childSpread = spread / node.length;
-  var stepY = Math.max(CELL * 3, Math.floor((vizH * 0.6) / (depth + 4)));
-  for (var i = 0; i < node.length; i++) {
-    var cx = x + (i - (node.length - 1) / 2) * spread;
-    var cy = y - stepY;
-    var childNodes = buildBranch(node[i], cx, cy, depth + 1, childSpread, key);
-    branchNode.children = branchNode.children.concat(childNodes);
-  }
-  return [branchNode];
-}
-
-function rebuildTree() {
-  branches = [];
-  leaves = [];
-  var pat = TR.state.patterns[TR.state.currentPattern];
-  if (!pat) return;
-
-  // Use kick's structure as the tree shape (most prominent)
-  var def = pat.kickDef;
-  if (!def) return;
-
-  trunkX = vizW / 2;
-  trunkBaseY = vizH - CELL * 3;
-  var topMargin = CELL * 4;
-  var spread = vizW * 0.35;
-
-  buildBranch(def.tree, trunkX, trunkBaseY - CELL * 6, 0, spread, 'kick');
-}
-
-/* ── Per-track hit state ── */
-var trackHits = {
-  kick:  { active: [], cursor: -1 },
-  snare: { active: [], cursor: -1 },
-  hihat: { active: [], cursor: -1 }
-};
+/* ── Hit flash state ── */
+var flashLeaves = {};  // { leafIdx: { key, age } }
+var pulses = [];       // { x, y, radius, maxRadius }
 
 function getFlat(key) {
   return key === 'kick' ? TR.state.kickFlat : key === 'snare' ? TR.state.snareFlat : TR.state.hihatFlat;
 }
-
 function getCursor(key) {
   if (!TR.state.isPlaying) return -1;
   for (var i = 0; i < TR.state.instPlayback.length; i++) {
@@ -99,38 +30,91 @@ function getCursor(key) {
   return -1;
 }
 
-/* ── Pulse rings from hits ── */
-var pulses = []; // {x, y, r, g, b, radius, maxRadius, age}
+/* ── Build tree layout ── */
+function buildNode(tree, x, y, depth, totalW) {
+  if (!Array.isArray(tree)) {
+    // Leaf group
+    var spacing = Math.min(totalW / tree, 20);
+    for (var i = 0; i < tree; i++) {
+      var lx = x + (i - (tree - 1) / 2) * spacing;
+      var leaf = { x: lx, y: y, depth: depth, isLeaf: true, parent: null, children: [] };
+      nodes.push(leaf);
+      leaves.push(leaf);
+    }
+    return;
+  }
+  var node = { x: x, y: y, depth: depth, isLeaf: false, parent: null, children: [] };
+  nodes.push(node);
 
-/* ── Drawing ── */
-function drawTrunk() {
-  // Draw trunk from base to first branch point
-  var c = TRUNK_COLOR;
-  for (var y = trunkBaseY; y > trunkBaseY - CELL * 8; y -= CELL) {
-    cell(trunkX - CELL, y, c[0], c[1], c[2]);
-    cell(trunkX, y, c[0], c[1], c[2]);
+  var childW = totalW / tree.length;
+  var stepY = Math.min(60, Math.max(30, vizH * 0.12));
+  for (var i = 0; i < tree.length; i++) {
+    var cx = x + (i - (tree.length - 1) / 2) * childW;
+    var cy = y - stepY;
+    var childStart = nodes.length;
+    buildNode(tree[i], cx, cy, depth + 1, childW * 0.9);
+    // Link first node added as child
+    var child = nodes[childStart];
+    if (child) {
+      child.parent = node;
+      node.children.push(child);
+    }
   }
 }
 
-function drawBranches() {
-  // Draw connections between branch points
-  for (var i = 0; i < branches.length; i++) {
-    var b = branches[i];
-    if (b.isLeaf) continue;
-    var c = b.lit > 0 ? palColor(b.key, 1) : TRUNK_COLOR;
-    for (var j = 0; j < b.children.length; j++) {
-      var child = b.children[j];
-      // Vertical line from parent to child height
-      var yFrom = b.y;
-      var yTo = child.y;
-      for (var y = Math.min(yFrom, yTo); y <= Math.max(yFrom, yTo); y += CELL) {
-        cell(b.x, y, c[0], c[1], c[2]);
-      }
-      // Horizontal line to child x
-      var xFrom = Math.min(b.x, child.x);
-      var xTo = Math.max(b.x, child.x);
-      for (var x = xFrom; x <= xTo; x += CELL) {
-        cell(x, child.y, c[0], c[1], c[2]);
+function rebuildTree() {
+  nodes = [];
+  leaves = [];
+  flashLeaves = {};
+  pulses = [];
+  var pat = TR.state.patterns[TR.state.currentPattern];
+  if (!pat || !pat.kickDef) return;
+
+  trunkX = vizW / 2;
+  trunkBaseY = vizH - 30;
+  var treeTop = 40;
+  var spread = vizW * 0.7;
+
+  buildNode(pat.kickDef.tree, trunkX, trunkBaseY - 50, 0, spread);
+}
+
+/* ── Drawing helpers ── */
+function line(x0, y0, x1, y1, width, color) {
+  ctx.beginPath();
+  ctx.moveTo(Math.round(x0), Math.round(y0));
+  ctx.lineTo(Math.round(x1), Math.round(y1));
+  ctx.strokeStyle = color || BLACK;
+  ctx.lineWidth = width || 1;
+  ctx.stroke();
+}
+
+function circle(x, y, r, fill, stroke) {
+  ctx.beginPath();
+  ctx.arc(Math.round(x), Math.round(y), r, 0, Math.PI * 2);
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); }
+}
+
+/* ── Draw tree structure ── */
+function drawTree() {
+  // Draw trunk
+  var trunkW = 3;
+  line(trunkX, trunkBaseY, trunkX, trunkBaseY - 50, trunkW, BLACK);
+
+  // Draw branches (connections)
+  for (var i = 0; i < nodes.length; i++) {
+    var n = nodes[i];
+    if (n.isLeaf || n.children.length === 0) continue;
+
+    for (var j = 0; j < n.children.length; j++) {
+      var child = n.children[j];
+      // L-shaped connector: vertical down from parent, then horizontal to child
+      var thickness = Math.max(1, 3 - n.depth);
+      line(n.x, n.y, n.x, child.y, thickness, BLACK);
+      line(n.x, child.y, child.x, child.y, thickness, BLACK);
+      // Vertical stem down to child's subtree
+      if (!child.isLeaf) {
+        line(child.x, child.y, child.x, child.y + 5, thickness, BLACK);
       }
     }
   }
@@ -138,6 +122,7 @@ function drawBranches() {
 
 function drawLeaves() {
   var keys = ['kick', 'snare', 'hihat'];
+
   for (var k = 0; k < keys.length; k++) {
     var key = keys[k];
     var flat = getFlat(key);
@@ -154,31 +139,36 @@ function drawLeaves() {
     for (var i = 0; i < Math.min(flat.length, leaves.length); i++) {
       var leaf = leaves[i];
       var lvl = levels[i] || 0;
-      var size = 1 + Math.floor(lvl / Math.max(maxLevel, 1) * 2);
+      var baseR = 3 + Math.floor(lvl / Math.max(maxLevel, 1) * 5);
+      var offsetY = (k - 1) * (baseR * 2 + 4);
 
-      // Vertical offset per track to avoid overlap
-      var offsetY = k * CELL * 2;
+      var flash = flashLeaves[i + '_' + key];
+      var isFlashing = flash && flash.age < 15;
+      var isCursor = cursor === i;
 
-      var cr, cg, cb;
-      if (cursor === i) {
-        cr = CURSOR_COLOR[0]; cg = CURSOR_COLOR[1]; cb = CURSOR_COLOR[2];
-        size += 1;
+      if (isCursor) {
+        // Cursor: inverted filled circle
+        circle(leaf.x, leaf.y + offsetY, baseR + 2, BLACK, null);
+        circle(leaf.x, leaf.y + offsetY, baseR - 1, WHITE, null);
       } else if (flat[i]) {
-        var c = palColor(key, lvl > maxLevel * 0.6 ? 2 : 1);
-        cr = c[0]; cg = c[1]; cb = c[2];
+        if (isFlashing) {
+          // Flash: filled black
+          circle(leaf.x, leaf.y + offsetY, baseR + 1, BLACK, null);
+        } else {
+          // Active: filled with border
+          circle(leaf.x, leaf.y + offsetY, baseR, BLACK, BLACK);
+        }
       } else {
-        var c = DIM;
-        cr = c[0]; cg = c[1]; cb = c[2];
-        size = 1;
+        // Inactive: hollow
+        circle(leaf.x, leaf.y + offsetY, baseR, null, LIGHT);
       }
 
-      // Draw as cluster of cells
-      for (var dy = 0; dy < size; dy++) {
-        for (var dx = 0; dx < size; dx++) {
-          cell(leaf.x + (dx - Math.floor(size / 2)) * CELL,
-               leaf.y - offsetY + (dy - Math.floor(size / 2)) * CELL,
-               cr, cg, cb);
-        }
+      // Track label on first leaf
+      if (i === 0) {
+        ctx.font = '10px monospace';
+        ctx.fillStyle = BLACK;
+        ctx.textAlign = 'right';
+        ctx.fillText(key[0].toUpperCase(), leaf.x - baseR - 6, leaf.y + offsetY + 4);
       }
     }
   }
@@ -187,23 +177,41 @@ function drawLeaves() {
 function drawPulses() {
   for (var i = pulses.length - 1; i >= 0; i--) {
     var p = pulses[i];
-    p.radius += 2;
-    p.age++;
+    p.radius += 3;
     if (p.radius > p.maxRadius) { pulses.splice(i, 1); continue; }
-    var fade = p.age / 30;
-    var alpha = Math.max(0, 1 - fade);
-    var r = Math.round(p.r * alpha + BG[0] * (1 - alpha));
-    var g = Math.round(p.g * alpha + BG[1] * (1 - alpha));
-    var b = Math.round(p.b * alpha + BG[2] * (1 - alpha));
-    // Draw ring of cells
-    var steps = Math.max(8, Math.floor(p.radius * 0.8));
-    for (var s = 0; s < steps; s++) {
-      var angle = (s / steps) * Math.PI * 2;
-      var px = p.x + Math.cos(angle) * p.radius;
-      var py = p.y + Math.sin(angle) * p.radius;
-      cell(px, py, r, g, b);
-    }
+    var alpha = 1 - p.radius / p.maxRadius;
+    ctx.beginPath();
+    ctx.arc(Math.round(p.x), Math.round(p.y), p.radius, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(0,0,0,' + alpha.toFixed(2) + ')';
+    ctx.lineWidth = 1;
+    ctx.stroke();
   }
+}
+
+function drawBorder() {
+  // Mac-style window border
+  ctx.strokeStyle = BLACK;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, vizW - 2, vizH - 2);
+  // Title bar
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(2, 2, vizW - 4, 16);
+  ctx.strokeStyle = BLACK;
+  ctx.lineWidth = 1;
+  line(2, 18, vizW - 2, 18, 1, BLACK);
+  // Title bar stripes
+  for (var y = 5; y < 16; y += 2) {
+    line(20, y, vizW - 20, y, 1, BLACK);
+  }
+  // Close box
+  ctx.strokeRect(5, 4, 11, 11);
+  // Title
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(vizW / 2 - 50, 3, 100, 13);
+  ctx.fillStyle = BLACK;
+  ctx.font = 'bold 10px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('Fractal Tree', vizW / 2, 13);
 }
 
 /* ── Plugin interface ── */
@@ -213,15 +221,11 @@ return {
     ctx = _ctx;
     vizW = w;
     vizH = h;
-    branches = [];
-    leaves = [];
-    pulses = [];
     rebuildTree();
   },
   resize: function(w, h) {
     vizW = w;
     vizH = h;
-    pulses = [];
     rebuildTree();
   },
   frame: function(_ctx, w, h) {
@@ -229,53 +233,38 @@ return {
     vizW = w;
     vizH = h;
 
-    // Clear
-    ctx.fillStyle = 'rgb(' + BG[0] + ',' + BG[1] + ',' + BG[2] + ')';
+    // White background
+    ctx.fillStyle = WHITE;
     ctx.fillRect(0, 0, vizW, vizH);
 
-    // Rebuild tree if pattern changed
     var pat = TR.state.patterns[TR.state.currentPattern];
     if (pat && leaves.length === 0) rebuildTree();
 
-    // Decay lit state
-    for (var i = 0; i < branches.length; i++) {
-      if (branches[i].lit > 0) branches[i].lit *= 0.92;
-      if (branches[i].lit < 0.01) branches[i].lit = 0;
+    // Age flashes
+    for (var key in flashLeaves) {
+      flashLeaves[key].age++;
+      if (flashLeaves[key].age > 30) delete flashLeaves[key];
     }
 
-    drawTrunk();
-    drawBranches();
+    drawBorder();
+    drawTree();
     drawLeaves();
     drawPulses();
   },
   onHit: function(key, step, level) {
-    // Light up the leaf at this step
     if (step < leaves.length) {
       var leaf = leaves[step];
-      leaf.lit = 1;
-      leaf.key = key;
-
-      // Propagate light up the tree
-      for (var i = 0; i < branches.length; i++) {
-        var b = branches[i];
-        if (!b.isLeaf && b.children.indexOf(leaf) >= 0) {
-          b.lit = 0.8;
-          b.key = key;
-        }
-      }
-
-      // Spawn pulse
-      var c = palColor(key, 2);
+      flashLeaves[step + '_' + key] = { key: key, age: 0 };
       pulses.push({
         x: leaf.x, y: leaf.y,
-        r: c[0], g: c[1], b: c[2],
-        radius: 0, maxRadius: CELL * (4 + level * 2), age: 0
+        radius: 0, maxRadius: 20 + level * 15
       });
     }
   },
   destroy: function() {
-    branches = [];
+    nodes = [];
     leaves = [];
+    flashLeaves = {};
     pulses = [];
   }
 };

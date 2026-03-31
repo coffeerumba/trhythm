@@ -11,6 +11,7 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
-/* ─── Auto-generate on load ─── */
+/* ─── Set defaults and auto-generate on load ─── */
+TR.setDefaultParams();
 document.getElementById('btn-generate').click();
 })(window.TR);

@@ -109,11 +109,8 @@ var helpTexts = {
 
 for (var i = 0; i < instruments.length; i++) {
   var inst = instruments[i];
-  var defaults = TR.INST_DEFAULTS[inst.key];
   var section = document.createElement('div');
   section.className = 'inst-section';
-
-  var selectedAttr16 = (inst.key !== 'kick') ? '' : '';
 
   section.innerHTML =
     '<div class="inst-header ' + inst.key + '">' + inst.label + '</div>' +
@@ -132,24 +129,24 @@ for (var i = 0; i < instruments.length; i++) {
     '<div class="param-group">' +
     '<div class="param-row">' +
       '<span class="param-label">\u6253\u7387<button class="help-btn" onclick="TR.toggleHelp(this)">?</button></span>' +
-      '<input type="range" id="' + inst.key + '-rate" min="0" max="1" step="0.01" value="' + defaults.rate.toFixed(2) + '">' +
-      '<span class="param-value" id="' + inst.key + '-rate-val">' + defaults.rate.toFixed(2) + '</span>' +
+      '<input type="range" id="' + inst.key + '-rate" min="0" max="1" step="0.01" value="0">' +
+      '<span class="param-value" id="' + inst.key + '-rate-val">0.00</span>' +
     '</div>' +
     '<div class="help-popup">' + helpTexts.rate + '</div>' +
     '</div>' +
     '<div class="param-group">' +
     '<div class="param-row">' +
       '<span class="param-label">\u91cd\u5fc3<button class="help-btn" onclick="TR.toggleHelp(this)">?</button></span>' +
-      '<input type="range" id="' + inst.key + '-center" min="0" max="1" step="0.01" value="' + defaults.center.toFixed(2) + '">' +
-      '<span class="param-value" id="' + inst.key + '-center-val">' + defaults.center.toFixed(2) + '</span>' +
+      '<input type="range" id="' + inst.key + '-center" min="0" max="1" step="0.01" value="0">' +
+      '<span class="param-value" id="' + inst.key + '-center-val">0.00</span>' +
     '</div>' +
     '<div class="help-popup">' + helpTexts.center + '</div>' +
     '</div>' +
     '<div class="param-group">' +
     '<div class="param-row">' +
       '<span class="param-label">\u5fe0\u5b9f\u5ea6<button class="help-btn" onclick="TR.toggleHelp(this)">?</button></span>' +
-      '<input type="range" id="' + inst.key + '-fidelity" min="0" max="1" step="0.01" value="' + defaults.fidelity.toFixed(2) + '">' +
-      '<span class="param-value" id="' + inst.key + '-fidelity-val">' + defaults.fidelity.toFixed(2) + '</span>' +
+      '<input type="range" id="' + inst.key + '-fidelity" min="0" max="1" step="0.01" value="0">' +
+      '<span class="param-value" id="' + inst.key + '-fidelity-val">0.00</span>' +
     '</div>' +
     '<div class="help-popup">' + helpTexts.fidelity + '</div>' +
     '</div>' +
@@ -354,12 +351,6 @@ document.getElementById('struct-next').addEventListener('click', function() { TR
 /* ─── Populate default-struct select dynamically ─── */
 var defSel = document.getElementById('default-struct');
 defSel.innerHTML = TR.buildStructOptions(false);
-defSel.value = 'p-16';
-
-/* ─── Initial render ─── */
-TR.renderAllProbCharts();
-TR.renderTreeViz();
-TR.updateAllBeatsSelects();
 
 /* ═══ Repeat Map ═══ */
 TR.updateRepeatMap = function(key) {
@@ -376,19 +367,16 @@ TR.updateRepeatMap = function(key) {
 (function() {
   var body = document.getElementById('repeat-map-body');
 
-  var instruments = [
-    { key: 'kick', label: 'K', defaultBias: 0.5 },
-    { key: 'snare', label: 'S', defaultBias: 0.25 },
-    { key: 'hihat', label: 'H', defaultBias: 0 }
-  ];
+  var instruments = ['kick', 'snare', 'hihat'];
+  var labels = { kick: 'K', snare: 'S', hihat: 'H' };
   for (var i = 0; i < instruments.length; i++) {
-    var inst = instruments[i];
+    var key = instruments[i];
 
     // Label
     var header = document.createElement('div');
-    header.className = 'grid-label ' + inst.key;
+    header.className = 'grid-label ' + key;
     header.style.cssText = 'margin-top:10px; margin-bottom:6px;';
-    header.textContent = inst.label;
+    header.textContent = labels[key];
     body.appendChild(header);
 
     // chunkRatio slider
@@ -396,8 +384,8 @@ TR.updateRepeatMap = function(key) {
     chunkRow.className = 'param-row';
     chunkRow.innerHTML =
       '<span class="param-label">chunkRatio</span>' +
-      '<input type="range" id="rf-chunk-' + inst.key + '" min="0" max="1" step="' + (1 / TR.PATTERN_COUNT) + '" value="' + (1 / TR.PATTERN_COUNT) + '" style="flex:1;">' +
-      '<span class="param-value" id="rf-chunk-val-' + inst.key + '">' + (1 / TR.PATTERN_COUNT).toFixed(4) + '</span>';
+      '<input type="range" id="rf-chunk-' + key + '" min="0" max="1" step="' + (1 / TR.PATTERN_COUNT) + '" value="0" style="flex:1;">' +
+      '<span class="param-value" id="rf-chunk-' + key + '-val">0.00</span>';
     body.appendChild(chunkRow);
 
     // bias slider
@@ -405,14 +393,14 @@ TR.updateRepeatMap = function(key) {
     biasRow.className = 'param-row';
     biasRow.innerHTML =
       '<span class="param-label">bias</span>' +
-      '<input type="range" id="rf-bias-' + inst.key + '" min="-1" max="1" step="0.01" value="' + inst.defaultBias + '" style="flex:1;">' +
-      '<span class="param-value" id="rf-bias-val-' + inst.key + '">' + inst.defaultBias.toFixed(2) + '</span>';
+      '<input type="range" id="rf-bias-' + key + '" min="-1" max="1" step="0.01" value="0" style="flex:1;">' +
+      '<span class="param-value" id="rf-bias-' + key + '-val">0.00</span>';
     body.appendChild(biasRow);
 
     // Number blocks (0 ~ PATTERN_COUNT - 1)
     var blockRow = document.createElement('div');
     blockRow.className = 'pattern-bank';
-    blockRow.id = 'rf-blocks-' + inst.key;
+    blockRow.id = 'rf-blocks-' + key;
     blockRow.style.cssText = 'grid-template-columns: repeat(' + TR.PATTERN_COUNT + ', 36px); margin-top:4px;';
     for (var n = 0; n < TR.PATTERN_COUNT; n++) {
       var cell = document.createElement('span');
@@ -424,21 +412,20 @@ TR.updateRepeatMap = function(key) {
     // Wire up sliders
     (function(key) {
       var chunkSlider = document.getElementById('rf-chunk-' + key);
-      var chunkVal = document.getElementById('rf-chunk-val-' + key);
+      var chunkVal = document.getElementById('rf-chunk-' + key + '-val');
       chunkSlider.addEventListener('input', function() {
         chunkVal.textContent = parseFloat(this.value).toFixed(2);
         TR.updateRepeatMap(key);
       });
 
       var biasSlider = document.getElementById('rf-bias-' + key);
-      var biasVal = document.getElementById('rf-bias-val-' + key);
+      var biasVal = document.getElementById('rf-bias-' + key + '-val');
       biasSlider.addEventListener('input', function() {
         biasVal.textContent = parseFloat(this.value).toFixed(2);
         TR.updateRepeatMap(key);
       });
 
-      TR.updateRepeatMap(key);
-    })(inst.key);
+    })(key);
   }
 })();
 
