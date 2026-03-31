@@ -484,17 +484,4 @@ TR.applyRepeatMap = function() {
   }
 };
 
-TR.isRepeatMapEnabled = function() {
-  return TR.state.allMode;
-};
-
-TR.updateRepeatMapState = function() {
-  var section = document.getElementById('repeat-map-section');
-  if (TR.state.allMode) {
-    section.classList.remove('disabled');
-  } else {
-    section.classList.add('disabled');
-  }
-};
-TR.updateRepeatMapState();
 })(window.TR);

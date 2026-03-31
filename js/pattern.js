@@ -1,18 +1,4 @@
 (function(TR) {
-/* ─── Mode Toggle ─── */
-(function() {
-  var btns = document.querySelectorAll('#mode-toggle .mode-btn');
-  for (var i = 0; i < btns.length; i++) {
-    btns[i].addEventListener('click', function() {
-      TR.state.allMode = this.dataset.mode === 'all';
-      for (var j = 0; j < btns.length; j++) {
-        btns[j].classList.toggle('active', btns[j] === this);
-      }
-      TR.updateRepeatMapState();
-    });
-  }
-})();
-
 /* ─── Pattern Bank UI ─── */
 (function() {
   var bank = document.getElementById('pattern-bank');
@@ -107,23 +93,15 @@ TR.generateForSlot = function(slotIndex) {
 };
 
 document.getElementById('btn-generate').addEventListener('click', function() {
-  if (TR.state.allMode) {
-    for (var i = 0; i < TR.PATTERN_COUNT; i++) TR.generateForSlot(i);
-    var pat = TR.state.patterns[TR.state.currentPattern];
-    TR.state.kickFlat = pat.kick; TR.state.snareFlat = pat.snare; TR.state.hihatFlat = pat.hihat;
-  } else {
-    TR.generateForSlot(TR.state.currentPattern);
-    var pat = TR.state.patterns[TR.state.currentPattern];
-    TR.state.kickFlat = pat.kick; TR.state.snareFlat = pat.snare; TR.state.hihatFlat = pat.hihat;
-  }
+  for (var i = 0; i < TR.PATTERN_COUNT; i++) TR.generateForSlot(i);
+  var pat = TR.state.patterns[TR.state.currentPattern];
+  TR.state.kickFlat = pat.kick; TR.state.snareFlat = pat.snare; TR.state.hihatFlat = pat.hihat;
 
-  // Regenerate and apply repeat map if enabled
-  if (TR.isRepeatMapEnabled()) {
-    TR.updateRepeatMap('kick');
-    TR.updateRepeatMap('snare');
-    TR.updateRepeatMap('hihat');
-    TR.applyRepeatMap();
-  }
+  // Regenerate and apply repeat map
+  TR.updateRepeatMap('kick');
+  TR.updateRepeatMap('snare');
+  TR.updateRepeatMap('hihat');
+  TR.applyRepeatMap();
 
   TR.renderAllGrids(TR.state.patterns[TR.state.currentPattern]);
 

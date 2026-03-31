@@ -60,7 +60,6 @@ function frame() {
 }
 
 TR.vizStart = function() { if (!animId) animId = requestAnimationFrame(frame); };
-TR.vizStop = function() { if (animId) { cancelAnimationFrame(animId); animId = null; } };
 
 // Select change handler
 document.getElementById('viz-select').addEventListener('change', function() {

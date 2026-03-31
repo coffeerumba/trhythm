@@ -101,7 +101,6 @@ TR.state = {
   snareFlat: null,
   hihatFlat: null,
   isPlaying: false,
-  allMode: true,
   schedulerTimer: null,
   toneStarted: false,
   masterGain: null,
@@ -110,8 +109,7 @@ TR.state = {
     { key: 'kick',  gridId: 'grid-kick',  getFlat: function() { return TR.state.kickFlat; },  play: null },
     { key: 'snare', gridId: 'grid-snare', getFlat: function() { return TR.state.snareFlat; }, play: null },
     { key: 'hihat', gridId: 'grid-hihat', getFlat: function() { return TR.state.hihatFlat; }, play: null }
-  ],
-  playingAllMode: false
+  ]
 };
 
 document.documentElement.style.setProperty('--pattern-count', TR.PATTERN_COUNT);

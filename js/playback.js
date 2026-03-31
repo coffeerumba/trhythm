@@ -98,13 +98,9 @@ TR.startPlayback = async function() {
     TR.audio.init();
   }
 
-  TR.state.playingAllMode = TR.state.allMode;
-
-  if (TR.state.playingAllMode) {
-    var firstIdx = TR.state.patterns[TR.state.currentPattern] ? TR.state.currentPattern : TR.findNextPatternIndex(TR.state.currentPattern);
-    if (firstIdx < 0) return;
-    if (firstIdx !== TR.state.currentPattern) TR.loadPatternForPlayback(firstIdx);
-  }
+  var firstIdx = TR.state.patterns[TR.state.currentPattern] ? TR.state.currentPattern : TR.findNextPatternIndex(TR.state.currentPattern);
+  if (firstIdx < 0) return;
+  if (firstIdx !== TR.state.currentPattern) TR.loadPatternForPlayback(firstIdx);
 
   var bpm = parseInt(document.getElementById('bpm').value);
   var now = Tone.now() + 0.05;
@@ -133,7 +129,7 @@ TR.startPlayback = async function() {
   function scheduler() {
     var lookAhead = Tone.now() + TR.SCHEDULER_LOOKAHEAD;
 
-    if (needsAdvance && TR.state.allMode) {
+    if (needsAdvance) {
       needsAdvance = false;
       var nextIdx = TR.findNextPatternIndex(TR.state.currentPattern);
       if (nextIdx >= 0) {
@@ -171,7 +167,7 @@ TR.startPlayback = async function() {
         ip.nextTime += ip.secPerStep;
         ip.step = (ip.step + 1) % ip.count;
         // Pattern advance when longest track completes cycle
-        if (TR.state.allMode && i === longestIdx && ip.step === 0) {
+        if (i === longestIdx && ip.step === 0) {
           needsAdvance = true;
         }
       }
@@ -243,18 +239,11 @@ TR.encodeWAV = function(audioBuffer) {
 };
 
 TR.collectPatternsForRender = function() {
-  if (TR.state.allMode) {
-    var list = [];
-    for (var i = 0; i < TR.PATTERN_COUNT; i++) {
-      if (TR.state.patterns[i]) list.push(TR.state.patterns[i]);
-    }
-    return list;
-  } else {
-    if (!TR.state.kickFlat) return [];
-    var pat = TR.state.patterns[TR.state.currentPattern];
-    if (!pat) return [];
-    return [pat];
+  var list = [];
+  for (var i = 0; i < TR.PATTERN_COUNT; i++) {
+    if (TR.state.patterns[i]) list.push(TR.state.patterns[i]);
   }
+  return list;
 };
 
 TR.renderOffline = async function() {
