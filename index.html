@@ -25,11 +25,10 @@
 
   <!-- Buttons -->
   <div class="btn-row">
-    <button class="btn btn-generate" id="btn-default">デフォルト</button>
-    <button class="btn btn-generate" id="btn-random">ランダム</button>
     <button class="btn btn-generate" id="btn-generate">生成</button>
     <button class="btn btn-play" id="btn-play" disabled>&#9654; 再生</button>
     <button class="btn btn-download" id="btn-download" disabled>&#11015; DL</button>
+    <button class="btn btn-generate" id="btn-default">リセット</button>
   </div>
   <div class="bpm-row">
     <label>BPM</label>
@@ -59,12 +58,6 @@
     </div>
   </div>
 
-  <!-- Repeat Map -->
-  <div class="grid-section" id="repeat-map-section">
-    <div class="inst-header">リピートマップ</div>
-    <div id="repeat-map-body"></div>
-  </div>
-
   <!-- Default structure + Tree visualization -->
   <div class="tree-viz" id="tree-viz-wrap">
     <div class="inst-header">既定拍構造</div>
@@ -79,6 +72,12 @@
 
   <!-- Instruments (dynamically generated) -->
   <div id="instruments-container"></div>
+
+  <!-- Repeat Map -->
+  <div class="grid-section" id="repeat-map-section">
+    <div class="inst-header">リピートマップ</div>
+    <div id="repeat-map-body"></div>
+  </div>
 
 
 </div>

@@ -134,46 +134,8 @@ TR.setDefaultParams = function() {
   TR.updateAllBeatsSelects();
 };
 
-TR.setRandomParams = function() {
-  // Random structure
-  var keys = Object.keys(TR.STRUCTURES);
-  document.getElementById('default-struct').value = keys[Math.floor(Math.random() * keys.length)];
-  // Random BPM (60-180)
-  var bpm = 60 + Math.floor(Math.random() * 121);
-  document.getElementById('bpm').value = bpm;
-  document.getElementById('bpm-val').textContent = bpm;
-  // Per-instrument
-  for (var i = 0; i < TR.INSTRUMENTS.length; i++) {
-    var inst = TR.INSTRUMENTS[i];
-    // 50% chance of 'default', otherwise random structure
-    if (Math.random() < 0.5) {
-      document.getElementById(inst + '-struct').value = 'default';
-    } else {
-      document.getElementById(inst + '-struct').value = keys[Math.floor(Math.random() * keys.length)];
-    }
-    setSlider(inst + '-rate', Math.random());
-    setSlider(inst + '-center', Math.random());
-    setSlider(inst + '-fidelity', Math.random());
-  }
-  // Repeat map
-  var step = 1 / TR.PATTERN_COUNT;
-  for (var i = 0; i < TR.INSTRUMENTS.length; i++) {
-    var inst = TR.INSTRUMENTS[i];
-    var chunk = Math.round(Math.random() / step) * step;
-    setSlider('rf-chunk-' + inst, chunk);
-    setSlider('rf-bias-' + inst, Math.random() * 2 - 1);
-  }
-  // Refresh UI
-  TR.renderAllProbCharts();
-  TR.renderTreeViz();
-  TR.updateAllBeatsSelects();
-};
-
 document.getElementById('btn-default').addEventListener('click', function() {
   TR.setDefaultParams();
-});
-document.getElementById('btn-random').addEventListener('click', function() {
-  TR.setRandomParams();
 });
 
 document.getElementById('btn-generate').addEventListener('click', function() {
