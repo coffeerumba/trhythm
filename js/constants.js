@@ -1,5 +1,5 @@
+/* ─── Global namespace & Constants ─── */
 (function() {
-/* ═══ Global namespace & Constants ═══ */
 window.TR = {};
 
 /* All patterns are balanced-depth trees with 2-or-3 children per node.
@@ -25,22 +25,30 @@ TR.STRUCTURES = {
   'u-7c':    { tree: [3,2,2], beatLevel: 1, label: '7/8(3+2+2) (7ステップ, 3拍)' },
   'u-8a':    { tree: [3,3,2], beatLevel: 1, label: 'トレシーロ (8ステップ, 3拍)' },
   'u-8b':    { tree: [2,3,3], beatLevel: 1, label: '逆トレシーロ (8ステップ, 3拍)' },
-  'u-10a':   { tree: [[2,3],[2,3]], beatLevel: 1, label: '10/8(2+3) ×2 (10ステップ, 4拍)' },
-  'u-16a':   { tree: [[3,3,2],[3,3,2]], beatLevel: 1, label: 'トレシーロ ×2 (16ステップ, 6拍)' },
-  'u-20a':   { tree: [[[2,2],[2,2]],[[2,2],[2,2],[2,2]]], beatLevel: 2, label: '4+6拍子 (20ステップ, 5拍)' },
+  'u-10a':   { tree: [[2,3],[2,3]], beatLevel: 1, label: '5/8×2 (10ステップ, 4拍)' },
+  'u-14a':   { tree: [[2,2,3],[2,2,3]], beatLevel: 1, label: '7/8×2 (14ステップ, 6拍)' },
+  'u-15a':   { tree: [[2,3],[2,3],[2,3]], beatLevel: 1, label: '5/8×3 (15ステップ, 6拍)' },
+  'u-16a':   { tree: [[3,3,2],[3,3,2]], beatLevel: 1, label: 'トレシーロ×2 (16ステップ, 6拍)' },
   // ── ★0.5 — Mixed balanced (cellTypes=2, spanRatio=1.0) ──
   'm-12a':   { tree: [[3,3],[2,2,2]], beatLevel: 1, label: 'ヘミオラ (12ステップ, 5拍)' },
   'm-12b':   { tree: [[2,2,2],[3,3]], beatLevel: 1, label: '逆ヘミオラ (12ステップ, 5拍)' },
-  'm-18':    { tree: [[3,3],[2,2,2],[3,3]], beatLevel: 1, label: 'ヘミオラ挟み (18ステップ, 7拍)' },
+  'm-18a':   { tree: [[3,3],[2,2,2],[3,3]], beatLevel: 1, label: 'ヘミオラ挟み (18ステップ, 7拍)' },
+  'm-18b':   { tree: [[3,3],[3,3],[2,2,2]], beatLevel: 1, label: 'ヘミオラ後置 (18ステップ, 7拍)' },
+  'm-18c':   { tree: [[2,2,2],[3,3],[2,2,2]], beatLevel: 1, label: '逆ヘミオラ挟み (18ステップ, 7拍)' },
+  'm-18d':   { tree: [[2,2,2],[2,2,2],[3,3]], beatLevel: 1, label: '逆ヘミオラ後置 (18ステップ, 7拍)' },
+  'm-18e':   { tree: [[3,3],[2,2,2],[2,2,2]], beatLevel: 1, label: 'ヘミオラ+6拍 (18ステップ, 8拍)' },
+  'm-18f':   { tree: [[2,2,2],[2,2,2],[3,3]], beatLevel: 1, label: '6拍+ヘミオラ (18ステップ, 8拍)' },
   // ── ★0.33 — Mixed uneven (cellTypes=2, spanRatio=1.5) ──
   'x-9':     { tree: [[2,2],[2,3]], beatLevel: 1, label: '4+5拍 (9ステップ, 4拍)' },
   'x-10a':   { tree: [[2,2],[3,3]], beatLevel: 1, label: '4+6拍 (10ステップ, 4拍)' },
   'x-10b':   { tree: [[3,3],[2,2]], beatLevel: 1, label: '6+4拍 (10ステップ, 4拍)' },
   'x-10c':   { tree: [[2,2],[2,2,2]], beatLevel: 1, label: '4+6拍B (10ステップ, 5拍)' },
-  'x-14':    { tree: [[3,3],[2,3,3]], beatLevel: 1, label: '6+8拍 (14ステップ, 5拍)' },
-  'x-15':    { tree: [[3,3],[3,3,3]], beatLevel: 1, label: '6+9拍 (15ステップ, 5拍)' },
+  'x-14a':   { tree: [[3,3],[2,3,3]], beatLevel: 1, label: '6+8拍 (14ステップ, 5拍)' },
+  'x-15a':   { tree: [[3,3],[3,3,3]], beatLevel: 1, label: '6+9拍 (15ステップ, 5拍)' },
+  'x-15b':   { tree: [[2,2,2],[3,3,3]], beatLevel: 1, label: '6拍+9拍 (15ステップ, 5拍)' },
   'x-16a':   { tree: [[3,3,3],[2,2,3]], beatLevel: 1, label: '9+7拍 (16ステップ, 6拍)' },
-  'x-16b':   { tree: [[3,3],[3,3],[2,2]], beatLevel: 1, label: '6+6+4拍 (16ステップ, 6拍)' }
+  'x-16b':   { tree: [[3,3],[3,3],[2,2]], beatLevel: 1, label: '6+6+4拍 (16ステップ, 6拍)' },
+  'x-20a':   { tree: [[[2,2],[2,2]],[[2,2],[2,2],[2,2]]], beatLevel: 2, label: '8+12拍 (20ステップ, 5拍)' }
 };
 
 TR.PATTERN_COUNT = 16;
@@ -74,7 +82,7 @@ TR.buildStructOptions = function(includeDefault) {
   return html;
 };
 
-/* ═══ State ═══ */
+/* ─── State ─── */
 TR.state = {
   patterns: new Array(TR.PATTERN_COUNT).fill(null),
   currentPattern: 0,
@@ -95,8 +103,7 @@ TR.state = {
 
 document.documentElement.style.setProperty('--pattern-count', TR.PATTERN_COUNT);
 
-/* ═══ Tree utilities ═══ */
-/* ─── Flatten tree to array ─── */
+/* ─── Tree utility functions ─── */
 TR.flattenTree = function(node) {
   if (!Array.isArray(node)) return [node];
   var result = [];
@@ -105,7 +112,6 @@ TR.flattenTree = function(node) {
   return result;
 };
 
-/* ─── Compute levels for display ─── */
 TR.computeLevels = function(structure) {
   var levels = [];
   function walk(node) {
@@ -125,7 +131,6 @@ TR.computeLevels = function(structure) {
   return levels;
 };
 
-/* ─── Count leaves in a tree node ─── */
 TR.countLeaves = function(node) {
   if (!Array.isArray(node)) return node;
   var count = 0;
@@ -133,7 +138,6 @@ TR.countLeaves = function(node) {
   return count;
 };
 
-/* ─── Compute group boundaries from top-level structure ─── */
 TR.getGroupBoundaries = function(structure) {
   var boundaries = {};
   var pos = 0;
@@ -144,7 +148,6 @@ TR.getGroupBoundaries = function(structure) {
   return boundaries;
 };
 
-/* ─── Compute beats from beatLevel ─── */
 TR.computeBeats = function(def) {
   var levels = TR.computeLevels(def.tree);
   var beats = 0;
