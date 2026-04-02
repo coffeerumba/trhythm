@@ -73,14 +73,16 @@
  *   B_min = ceil(maxCycle / BEAT_DUR_MAX)
  *   B_max = floor(minCycle / BEAT_DUR_MIN)
  *
+ * Subdivision constraint:
+ *   MAX_STEPS_PER_BEAT = 6 — more than this loses subdivision feel
+ *
  * Algorithm:
- *   1. Compute beats count (same as before):
- *      a. Count leaf-parent nodes (nodes at depth maxDepth-1).
- *      b. If that count is within [B_min, B_max], use it as beats.
- *      c. Otherwise, fall back to leaf count (nodes at depth maxDepth).
- *   2. Compute metrical levels for all leaf positions using analyzeLevels().
- *   3. Sort levels descending.
- *   4. beatLevel = levels[beats - 1] (the beats-th largest level).
+ *   1. Compute metrical levels for all leaf positions using analyzeLevels().
+ *   2. From highest level (fewest beats) to lowest, find the first where:
+ *      a. beats count (#{level >= lvl}) is within [B_min, B_max]
+ *      b. steps per beat (totalSteps / beats) <= MAX_STEPS_PER_BEAT
+ *   3. That level is beatLevel.
+ *   4. Fallback: level 1.
  *
  * Property: #{positions with level >= beatLevel} = beats.
  * This means beats can always be derived from beatLevel:
@@ -95,7 +97,6 @@
  *   [2,2]                                → beats=2, beatLevel=1
  *   [[2,2],[2,2]]                        → beats=4, beatLevel=1
  *   [[[2,2],[2,2]],[[2,2],[2,2]]]        → beats=4, beatLevel=2
- *   [[[[2,2],[2,2]],…],[…]]  (32 steps)  → beats=8, beatLevel=2
  *   [3,3,3]                              → beats=3, beatLevel=1
  *   [[3,3],[3,3]]                        → beats=4, beatLevel=1
  *   [[2,2,2],[2,2,2]]                    → beats=6, beatLevel=1
@@ -348,26 +349,31 @@ function analyzeLevels(tree) {
  * 2. Compute metrical levels for all positions.
  * 3. beatLevel = the beats-th largest level value.
  */
+var MAX_STEPS_PER_BEAT = 6;
+
 function computeBeatLevel(tree, minCycle, maxCycle) {
   var bMin = Math.ceil(maxCycle / BEAT_DUR_MAX);
   var bMax = Math.floor(minCycle / BEAT_DUR_MIN);
-  var maxDepth = getMaxDepth(tree);
 
-  // Step 1: Determine beats count
-  var beats;
-  var leafParentCount = countNodesAtDepth(tree, maxDepth - 1);
-  if (leafParentCount >= bMin && leafParentCount <= bMax) {
-    beats = leafParentCount;
-  } else {
-    beats = countNodesAtDepth(tree, maxDepth);
+  // Compute metrical levels
+  var levels = analyzeLevels(tree);
+  var L = levels.length;
+  var maxLvl = 0;
+  for (var i = 0; i < L; i++) if (levels[i] > maxLvl) maxLvl = levels[i];
+
+  // Find highest level (fewest beats) where:
+  //   - beats count is in [bMin, bMax]
+  //   - steps per beat <= MAX_STEPS_PER_BEAT
+  for (var lvl = maxLvl; lvl >= 1; lvl--) {
+    var beats = 0;
+    for (var i = 0; i < L; i++) if (levels[i] >= lvl) beats++;
+    if (beats < bMin || beats > bMax) continue;
+    if (L / beats > MAX_STEPS_PER_BEAT) continue;
+    return lvl;
   }
 
-  // Step 2: Compute metrical levels
-  var levels = analyzeLevels(tree);
-
-  // Step 3: Sort descending, take beats-th value
-  var sorted = levels.slice().sort(function(a, b) { return b - a; });
-  return sorted[beats - 1];
+  // Fallback: use level 1
+  return 1;
 }
 
 /* ─── Main ─── */
