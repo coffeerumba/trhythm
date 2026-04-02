@@ -5,7 +5,7 @@ window.TR = {};
 /* All patterns are balanced-depth trees with 2-or-3 children per node.
    Score = 1/(cellTypes x spanRatio). See structures.tsv for full catalog. */
 TR.STRUCTURES = {
-  // ── ★1.0 — Pure (cellTypes=1, spanRatio=1.0) — all 18 ──
+  // ── ★1.0 — Pure (cellTypes=1, spanRatio=1.0) ──
   'p-4':     { tree: [2,2], beatLevel: 1, label: '2拍子 (4ステップ, 2拍)' },
   'p-6a':    { tree: [3,3], beatLevel: 1, label: '6/8拍子 (6ステップ, 2拍)' },
   'p-6b':    { tree: [2,2,2], beatLevel: 1, label: '3拍子 (6ステップ, 3拍)' },
@@ -18,12 +18,6 @@ TR.STRUCTURES = {
   'p-18a':   { tree: [[3,3,3],[3,3,3]], beatLevel: 1, label: '6拍3連 (18ステップ, 6拍)' },
   'p-18b':   { tree: [[3,3],[3,3],[3,3]], beatLevel: 1, label: '6拍3連B (18ステップ, 6拍)' },
   'p-18c':   { tree: [[2,2,2],[2,2,2],[2,2,2]], beatLevel: 1, label: '9拍子 (18ステップ, 9拍)' },
-  'p-24a':   { tree: [[[3,3],[3,3]],[[3,3],[3,3]]], beatLevel: 2, label: '12/8 ×2 (24ステップ, 4拍)' },
-  'p-24b':   { tree: [[[2,2,2],[2,2,2]],[[2,2,2],[2,2,2]]], beatLevel: 2, label: '6拍子 ×2 (24ステップ, 4拍)' },
-  'p-24c':   { tree: [[[2,2],[2,2],[2,2]],[[2,2],[2,2],[2,2]]], beatLevel: 2, label: '6拍子B ×2 (24ステップ, 6拍)' },
-  'p-24d':   { tree: [[[2,2],[2,2]],[[2,2],[2,2]],[[2,2],[2,2]]], beatLevel: 2, label: '8ビート ×3 (24ステップ, 6拍)' },
-  'p-27':    { tree: [[3,3,3],[3,3,3],[3,3,3]], beatLevel: 1, label: '9拍3連 (27ステップ, 9拍)' },
-  'p-32':    { tree: [[[[2,2],[2,2]],[[2,2],[2,2]]],[[[2,2],[2,2]],[[2,2],[2,2]]]], beatLevel: 2, label: '32ビート (32ステップ, 8拍)' },
   // ── ★0.67 — Uneven (cellTypes=1, spanRatio=1.5) ──
   'u-5a':    { tree: [2,3], beatLevel: 1, label: '5/8(2+3) (5ステップ, 2拍)' },
   'u-5b':    { tree: [3,2], beatLevel: 1, label: '5/8(3+2) (5ステップ, 2拍)' },
@@ -34,7 +28,6 @@ TR.STRUCTURES = {
   'u-10a':   { tree: [[2,3],[2,3]], beatLevel: 1, label: '10/8(2+3) ×2 (10ステップ, 4拍)' },
   'u-16a':   { tree: [[3,3,2],[3,3,2]], beatLevel: 1, label: 'トレシーロ ×2 (16ステップ, 6拍)' },
   'u-20a':   { tree: [[[2,2],[2,2]],[[2,2],[2,2],[2,2]]], beatLevel: 2, label: '4+6拍子 (20ステップ, 5拍)' },
-  'u-32a':   { tree: [[[3,3,2],[3,3,2]],[[3,3,2],[3,3,2]]], beatLevel: 2, label: 'トレシーロ ×4 (32ステップ, 4拍)' },
   // ── ★0.5 — Mixed balanced (cellTypes=2, spanRatio=1.0) ──
   'm-12a':   { tree: [[3,3],[2,2,2]], beatLevel: 1, label: 'ヘミオラ (12ステップ, 5拍)' },
   'm-12b':   { tree: [[2,2,2],[3,3]], beatLevel: 1, label: '逆ヘミオラ (12ステップ, 5拍)' },
