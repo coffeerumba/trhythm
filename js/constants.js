@@ -29,6 +29,8 @@ TR.STRUCTURES = {
   'u-14a':   { tree: [[2,2,3],[2,2,3]], beatLevel: 1, label: '7/8×2 (14ステップ, 6拍)' },
   'u-15a':   { tree: [[2,3],[2,3],[2,3]], beatLevel: 1, label: '5/8×3 (15ステップ, 6拍)' },
   'u-16a':   { tree: [[3,3,2],[3,3,2]], beatLevel: 1, label: 'トレシーロ×2 (16ステップ, 6拍)' },
+  'u-18a':   { tree: [[[2,2],[2,3]],[[2,2],[2,3]]], beatLevel: 2, label: '(4+5)×2 (18ステップ, 4拍)' },
+  'u-20b':   { tree: [[[2,2],[3,3]],[[2,2],[3,3]]], beatLevel: 2, label: 'ヘミオラ×2 (20ステップ, 4拍)' },
   // ── ★0.5 — Mixed balanced (cellTypes=2, spanRatio=1.0) ──
   'm-12a':   { tree: [[3,3],[2,2,2]], beatLevel: 1, label: 'ヘミオラ (12ステップ, 5拍)' },
   'm-12b':   { tree: [[2,2,2],[3,3]], beatLevel: 1, label: '逆ヘミオラ (12ステップ, 5拍)' },
