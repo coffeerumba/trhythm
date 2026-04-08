@@ -30,7 +30,7 @@
  *
  * structure  — JSON representation of the tree
  * score      — 1 / (cellTypes × spanRatio). Higher = more regular.
- * cellTypes  — Number of distinct leaf-parent arrays in the tree.
+ * cellTypes  — Number of distinct beat-level subtree signatures in the tree.
  *              e.g. [[2,2],[3,3]] has 2 types: [2,2] and [3,3].
  *              Order matters: [2,3] and [3,2] are different types.
  * spanRatio  — For each internal node, max(childSums)/min(childSums).
@@ -239,26 +239,28 @@ function leafSum(tree) {
 }
 
 /**
- * cellTypes: number of distinct leaf-parent array signatures.
+ * cellTypes: number of distinct beat-level subtree signatures.
+ * Beat-level nodes are at depth (maxDepth - beatLevel) in the tree.
+ * For beatLevel=1, this is the leaf-parent level (same as before).
+ * For beatLevel=2, this is one level above leaf-parents.
  */
-function computeCellTypes(tree) {
+function computeCellTypes(tree, beatLevel) {
+  var maxD = getMaxDepth(tree);
+  var beatDepth = maxD - beatLevel;
+  if (beatDepth < 0) beatDepth = 0;
   var types = {};
-  collectLeafParents(tree, types);
+  collectNodesAtDepth(tree, 0, beatDepth, types);
   return Object.keys(types).length;
 }
 
-function collectLeafParents(node, types) {
-  if (typeof node === 'number') return;
-  var allLeaves = true;
-  for (var i = 0; i < node.length; i++) {
-    if (typeof node[i] !== 'number') { allLeaves = false; break; }
-  }
-  if (allLeaves) {
+function collectNodesAtDepth(node, currentDepth, targetDepth, types) {
+  if (currentDepth === targetDepth) {
     types[JSON.stringify(node)] = true;
-  } else {
-    for (var i = 0; i < node.length; i++) {
-      collectLeafParents(node[i], types);
-    }
+    return;
+  }
+  if (typeof node === 'number') return;
+  for (var i = 0; i < node.length; i++) {
+    collectNodesAtDepth(node[i], currentDepth + 1, targetDepth, types);
   }
 }
 
@@ -391,10 +393,10 @@ function main() {
     var range = computeCycleRange(leaves);
     if (range.minCycle > range.maxCycle) continue;
 
-    var cellTypes = computeCellTypes(tree);
+    var beatLevel = computeBeatLevel(tree, range.minCycle, range.maxCycle);
+    var cellTypes = computeCellTypes(tree, beatLevel);
     var spanRatio = computeSpanRatio(tree);
     var score = 1.0 / (cellTypes * spanRatio);
-    var beatLevel = computeBeatLevel(tree, range.minCycle, range.maxCycle);
 
     rows.push({
       structure: JSON.stringify(tree),
