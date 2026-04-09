@@ -29,8 +29,8 @@
  * ═══════════════════════════════════════════════════════════════
  *
  * structure  — JSON representation of the tree
- * score      — 1 / (cellTypes × spanRatio). Higher = more regular.
- * cellTypes  — Number of distinct beat-level subtree signatures in the tree.
+ * score      — 1 / (beatTypes × spanRatio). Higher = more regular.
+ * beatTypes  — Number of distinct beat-level subtree signatures in the tree.
  *              e.g. [[2,2],[3,3]] has 2 types: [2,2] and [3,3].
  *              Order matters: [2,3] and [3,2] are different types.
  * spanRatio  — For each internal node, max(childSums)/min(childSums).
@@ -239,54 +239,73 @@ function leafSum(tree) {
 }
 
 /**
- * cellTypes: number of distinct beat-level subtree signatures.
- * Beat-level nodes are at depth (maxDepth - beatLevel) in the tree.
- * For beatLevel=1, this is the leaf-parent level (same as before).
- * For beatLevel=2, this is one level above leaf-parents.
+ * findBeatDepth: find the tree depth where node count equals beat count.
+ * Returns the depth of beat-level nodes in the tree.
  */
-function computeCellTypes(tree, beatLevel) {
+function findBeatDepth(tree, beatLevel) {
+  var levels = analyzeLevels(tree);
+  var beatCount = 0;
+  for (var i = 0; i < levels.length; i++) {
+    if (levels[i] >= beatLevel) beatCount++;
+  }
   var maxD = getMaxDepth(tree);
-  var beatDepth = maxD - beatLevel;
-  if (beatDepth < 0) beatDepth = 0;
-  var types = {};
-  collectNodesAtDepth(tree, 0, beatDepth, types);
-  return Object.keys(types).length;
-}
-
-function collectNodesAtDepth(node, currentDepth, targetDepth, types) {
-  if (currentDepth === targetDepth) {
-    types[JSON.stringify(node)] = true;
-    return;
+  for (var d = 1; d <= maxD; d++) {
+    var nodes = collectNodesAtDepth(tree, 0, d);
+    if (nodes.length === beatCount) return d;
   }
-  if (typeof node === 'number') return;
-  for (var i = 0; i < node.length; i++) {
-    collectNodesAtDepth(node[i], currentDepth + 1, targetDepth, types);
-  }
+  return 1; // fallback
 }
 
 /**
- * spanRatio: max(childSums) / min(childSums) across all internal nodes.
+ * beatTypes: number of distinct beat-level subtree signatures.
  */
-function computeSpanRatio(tree) {
-  if (typeof tree === 'number') return 1.0;
+function computeBeatTypes(tree, beatDepth) {
+  var nodes = collectNodesAtDepth(tree, 0, beatDepth);
+  var types = {};
+  for (var j = 0; j < nodes.length; j++) types[nodes[j]] = true;
+  return Object.keys(types).length;
+}
+
+function collectNodesAtDepth(node, currentDepth, targetDepth) {
+  if (currentDepth === targetDepth) return [JSON.stringify(node)];
+  if (typeof node === 'number') return [];
+  var result = [];
+  for (var i = 0; i < node.length; i++) {
+    result = result.concat(collectNodesAtDepth(node[i], currentDepth + 1, targetDepth));
+  }
+  return result;
+}
+
+/**
+ * spanRatio: max(childSums) / min(childSums) across all internal nodes,
+ * skipping beat-parent nodes (depth == beatDepth - 1) to avoid
+ * double-counting with beatTypes.
+ */
+function computeSpanRatio(tree, beatDepth) {
+  var skipDepth = beatDepth - 1;
   var maxRatio = 1.0;
-  var childSums = [];
-  for (var i = 0; i < tree.length; i++) {
-    childSums.push(leafSum(tree[i]));
+  function walk(node, depth) {
+    if (typeof node === 'number') return;
+    if (depth !== skipDepth) {
+      var childSums = [];
+      for (var i = 0; i < node.length; i++) {
+        childSums.push(leafSum(node[i]));
+      }
+      var minS = childSums[0], maxS = childSums[0];
+      for (var i = 1; i < childSums.length; i++) {
+        if (childSums[i] < minS) minS = childSums[i];
+        if (childSums[i] > maxS) maxS = childSums[i];
+      }
+      if (minS > 0) {
+        var ratio = maxS / minS;
+        if (ratio > maxRatio) maxRatio = ratio;
+      }
+    }
+    for (var i = 0; i < node.length; i++) {
+      walk(node[i], depth + 1);
+    }
   }
-  var minS = childSums[0], maxS = childSums[0];
-  for (var i = 1; i < childSums.length; i++) {
-    if (childSums[i] < minS) minS = childSums[i];
-    if (childSums[i] > maxS) maxS = childSums[i];
-  }
-  if (minS > 0) {
-    var ratio = maxS / minS;
-    if (ratio > maxRatio) maxRatio = ratio;
-  }
-  for (var i = 0; i < tree.length; i++) {
-    var childRatio = computeSpanRatio(tree[i]);
-    if (childRatio > maxRatio) maxRatio = childRatio;
-  }
+  walk(tree, 0);
   return maxRatio;
 }
 
@@ -394,14 +413,15 @@ function main() {
     if (range.minCycle > range.maxCycle) continue;
 
     var beatLevel = computeBeatLevel(tree, range.minCycle, range.maxCycle);
-    var cellTypes = computeCellTypes(tree, beatLevel);
-    var spanRatio = computeSpanRatio(tree);
-    var score = 1.0 / (cellTypes * spanRatio);
+    var beatDepth = findBeatDepth(tree, beatLevel);
+    var beatTypes = computeBeatTypes(tree, beatDepth);
+    var spanRatio = computeSpanRatio(tree, beatDepth);
+    var score = 1.0 / (beatTypes * spanRatio);
 
     rows.push({
       structure: JSON.stringify(tree),
       score: score,
-      cellTypes: cellTypes,
+      beatTypes: beatTypes,
       spanRatio: spanRatio,
       leaves: leaves,
       minCycle: range.minCycle,
@@ -420,14 +440,14 @@ function main() {
   });
 
   // Output TSV
-  var header = 'structure\tscore\tcellTypes\tspanRatio\tleaves\tminCycle\tmaxCycle\tbeatLevel';
+  var header = 'structure\tscore\tbeatTypes\tspanRatio\tleaves\tminCycle\tmaxCycle\tbeatLevel';
   var lines = [header];
   for (var i = 0; i < rows.length; i++) {
     var r = rows[i];
     lines.push([
       r.structure,
       r.score.toFixed(6),
-      r.cellTypes,
+      r.beatTypes,
       r.spanRatio.toFixed(4),
       r.leaves,
       r.minCycle.toFixed(4),
