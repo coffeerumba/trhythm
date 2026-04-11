@@ -106,7 +106,8 @@
  * Sort order
  * ═══════════════════════════════════════════════════════════════
  *
- * Rows are sorted by: score descending, leaves ascending, structure ascending.
+ * Rows are sorted by: div descending, simpson descending, leaves ascending,
+ * structure ascending.
  */
 
 var fs = require('fs');
