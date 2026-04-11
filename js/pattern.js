@@ -103,7 +103,7 @@ function setSlider(id, value) {
 /* ─── Default params (single source of truth for all defaults) ─── */
 TR.setDefaultParams = function() {
   // Default structure
-  document.getElementById('default-struct').value = 'p-16';
+  document.getElementById('default-struct').value = 'a-16';
   // BPM
   document.getElementById('bpm').value = 120;
   document.getElementById('bpm-val').textContent = '120';

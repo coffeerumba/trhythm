@@ -3,54 +3,52 @@
 window.TR = {};
 
 /* All patterns are balanced-depth trees with 2-or-3 children per node.
-   Score = 1/(beatTypes x spanRatio). See structures.tsv for full catalog. */
+   Two-axis scoring: div (step count divisibility) + simpson (structural uniformity).
+   See structures.tsv for full catalog. */
 TR.STRUCTURES = {
-  // ── ★1.0 — 均一 (beatTypes=1, spanRatio=1.0) ──
-  'p-4':     { tree: [2,2], beatLevel: 1, label: '2拍子 (4ステップ, 2拍)' },
-  'p-6a':    { tree: [3,3], beatLevel: 1, label: '6/8拍子 (6ステップ, 2拍)' },
-  'p-6b':    { tree: [2,2,2], beatLevel: 1, label: '3拍子 (6ステップ, 3拍)' },
-  'p-8':     { tree: [[2,2],[2,2]], beatLevel: 1, label: '8ビート (8ステップ, 4拍)' },
-  'p-9':     { tree: [3,3,3], beatLevel: 1, label: '9/8拍子 (9ステップ, 3拍)' },
-  'p-12a':   { tree: [[3,3],[3,3]], beatLevel: 1, label: '12/8拍子 (12ステップ, 4拍)' },
-  'p-12b':   { tree: [[2,2,2],[2,2,2]], beatLevel: 1, label: '6拍子 (12ステップ, 6拍)' },
-  'p-12c':   { tree: [[2,2],[2,2],[2,2]], beatLevel: 1, label: '6拍子B (12ステップ, 6拍)' },
-  'p-16':    { tree: [[[2,2],[2,2]],[[2,2],[2,2]]], beatLevel: 2, label: '16ビート (16ステップ, 4拍)' },
-  'p-18a':   { tree: [[3,3,3],[3,3,3]], beatLevel: 1, label: '6拍3連 (18ステップ, 6拍)' },
-  'p-18b':   { tree: [[3,3],[3,3],[3,3]], beatLevel: 1, label: '6拍3連B (18ステップ, 6拍)' },
-  'p-18c':   { tree: [[2,2,2],[2,2,2],[2,2,2]], beatLevel: 1, label: '9拍子 (18ステップ, 9拍)' },
-  // ── ★0.67 — 不均一 (beatTypes=1, spanRatio>1.0) ──
-  'u-10c':   { tree: [[2,2],[2,2,2]], beatLevel: 1, label: '4+6拍 (10ステップ, 5拍)' },
-  'u-15a':   { tree: [[3,3],[3,3,3]], beatLevel: 1, label: '6+9拍 (15ステップ, 5拍)' },
-  'u-20a':   { tree: [[[2,2],[2,2]],[[2,2],[2,2],[2,2]]], beatLevel: 2, label: '8+12拍 (20ステップ, 5拍)' },
-  // ── ★0.5 — 混合 (beatTypes>1, spanRatio=1.0) ──
-  'm-5a':    { tree: [2,3], beatLevel: 1, label: '5/8(2+3) (5ステップ, 2拍)' },
-  'm-5b':    { tree: [3,2], beatLevel: 1, label: '5/8(3+2) (5ステップ, 2拍)' },
-  'm-7a':    { tree: [2,2,3], beatLevel: 1, label: '7/8(2+2+3) (7ステップ, 3拍)' },
-  'm-7c':    { tree: [3,2,2], beatLevel: 1, label: '7/8(3+2+2) (7ステップ, 3拍)' },
-  'm-8a':    { tree: [3,3,2], beatLevel: 1, label: 'トレシーロ (8ステップ, 3拍)' },
-  'm-8b':    { tree: [2,3,3], beatLevel: 1, label: '逆トレシーロ (8ステップ, 3拍)' },
-  'm-10a':   { tree: [[2,3],[2,3]], beatLevel: 1, label: '5/8×2 (10ステップ, 4拍)' },
-  'm-12a':   { tree: [[3,3],[2,2,2]], beatLevel: 1, label: 'ヘミオラ (12ステップ, 5拍)' },
-  'm-12b':   { tree: [[2,2,2],[3,3]], beatLevel: 1, label: '逆ヘミオラ (12ステップ, 5拍)' },
-  'm-14a':   { tree: [[2,2,3],[2,2,3]], beatLevel: 1, label: '7/8×2 (14ステップ, 6拍)' },
-  'm-15a':   { tree: [[2,3],[2,3],[2,3]], beatLevel: 1, label: '5/8×3 (15ステップ, 6拍)' },
-  'm-16a':   { tree: [[3,3,2],[3,3,2]], beatLevel: 1, label: 'トレシーロ×2 (16ステップ, 6拍)' },
-  'm-18a':   { tree: [[3,3],[2,2,2],[3,3]], beatLevel: 1, label: 'ヘミオラ挟み (18ステップ, 7拍)' },
-  'm-18b':   { tree: [[3,3],[3,3],[2,2,2]], beatLevel: 1, label: 'ヘミオラ後置 (18ステップ, 7拍)' },
-  'm-18c':   { tree: [[2,2,2],[3,3],[2,2,2]], beatLevel: 1, label: '逆ヘミオラ挟み (18ステップ, 7拍)' },
-  'm-18d':   { tree: [[2,2,2],[2,2,2],[3,3]], beatLevel: 1, label: '逆ヘミオラ後置 (18ステップ, 7拍)' },
-  'm-18e':   { tree: [[3,3],[2,2,2],[2,2,2]], beatLevel: 1, label: 'ヘミオラ+6拍 (18ステップ, 8拍)' },
-  'm-18f':   { tree: [[2,2,2],[2,2,2],[3,3]], beatLevel: 1, label: '6拍+ヘミオラ (18ステップ, 8拍)' },
-  'm-20b':   { tree: [[[2,2],[3,3]],[[2,2],[3,3]]], beatLevel: 2, label: 'ヘミオラ×2 (20ステップ, 4拍)' },
-  // ── ★<0.5 — 混合不均一 (beatTypes>1, spanRatio>1.0) ──
-  'x-9':     { tree: [[2,2],[2,3]], beatLevel: 1, label: '4+5拍 (9ステップ, 4拍)' },
-  'x-10a':   { tree: [[2,2],[3,3]], beatLevel: 1, label: '4+6拍 (10ステップ, 4拍)' },
-  'x-10b':   { tree: [[3,3],[2,2]], beatLevel: 1, label: '6+4拍 (10ステップ, 4拍)' },
-  'x-14a':   { tree: [[3,3],[2,3,3]], beatLevel: 1, label: '6+8拍 (14ステップ, 5拍)' },
-  'x-15b':   { tree: [[2,2,2],[3,3,3]], beatLevel: 1, label: '6拍+9拍 (15ステップ, 5拍)' },
-  'x-16a':   { tree: [[3,3,3],[2,2,3]], beatLevel: 1, label: '9+7拍 (16ステップ, 6拍)' },
-  'x-16b':   { tree: [[3,3],[3,3],[2,2]], beatLevel: 1, label: '6+6+4拍 (16ステップ, 6拍)' },
-  'x-18a':   { tree: [[[2,2],[2,3]],[[2,2],[2,3]]], beatLevel: 2, label: '(4+5)×2 (18ステップ, 4拍)' }
+  // ── A: ★1.0 — 均一 ──
+  'a-4':     { tree: [2,2], beatLevel: 1, label: '2拍子 (4ステップ, 2拍)' },
+  'a-6a':    { tree: [3,3], beatLevel: 1, label: '6/8拍子 (6ステップ, 2拍)' },
+  'a-6b':    { tree: [2,2,2], beatLevel: 1, label: '3拍子 (6ステップ, 3拍)' },
+  'a-8':     { tree: [[2,2],[2,2]], beatLevel: 1, label: '8ビート (8ステップ, 4拍)' },
+  'a-9':     { tree: [3,3,3], beatLevel: 1, label: '9/8拍子 (9ステップ, 3拍)' },
+  'a-12a':   { tree: [[3,3],[3,3]], beatLevel: 1, label: '12/8拍子 (12ステップ, 4拍)' },
+  'a-12b':   { tree: [[2,2,2],[2,2,2]], beatLevel: 1, label: '6拍子 (12ステップ, 6拍)' },
+  'a-12c':   { tree: [[2,2],[2,2],[2,2]], beatLevel: 1, label: '6拍子B (12ステップ, 6拍)' },
+  'a-16':    { tree: [[[2,2],[2,2]],[[2,2],[2,2]]], beatLevel: 2, label: '16ビート (16ステップ, 4拍)' },
+  'a-18':    { tree: [[3,3],[3,3],[3,3]], beatLevel: 1, label: '6拍3連 (18ステップ, 6拍)' },
+  // ── B: ★0.5~0.67 — 準均一 ──
+  'b-7':     { tree: [2,2,3], beatLevel: 1, label: '7/8拍子 (7ステップ, 3拍)' },
+  'b-8a':    { tree: [3,3,2], beatLevel: 1, label: 'トレシーロ (8ステップ, 3拍)' },
+  'b-8b':    { tree: [2,3,3], beatLevel: 1, label: '逆トレシーロ (8ステップ, 3拍)' },
+  'b-12':    { tree: [[3,3],[2,2,2]], beatLevel: 1, label: 'ヘミオラ (12ステップ, 5拍)' },
+  'b-14a':   { tree: [[2,2,3],[2,2,3]], beatLevel: 1, label: '7/8×2 (14ステップ, 6拍)' },
+  'b-14b':   { tree: [[2,2],[3,3],[2,2]], beatLevel: 1, label: '8挟み6 (14ステップ, 6拍)' },
+  'b-16a':   { tree: [[3,3,2],[3,3,2]], beatLevel: 1, label: 'トレシーロ×2 (16ステップ, 6拍)' },
+  'b-16b':   { tree: [[3,3],[3,3],[2,2]], beatLevel: 1, label: '12/8+4 (16ステップ, 6拍)' },
+  'b-18a':   { tree: [[3,3],[2,2,2],[3,3]], beatLevel: 1, label: 'ヘミオラ挟み (18ステップ, 7拍)' },
+  'b-18b':   { tree: [[3,3],[3,3],[2,2,2]], beatLevel: 1, label: 'ヘミオラ後置 (18ステップ, 7拍)' },
+  'b-18c':   { tree: [[2,2,2],[3,3],[2,2,2]], beatLevel: 1, label: '逆ヘミオラ挟み (18ステップ, 7拍)' },
+  'b-18d':   { tree: [[2,2,2],[2,2,2],[3,3]], beatLevel: 1, label: '6拍+ヘミオラ (18ステップ, 8拍)' },
+  // ── C: ★0.3~0.49 — 変拍子 ──
+  'c-5':     { tree: [2,3], beatLevel: 1, label: '5/8拍子 (5ステップ, 2拍)' },
+  'c-10a':   { tree: [[2,3],[2,3]], beatLevel: 1, label: '5/8×2 (10ステップ, 4拍)' },
+  'c-10b':   { tree: [[2,2],[2,2,2]], beatLevel: 1, label: '4+6 (10ステップ, 5拍)' },
+  'c-10c':   { tree: [[2,2],[3,3]], beatLevel: 1, label: '4+6拍 (10ステップ, 4拍)' },
+  'c-15a':   { tree: [[2,3],[2,3],[2,3]], beatLevel: 1, label: '5/8×3 (15ステップ, 6拍)' },
+  'c-15b':   { tree: [[2,2,2],[3,3,3]], beatLevel: 1, label: '6+9拍 (15ステップ, 5拍)' },
+  'c-17':    { tree: [[2,2],[2,2],[3,3,3]], beatLevel: 1, label: '4+4+9 (17ステップ, 7拍)' },
+  'c-19':    { tree: [[2,2,2],[2,2,2],[2,2,3]], beatLevel: 1, label: '6+6+7 (19ステップ, 8拍)' },
+  'c-20a':   { tree: [[[2,2],[3,3]],[[2,2],[3,3]]], beatLevel: 2, label: 'ヘミオラ×2 (20ステップ, 4拍)' },
+  'c-20b':   { tree: [[[2,2],[2,2]],[[2,2],[2,2],[2,2]]], beatLevel: 2, label: '8+12 (20ステップ, 5拍)' },
+  // ── D: ★<0.3 — 複合不規則 ──
+  'd-9':     { tree: [[2,2],[2,3]], beatLevel: 1, label: '4+5拍 (9ステップ, 4拍)' },
+  'd-11':    { tree: [[2,2,2],[2,3]], beatLevel: 1, label: '6+5拍 (11ステップ, 4拍)' },
+  'd-13':    { tree: [[2,2],[2,2],[2,3]], beatLevel: 1, label: '4+4+5 (13ステップ, 6拍)' },
+  'd-14':    { tree: [[3,3],[2,3,3]], beatLevel: 1, label: '6+8拍 (14ステップ, 5拍)' },
+  'd-17':    { tree: [[2,2,2],[2,2],[3,3,3]], beatLevel: 1, label: '6+4+9 (17ステップ, 7拍)' },
+  'd-18':    { tree: [[[2,2],[2,3]],[[2,2],[2,3]]], beatLevel: 2, label: '(4+5)×2 (18ステップ, 4拍)' },
+  'd-20':    { tree: [[[2,2],[2,2]],[[2,2],[2,3]]], beatLevel: 2, label: '8+(4+5) (17ステップ, 4拍)' }
 };
 
 TR.PATTERN_COUNT = 16;
@@ -59,10 +57,10 @@ TR.SCHEDULER_LOOKAHEAD = 0.1;
 TR.SCHEDULER_INTERVAL = 25;
 
 TR.STRUCT_GROUPS = [
-  { prefix: 'p-', label: '\u2605 1.0 \u2014 \u5747\u4e00' },
-  { prefix: 'u-', label: '\u2605 0.67 \u2014 \u4e0d\u5747\u4e00' },
-  { prefix: 'm-', label: '\u2605 0.5 \u2014 \u6df7\u5408' },
-  { prefix: 'x-', label: '\u2605 <0.5 \u2014 \u6df7\u5408\u4e0d\u5747\u4e00' }
+  { prefix: 'a-', label: '\u2605 1.0 \u2014 \u5747\u4e00' },
+  { prefix: 'b-', label: '\u2605 0.5\uff5e \u2014 \u6e96\u5747\u4e00' },
+  { prefix: 'c-', label: '\u2605 0.3\uff5e \u2014 \u5909\u62cd\u5b50' },
+  { prefix: 'd-', label: '\u2605 <0.3 \u2014 \u8907\u5408\u4e0d\u898f\u5247' }
 ];
 
 TR.buildStructOptions = function(includeDefault) {

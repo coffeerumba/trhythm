@@ -16,7 +16,7 @@
  *   - Each internal node has 2 or 3 children
  *   - Leaf values are 2 or 3
  *   - All leaves are at the same nesting depth
- *   - Total sum of leaf values (= number of steps) is 4–32
+ *   - Total sum of leaf values (= number of steps) is 4–20
  *
  * Examples:
  *   [2,2]                         → 4 steps (depth 1)
@@ -29,13 +29,14 @@
  * ═══════════════════════════════════════════════════════════════
  *
  * structure  — JSON representation of the tree
- * score      — 1 / (beatTypes × spanRatio). Higher = more regular.
- * beatTypes  — Number of distinct beat-level subtree signatures in the tree.
- *              e.g. [[2,2],[3,3]] has 2 types: [2,2] and [3,3].
- *              Order matters: [2,3] and [3,2] are different types.
- * spanRatio  — For each internal node, max(childSums)/min(childSums).
- *              The maximum ratio across all nodes in the tree.
- *              1.0 means all sibling subtrees have equal step counts.
+ * div        — Binary-ternary divisibility of total step count n.
+ *              (v₂ + v₃/log₂3) / log₂(n). Range [0, 1].
+ *              1.0 = n is a power of 2.
+ * simpson    — Weighted-average Simpson index across unique internal nodes.
+ *              At each node: h = fraction of same-signature child pairs.
+ *              Root weight = 1, child weight = parent / siblings.
+ *              simpson = Σ(weight × h) / Σ(weight). Range [0, 1].
+ *              1.0 = all nodes have identical children.
  * leaves     — Total steps (sum of all leaf values).
  * minCycle   — Minimum cycle duration in seconds.
  * maxCycle   — Maximum cycle duration in seconds.
@@ -239,74 +240,81 @@ function leafSum(tree) {
 }
 
 /**
- * findBeatDepth: find the tree depth where node count equals beat count.
- * Returns the depth of beat-level nodes in the tree.
+ * div: binary-ternary divisibility of a single number.
+ * (v₂ + v₃ / log₂(3)) / log₂(n).
+ * 1/log₂(3) ≈ 0.631 = "binary equivalent" of one ternary split.
  */
-function findBeatDepth(tree, beatLevel) {
-  var levels = analyzeLevels(tree);
-  var beatCount = 0;
-  for (var i = 0; i < levels.length; i++) {
-    if (levels[i] >= beatLevel) beatCount++;
-  }
-  var maxD = getMaxDepth(tree);
-  for (var d = 1; d <= maxD; d++) {
-    var nodes = collectNodesAtDepth(tree, 0, d);
-    if (nodes.length === beatCount) return d;
-  }
-  return 1; // fallback
+var LOG2_3 = Math.log(3) / Math.log(2); // ≈ 1.585
+var INV_LOG2_3 = 1 / LOG2_3;            // ≈ 0.631
+
+function div(n) {
+  if (n <= 1) return 0;
+  var v2 = 0, v3 = 0;
+  var tmp = n;
+  while (tmp % 2 === 0) { v2++; tmp /= 2; }
+  while (tmp % 3 === 0) { v3++; tmp /= 3; }
+  return (v2 + v3 * INV_LOG2_3) / (Math.log(n) / Math.log(2));
 }
 
 /**
- * beatTypes: number of distinct beat-level subtree signatures.
+ * computeDiv: binary-ternary divisibility of total step count.
  */
-function computeBeatTypes(tree, beatDepth) {
-  var nodes = collectNodesAtDepth(tree, 0, beatDepth);
-  var types = {};
-  for (var j = 0; j < nodes.length; j++) types[nodes[j]] = true;
-  return Object.keys(types).length;
+function computeDiv(tree) {
+  return div(leafSum(tree));
 }
 
-function collectNodesAtDepth(node, currentDepth, targetDepth) {
-  if (currentDepth === targetDepth) return [JSON.stringify(node)];
-  if (typeof node === 'number') return [];
-  var result = [];
+/**
+ * computeSimpson: weighted-average Simpson index across unique internal nodes.
+ *
+ * At each unique node (deduped by canonical key):
+ *   h = fraction of child-pairs with the same canonical signature.
+ * Weight: root = 1, each child = parent_weight / number_of_siblings.
+ * Simpson = Σ(weight × h) / Σ(weight).
+ */
+function canonicalKey(node) {
+  if (typeof node === 'number') return String(node);
+  var childKeys = [];
   for (var i = 0; i < node.length; i++) {
-    result = result.concat(collectNodesAtDepth(node[i], currentDepth + 1, targetDepth));
+    childKeys.push(canonicalKey(node[i]));
   }
-  return result;
+  childKeys.sort();
+  return '[' + childKeys.join(',') + ']';
 }
 
-/**
- * spanRatio: max(childSums) / min(childSums) across all internal nodes,
- * skipping beat-parent nodes (depth == beatDepth - 1) to avoid
- * double-counting with beatTypes.
- */
-function computeSpanRatio(tree, beatDepth) {
-  var skipDepth = beatDepth - 1;
-  var maxRatio = 1.0;
-  function walk(node, depth) {
+function computeSimpson(tree) {
+  var seen = {};
+  var totalWeight = 0;
+  var totalWeightedH = 0;
+
+  function walk(node, weight) {
     if (typeof node === 'number') return;
-    if (depth !== skipDepth) {
-      var childSums = [];
-      for (var i = 0; i < node.length; i++) {
-        childSums.push(leafSum(node[i]));
-      }
-      var minS = childSums[0], maxS = childSums[0];
-      for (var i = 1; i < childSums.length; i++) {
-        if (childSums[i] < minS) minS = childSums[i];
-        if (childSums[i] > maxS) maxS = childSums[i];
-      }
-      if (minS > 0) {
-        var ratio = maxS / minS;
-        if (ratio > maxRatio) maxRatio = ratio;
+    var key = canonicalKey(node);
+    if (seen[key]) {
+      for (var i = 0; i < node.length; i++) walk(node[i], weight / node.length);
+      return;
+    }
+    seen[key] = true;
+
+    // Pairwise Simpson index
+    var sigs = [];
+    for (var i = 0; i < node.length; i++) sigs.push(canonicalKey(node[i]));
+    var pairs = 0, same = 0;
+    for (var i = 0; i < sigs.length; i++) {
+      for (var j = i + 1; j < sigs.length; j++) {
+        pairs++;
+        if (sigs[i] === sigs[j]) same++;
       }
     }
-    for (var i = 0; i < node.length; i++) {
-      walk(node[i], depth + 1);
-    }
+    var h = pairs > 0 ? same / pairs : 1;
+
+    totalWeight += weight;
+    totalWeightedH += weight * h;
+
+    for (var i = 0; i < node.length; i++) walk(node[i], weight / node.length);
   }
-  walk(tree, 0);
-  return maxRatio;
+
+  walk(tree, 1.0);
+  return totalWeight > 0 ? totalWeightedH / totalWeight : 1;
 }
 
 function computeCycleRange(leaves) {
@@ -315,27 +323,6 @@ function computeCycleRange(leaves) {
   return { minCycle: minCycle, maxCycle: maxCycle };
 }
 
-/**
- * Count nodes at a given depth from root.
- */
-function countNodesAtDepth(node, depth) {
-  if (depth === 0 || typeof node === 'number') return 1;
-  var count = 0;
-  for (var i = 0; i < node.length; i++) {
-    count += countNodesAtDepth(node[i], depth - 1);
-  }
-  return count;
-}
-
-function getMaxDepth(node) {
-  if (typeof node === 'number') return 0;
-  var maxD = 0;
-  for (var i = 0; i < node.length; i++) {
-    var d = getMaxDepth(node[i]);
-    if (d > maxD) maxD = d;
-  }
-  return 1 + maxD;
-}
 
 /**
  * Compute metrical levels for each leaf position in the tree.
@@ -413,16 +400,13 @@ function main() {
     if (range.minCycle > range.maxCycle) continue;
 
     var beatLevel = computeBeatLevel(tree, range.minCycle, range.maxCycle);
-    var beatDepth = findBeatDepth(tree, beatLevel);
-    var beatTypes = computeBeatTypes(tree, beatDepth);
-    var spanRatio = computeSpanRatio(tree, beatDepth);
-    var score = 1.0 / (beatTypes * spanRatio);
+    var d = computeDiv(tree);
+    var s = computeSimpson(tree);
 
     rows.push({
       structure: JSON.stringify(tree),
-      score: score,
-      beatTypes: beatTypes,
-      spanRatio: spanRatio,
+      div: d,
+      simpson: s,
       leaves: leaves,
       minCycle: range.minCycle,
       maxCycle: range.maxCycle,
@@ -432,23 +416,23 @@ function main() {
 
   console.error('Valid rows (cycle range OK): ' + rows.length);
 
-  // Sort by score desc, then leaves asc, then structure asc
+  // Sort by div desc, then simpson desc, then leaves asc, then structure asc
   rows.sort(function(a, b) {
-    if (b.score !== a.score) return b.score - a.score;
+    if (b.div !== a.div) return b.div - a.div;
+    if (b.simpson !== a.simpson) return b.simpson - a.simpson;
     if (a.leaves !== b.leaves) return a.leaves - b.leaves;
     return a.structure < b.structure ? -1 : a.structure > b.structure ? 1 : 0;
   });
 
   // Output TSV
-  var header = 'structure\tscore\tbeatTypes\tspanRatio\tleaves\tminCycle\tmaxCycle\tbeatLevel';
+  var header = 'structure\tdiv\tsimpson\tleaves\tminCycle\tmaxCycle\tbeatLevel';
   var lines = [header];
   for (var i = 0; i < rows.length; i++) {
     var r = rows[i];
     lines.push([
       r.structure,
-      r.score.toFixed(6),
-      r.beatTypes,
-      r.spanRatio.toFixed(4),
+      r.div.toFixed(6),
+      r.simpson.toFixed(6),
       r.leaves,
       r.minCycle.toFixed(4),
       r.maxCycle.toFixed(4),
