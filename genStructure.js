@@ -444,6 +444,14 @@ function main() {
   var outPath = path.join(__dirname, 'structures.tsv');
   fs.writeFileSync(outPath, lines.join('\n') + '\n', 'utf8');
   console.error('Wrote ' + rows.length + ' rows to ' + outPath);
+
+  // Output chart data as JS (avoids CORS issues with file:// protocol)
+  var chartData = rows.map(function(r) {
+    return [r.structure, +r.div.toFixed(6), +r.simpson.toFixed(6)];
+  });
+  var jsPath = path.join(__dirname, 'js', 'structureData.js');
+  fs.writeFileSync(jsPath, 'window.STRUCTURE_DATA=' + JSON.stringify(chartData) + ';\n', 'utf8');
+  console.error('Wrote ' + chartData.length + ' entries to ' + jsPath);
 }
 
 main();

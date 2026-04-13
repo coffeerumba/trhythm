@@ -58,6 +58,12 @@
     </div>
   </div>
 
+  <!-- Structure map -->
+  <div class="tree-viz">
+    <div class="inst-header">拍構造マップ</div>
+    <canvas id="div-simpson-chart" width="395" height="395" style="display:block; margin:0 auto; max-width:100%;"></canvas>
+  </div>
+
   <!-- Default structure + Tree visualization -->
   <div class="tree-viz" id="tree-viz-wrap">
     <div class="inst-header">既定拍構造</div>
@@ -75,7 +81,7 @@
 
   <!-- Repeat Map -->
   <div class="grid-section" id="repeat-map-section">
-    <div class="inst-header">リピートマップ</div>
+    <div class="inst-header">繰り返しパラメーター</div>
     <div id="repeat-map-body"></div>
   </div>
 
@@ -87,7 +93,8 @@
 <script src="genRhythm.js"></script>
 <script src="genRepeat.js"></script>
 <script src="js/constants.js"></script>
-<script src="js/ui.js"></script>
+<script src="js/structureData.js"></script>
+<script src="js/ui.js?v=4"></script>
 <script src="js/pattern.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/visualizer.js"></script>

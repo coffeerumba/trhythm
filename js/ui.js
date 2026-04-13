@@ -92,7 +92,7 @@ TR.renderAllGrids = function(pat) {
 
 /* ═══ Instrument UI ═══ */
 (function() {
-/* ─── Dynamically generate instrument sections ─── */
+/* ─── Dynamically generate instrument sections (unified) ─── */
 var container = document.getElementById('instruments-container');
 var instruments = [
   { key: 'kick',  label: 'Kick' },
@@ -107,13 +107,15 @@ var helpTexts = {
   fidelity: '\u62cd\u69cb\u9020\u306b\u3069\u308c\u3060\u3051\u5fe0\u5b9f\u306b\u30d1\u30bf\u30fc\u30f3\u3092\u751f\u6210\u3059\u308b\u304b\u3092\u6c7a\u3081\u307e\u3059\u30021\u3060\u3068\u91cd\u307f\u306e\u9ad8\u3044\u4f4d\u7f6e\u304b\u3089\u9806\u306b\u78ba\u5b9f\u306b\u9078\u3070\u308c\u30010\u3060\u3068\u3069\u306e\u4f4d\u7f6e\u304c\u9078\u3070\u308c\u308b\u304b\u5b8c\u5168\u306b\u30e9\u30f3\u30c0\u30e0\u306b\u306a\u308a\u307e\u3059\u3002\u4e2d\u9593\u5024\u3067\u307b\u3069\u3088\u3044\u63fa\u3089\u304e\u304c\u751f\u307e\u308c\u307e\u3059\u3002'
 };
 
+var section = document.createElement('div');
+section.className = 'inst-section';
+var html = '<div class="inst-header">\u697d\u5668\u30d1\u30e9\u30e1\u30fc\u30bf\u30fc</div>';
+
 for (var i = 0; i < instruments.length; i++) {
   var inst = instruments[i];
-  var section = document.createElement('div');
-  section.className = 'inst-section';
-
-  section.innerHTML =
-    '<div class="inst-header ' + inst.key + '">' + inst.label + '</div>' +
+  if (i > 0) html += '<hr style="border:none; border-top:2px dashed var(--border); margin:10px 0;">';
+  html +=
+    '<div class="inst-header ' + inst.key + '" style="font-size:16px;">' + inst.label + '</div>' +
     '<div class="param-group">' +
     '<div class="param-row">' +
       '<span class="param-label">\u62cd\u69cb\u9020<button class="help-btn" onclick="TR.toggleHelp(this)">?</button></span>' +
@@ -151,12 +153,16 @@ for (var i = 0; i < instruments.length; i++) {
     '<div class="help-popup">' + helpTexts.fidelity + '</div>' +
     '</div>' +
     '<div class="prob-chart" id="prob-' + inst.key + '"></div>';
+}
 
-  container.appendChild(section);
+section.innerHTML = html;
+container.appendChild(section);
 
-  TR.setupSlider(inst.key + '-rate');
-  TR.setupSlider(inst.key + '-fidelity');
-  TR.setupSlider(inst.key + '-center');
+for (var i = 0; i < instruments.length; i++) {
+  var key = instruments[i].key;
+  TR.setupSlider(key + '-rate');
+  TR.setupSlider(key + '-fidelity');
+  TR.setupSlider(key + '-center');
 }
 })();
 
@@ -352,6 +358,100 @@ document.getElementById('struct-next').addEventListener('click', function() { TR
 var defSel = document.getElementById('default-struct');
 defSel.innerHTML = TR.buildStructOptions(false);
 
+/* ─── Div × Simpson heatmap matrix (static, no interaction) ─── */
+(function() {
+  var canvas = document.getElementById('div-simpson-chart');
+  var ctx = canvas.getContext('2d');
+  var W = canvas.width, H = canvas.height;
+
+  if (!window.STRUCTURE_DATA) return;
+
+  // Both axes: 10 equal-width bins [0,0.1), [0.1,0.2), ... [0.9,1.0]
+  var nCols = 10;
+  var nRows = 10;
+  function bin(v) {
+    var b = Math.floor(v * 10);
+    return b >= 10 ? 9 : b;
+  }
+
+  // Count per cell
+  var grid = [];
+  for (var r = 0; r < nRows; r++) {
+    grid[r] = [];
+    for (var c = 0; c < nCols; c++) grid[r][c] = 0;
+  }
+  for (var i = 0; i < window.STRUCTURE_DATA.length; i++) {
+    var d = window.STRUCTURE_DATA[i][1];
+    var s = window.STRUCTURE_DATA[i][2];
+    grid[bin(s)][bin(d)]++;
+  }
+
+  // Layout
+  var pad = { top: 25, right: 25, bottom: 50, left: 50 };
+  var plotW = W - pad.left - pad.right;
+  var plotH = H - pad.top - pad.bottom;
+  var cellW = plotW / nCols;
+  var cellH = plotH / nRows;
+
+  // Background
+  ctx.fillStyle = '#e8e8e8';
+  ctx.fillRect(0, 0, W, H);
+
+  // Draw grid cells
+  for (var r = 0; r < nRows; r++) {
+    for (var c = 0; c < nCols; c++) {
+      var x = pad.left + c * cellW;
+      var y = pad.top + (nRows - 1 - r) * cellH; // row 0 = bottom (low simpson)
+      var count = grid[r][c];
+
+      // Cell background
+      ctx.fillStyle = count > 0 ? '#ccc' : '#d8d8d8';
+      ctx.fillRect(x, y, cellW, cellH);
+      ctx.strokeStyle = '#b0b0b0';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, y, cellW, cellH);
+
+      // Count number
+      if (count > 0) {
+        ctx.fillStyle = '#1a1a1a';
+        ctx.font = '14px DotGothic16, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(count, x + cellW / 2, y + cellH / 2);
+      }
+    }
+  }
+
+  // Axis labels
+  ctx.fillStyle = '#777';
+  ctx.font = '14px DotGothic16, sans-serif';
+
+  // X axis: div bins (label at left edge, every 0.2)
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  for (var c = 0; c <= nCols; c += 2) {
+    ctx.fillText((c / 10).toFixed(1), pad.left + c * cellW, pad.top + plotH + 4);
+  }
+  ctx.font = '14px DotGothic16, sans-serif';
+  ctx.fillText('\u5272\u308a\u3084\u3059\u3055', pad.left + plotW / 2, pad.top + plotH + 28);
+
+  // Y axis: simpson bins (label at bottom edge, every 0.2)
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (var r = 0; r <= nRows; r += 2) {
+    var y = pad.top + (nRows - r) * cellH;
+    ctx.fillText((r / 10).toFixed(1), pad.left - 4, y);
+  }
+  ctx.save();
+  ctx.font = '14px DotGothic16, sans-serif';
+  ctx.translate(14, pad.top + plotH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('\u5747\u4e00\u6027', 0, 0);
+  ctx.restore();
+})();
+
 /* ═══ Repeat Map ═══ */
 TR.updateRepeatMap = function(key) {
   var chunkRatio = parseFloat(document.getElementById('rf-chunk-' + key).value);
@@ -368,9 +468,16 @@ TR.updateRepeatMap = function(key) {
   var body = document.getElementById('repeat-map-body');
 
   var instruments = ['kick', 'snare', 'hihat'];
-  var labels = { kick: 'K', snare: 'S', hihat: 'H' };
+  var labels = { kick: 'Kick', snare: 'Snare', hihat: 'HiHat' };
   for (var i = 0; i < instruments.length; i++) {
     var key = instruments[i];
+
+    // Separator between instruments
+    if (i > 0) {
+      var hr = document.createElement('hr');
+      hr.style.cssText = 'border:none; border-top:2px dashed var(--border); margin:10px 0;';
+      body.appendChild(hr);
+    }
 
     // Label
     var header = document.createElement('div');
@@ -380,22 +487,28 @@ TR.updateRepeatMap = function(key) {
     body.appendChild(header);
 
     // chunkRatio slider
-    var chunkRow = document.createElement('div');
-    chunkRow.className = 'param-row';
-    chunkRow.innerHTML =
-      '<span class="param-label">chunkRatio</span>' +
+    var chunkGroup = document.createElement('div');
+    chunkGroup.className = 'param-group';
+    chunkGroup.innerHTML =
+      '<div class="param-row">' +
+      '<span class="param-label">\u304b\u305f\u307e\u308a<button class="help-btn" onclick="TR.toggleHelp(this)">?</button></span>' +
       '<input type="range" id="rf-chunk-' + key + '" min="0" max="1" step="' + (1 / TR.PATTERN_COUNT) + '" value="0" style="flex:1;">' +
-      '<span class="param-value" id="rf-chunk-' + key + '-val">0.00</span>';
-    body.appendChild(chunkRow);
+      '<span class="param-value" id="rf-chunk-' + key + '-val">0.00</span>' +
+      '</div>' +
+      '<div class="help-popup">\u3072\u3068\u304b\u305f\u307e\u308a\u3068\u3057\u3066\u6271\u3046\u30d1\u30bf\u30fc\u30f3\u306e\u6570\u3092\u3001\u5168\u30d1\u30bf\u30fc\u30f3\u306e\u6570\u306b\u5bfe\u3059\u308b\u5272\u5408\u3068\u3057\u3066\u6307\u5b9a\u3057\u307e\u3059\u30020\u3060\u3068\u5404\u30d1\u30bf\u30fc\u30f3\u304c\u305d\u308c\u305e\u308c\u72ec\u7acb\u306b\u6271\u308f\u308c\u307e\u3059\u3002\u5024\u3092\u4e0a\u3052\u308b\u3068\u3001\u3088\u308a\u591a\u304f\u306e\u30d1\u30bf\u30fc\u30f3\u3092\u3072\u3068\u304b\u305f\u307e\u308a\u3068\u3057\u3066\u6271\u3044\u307e\u3059\u3002</div>';
+    body.appendChild(chunkGroup);
 
     // bias slider
-    var biasRow = document.createElement('div');
-    biasRow.className = 'param-row';
-    biasRow.innerHTML =
-      '<span class="param-label">bias</span>' +
+    var biasGroup = document.createElement('div');
+    biasGroup.className = 'param-group';
+    biasGroup.innerHTML =
+      '<div class="param-row">' +
+      '<span class="param-label">\u504f\u308a<button class="help-btn" onclick="TR.toggleHelp(this)">?</button></span>' +
       '<input type="range" id="rf-bias-' + key + '" min="-1" max="1" step="0.01" value="0" style="flex:1;">' +
-      '<span class="param-value" id="rf-bias-' + key + '-val">0.00</span>';
-    body.appendChild(biasRow);
+      '<span class="param-value" id="rf-bias-' + key + '-val">0.00</span>' +
+      '</div>' +
+      '<div class="help-popup">\u7e70\u308a\u8fd4\u3057\u304c\u767a\u751f\u3059\u308b\u78ba\u7387\u3092\u8abf\u6574\u3057\u307e\u3059\u3002\u6b63\u306e\u5024\u3060\u3068\u7e70\u308a\u8fd4\u3057\u304c\u8d77\u304d\u3084\u3059\u304f\u306a\u308a\u3001\u8ca0\u306e\u5024\u3060\u3068\u8d77\u304d\u306b\u304f\u304f\u306a\u308a\u307e\u3059\u30020\u3067\u30c7\u30d5\u30a9\u30eb\u30c8\u306e\u78ba\u7387\u3067\u3059\u3002</div>';
+    body.appendChild(biasGroup);
 
     // Number blocks (0 ~ PATTERN_COUNT - 1)
     var blockRow = document.createElement('div');
