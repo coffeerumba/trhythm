@@ -272,17 +272,58 @@ for (var ii = 0; ii < TR.INSTRUMENTS.length; ii++) {
 
 /* ═══ Tree Visualization ═══ */
 /* ─── Tree visualization (tournament bracket) ─── */
-TR.renderTreeViz = function() {
-  var key = document.getElementById('default-struct').value;
-  var def = TR.STRUCTURES[key];
+/**
+ * Build tree visualization HTML for any tree + beatLevel.
+ * Returns an HTML string using .tv-fork/.tv-arms/.tv-arm/.tv-leaves/.tv-leaf classes.
+ */
+TR.buildTreeHTML = function(tree, beatLevel) {
   var maxDepth = 0;
   function getMaxDepth(node, d) {
     if (!Array.isArray(node)) { if (d > maxDepth) maxDepth = d; return; }
     for (var i = 0; i < node.length; i++) getMaxDepth(node[i], d + 1);
   }
-  getMaxDepth(def.tree, 0);
+  getMaxDepth(tree, 0);
 
-  var beatColorDepth = maxDepth - def.beatLevel + 1;
+  var beatColorDepth = maxDepth - beatLevel + 1;
+  var colors = ['#666', '#888', '#aaa', '#bbb', '#ccc'];
+  var levels = TR.computeLevels(tree);
+  var leafIdx = 0;
+
+  function build(node, depth) {
+    var color = (depth === beatColorDepth && depth < maxDepth) ? 'var(--accent)' : colors[depth % colors.length];
+    if (!Array.isArray(node)) {
+      var cells = '';
+      for (var j = 0; j < node; j++) {
+        var isBeat = levels[leafIdx] >= beatLevel;
+        cells += '<div class="tv-leaf' + (isBeat ? ' beat' : '') + '">' +
+                 levels[leafIdx] + '</div>';
+        leafIdx++;
+      }
+      return '<div class="tv-leaves">' + cells + '</div>';
+    }
+    var arms = '';
+    for (var i = 0; i < node.length; i++) {
+      arms += '<div class="tv-arm">' + build(node[i], depth + 1) + '</div>';
+    }
+    return '<div class="tv-fork" style="--fc:' + color + '">' +
+           '<div class="tv-arms">' + arms + '</div></div>';
+  }
+
+  return build(tree, 0);
+};
+
+/**
+ * Build structure label HTML (bracket notation with beat-level coloring).
+ */
+TR.buildStructLabel = function(tree, beatLevel) {
+  var maxDepth = 0;
+  function getMaxDepth(node, d) {
+    if (!Array.isArray(node)) { if (d > maxDepth) maxDepth = d; return; }
+    for (var i = 0; i < node.length; i++) getMaxDepth(node[i], d + 1);
+  }
+  getMaxDepth(tree, 0);
+
+  var beatColorDepth = maxDepth - beatLevel + 1;
   function structLabel(node, depth) {
     if (!Array.isArray(node)) {
       if (depth === beatColorDepth) {
@@ -300,34 +341,14 @@ TR.renderTreeViz = function() {
     }
     return '[' + inner + ']';
   }
-  document.getElementById('tree-struct-label').innerHTML = structLabel(def.tree, 0);
+  return structLabel(tree, 0);
+};
 
-  var el = document.getElementById('tree-viz');
-  var colors = ['#666', '#888', '#aaa', '#bbb', '#ccc'];
-  var levels = TR.computeLevels(def.tree);
-  var leafIdx = 0;
-
-  function build(node, depth) {
-    var color = (depth === beatColorDepth && depth < maxDepth) ? 'var(--accent)' : colors[depth % colors.length];
-    if (!Array.isArray(node)) {
-      var cells = '';
-      for (var j = 0; j < node; j++) {
-        var isBeat = levels[leafIdx] >= def.beatLevel;
-        cells += '<div class="tv-leaf' + (isBeat ? ' beat' : '') + '">' +
-                 levels[leafIdx] + '</div>';
-        leafIdx++;
-      }
-      return '<div class="tv-leaves">' + cells + '</div>';
-    }
-    var arms = '';
-    for (var i = 0; i < node.length; i++) {
-      arms += '<div class="tv-arm">' + build(node[i], depth + 1) + '</div>';
-    }
-    return '<div class="tv-fork" style="--fc:' + color + '">' +
-           '<div class="tv-arms">' + arms + '</div></div>';
-  }
-
-  el.innerHTML = build(def.tree, 0);
+TR.renderTreeViz = function() {
+  var key = document.getElementById('default-struct').value;
+  var def = TR.STRUCTURES[key];
+  document.getElementById('tree-struct-label').innerHTML = TR.buildStructLabel(def.tree, def.beatLevel);
+  document.getElementById('tree-viz').innerHTML = TR.buildTreeHTML(def.tree, def.beatLevel);
 };
 
 /* ─── Prev/Next structure navigation ─── */
@@ -390,7 +411,7 @@ defSel.innerHTML = TR.buildStructOptions(false);
     var s = window.STRUCTURE_DATA[i][2];
     var bc = bin(d), br = bin(s);
     grid[br][bc]++;
-    cellStructures[br][bc].push({ structure: window.STRUCTURE_DATA[i][0], leaves: window.STRUCTURE_DATA[i][3] });
+    cellStructures[br][bc].push({ structure: window.STRUCTURE_DATA[i][0], leaves: window.STRUCTURE_DATA[i][3], beatLevel: window.STRUCTURE_DATA[i][6] });
   }
 
   // Sort each cell by leaves
@@ -523,7 +544,11 @@ defSel.innerHTML = TR.buildStructOptions(false);
       'div=[' + divLo + ',' + divHi + divBracket + ' simp=[' + simpLo + ',' + simpHi + simpBracket + ' \u2014 ' +
       structures.length + '\u500b</div>';
     for (var i = 0; i < structures.length; i++) {
-      html += '<div style="padding:2px 0; font-family:monospace; font-size:13px;">' + structures[i].structure + '</div>';
+      var tree = JSON.parse(structures[i].structure);
+      html += '<div style="padding:6px 0; border-bottom:1px solid #ccc;">' +
+        '<div style="font-family:monospace; font-size:13px; margin-bottom:4px;">' + structures[i].structure + ' (steps=' + structures[i].leaves + ', beats=' + TR.computeBeats({ tree: tree, beatLevel: structures[i].beatLevel }) + ')</div>' +
+        '<div style="display:flex;"><div style="margin:0 auto;">' + TR.buildTreeHTML(tree, structures[i].beatLevel) + '</div></div>' +
+        '</div>';
     }
     listDiv.innerHTML = html;
   });
