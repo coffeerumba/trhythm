@@ -358,7 +358,7 @@ document.getElementById('struct-next').addEventListener('click', function() { TR
 var defSel = document.getElementById('default-struct');
 defSel.innerHTML = TR.buildStructOptions(false);
 
-/* ─── Div × Simpson heatmap matrix (static, no interaction) ─── */
+/* ─── Div × Simpson heatmap matrix ─── */
 (function() {
   var canvas = document.getElementById('div-simpson-chart');
   var ctx = canvas.getContext('2d');
@@ -374,16 +374,30 @@ defSel.innerHTML = TR.buildStructOptions(false);
     return b >= 10 ? 9 : b;
   }
 
-  // Count per cell
+  // Count per cell + collect structures per cell
   var grid = [];
+  var cellStructures = [];
   for (var r = 0; r < nRows; r++) {
     grid[r] = [];
-    for (var c = 0; c < nCols; c++) grid[r][c] = 0;
+    cellStructures[r] = [];
+    for (var c = 0; c < nCols; c++) {
+      grid[r][c] = 0;
+      cellStructures[r][c] = [];
+    }
   }
   for (var i = 0; i < window.STRUCTURE_DATA.length; i++) {
     var d = window.STRUCTURE_DATA[i][1];
     var s = window.STRUCTURE_DATA[i][2];
-    grid[bin(s)][bin(d)]++;
+    var bc = bin(d), br = bin(s);
+    grid[br][bc]++;
+    cellStructures[br][bc].push({ structure: window.STRUCTURE_DATA[i][0], leaves: window.STRUCTURE_DATA[i][3] });
+  }
+
+  // Sort each cell by leaves
+  for (var r = 0; r < nRows; r++) {
+    for (var c = 0; c < nCols; c++) {
+      cellStructures[r][c].sort(function(a, b) { return a.leaves - b.leaves; });
+    }
   }
 
   // Layout
@@ -450,6 +464,69 @@ defSel.innerHTML = TR.buildStructOptions(false);
   ctx.textBaseline = 'middle';
   ctx.fillText('\u5747\u4e00\u6027', 0, 0);
   ctx.restore();
+
+  // Save base image for hover overlay
+  var baseImage = ctx.getImageData(0, 0, W, H);
+  var hoverCol = -1, hoverRow = -1;
+
+  function getCell(e) {
+    var rect = canvas.getBoundingClientRect();
+    var mx = (e.clientX - rect.left) * (W / rect.width);
+    var my = (e.clientY - rect.top) * (H / rect.height);
+    var c = Math.floor((mx - pad.left) / cellW);
+    var r = nRows - 1 - Math.floor((my - pad.top) / cellH);
+    if (c < 0 || c >= nCols || r < 0 || r >= nRows) return null;
+    return { col: c, row: r };
+  }
+
+  canvas.addEventListener('mousemove', function(e) {
+    var cell = getCell(e);
+    var c = cell ? cell.col : -1;
+    var r = cell ? cell.row : -1;
+    if (c === hoverCol && r === hoverRow) return;
+    hoverCol = c; hoverRow = r;
+    ctx.putImageData(baseImage, 0, 0);
+    if (c >= 0 && r >= 0) {
+      var x = pad.left + c * cellW;
+      var y = pad.top + (nRows - 1 - r) * cellH;
+      ctx.fillStyle = 'rgba(208,48,80,0.2)';
+      ctx.fillRect(x, y, cellW, cellH);
+      ctx.strokeStyle = '#d03050';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x + 1, y + 1, cellW - 2, cellH - 2);
+    }
+  });
+
+  canvas.addEventListener('mouseleave', function() {
+    hoverCol = -1; hoverRow = -1;
+    ctx.putImageData(baseImage, 0, 0);
+  });
+
+  // Click to show structures in selected cell
+  var listDiv = document.getElementById('map-cell-list');
+  canvas.addEventListener('click', function(e) {
+    var cell = getCell(e);
+    if (!cell) { listDiv.textContent = '\u30de\u30b9\u3092\u30af\u30ea\u30c3\u30af\u3059\u308b\u3068\u8a72\u5f53\u3059\u308b\u62cd\u69cb\u9020\u30d1\u30bf\u30fc\u30f3\u304c\u8868\u793a\u3055\u308c\u307e\u3059'; return; }
+    var c = cell.col, r = cell.row;
+
+    var structures = cellStructures[r][c];
+    if (structures.length === 0) {
+      listDiv.textContent = '\u3053\u306e\u30de\u30b9\u306b\u30d1\u30bf\u30fc\u30f3\u306f\u3042\u308a\u307e\u305b\u3093';
+      return;
+    }
+
+    var divLo = (c / 10).toFixed(1), divHi = ((c + 1) / 10).toFixed(1);
+    var simpLo = (r / 10).toFixed(1), simpHi = ((r + 1) / 10).toFixed(1);
+    var divBracket = c === nCols - 1 ? ']' : ')';
+    var simpBracket = r === nRows - 1 ? ']' : ')';
+    var html = '<div style="padding:4px 0; font-weight:bold; color:var(--text);">' +
+      'div=[' + divLo + ',' + divHi + divBracket + ' simp=[' + simpLo + ',' + simpHi + simpBracket + ' \u2014 ' +
+      structures.length + '\u500b</div>';
+    for (var i = 0; i < structures.length; i++) {
+      html += '<div style="padding:2px 0; font-family:monospace; font-size:13px;">' + structures[i].structure + '</div>';
+    }
+    listDiv.innerHTML = html;
+  });
 })();
 
 /* ═══ Repeat Map ═══ */

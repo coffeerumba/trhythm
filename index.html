@@ -61,7 +61,10 @@
   <!-- Structure map -->
   <div class="tree-viz">
     <div class="inst-header">拍構造マップ</div>
-    <canvas id="div-simpson-chart" width="395" height="395" style="display:block; margin:0 auto; max-width:100%;"></canvas>
+    <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:flex-start;">
+      <canvas id="div-simpson-chart" width="395" height="395" style="cursor:pointer; flex-shrink:0;"></canvas>
+      <div id="map-cell-list" style="font-size:14px; color:var(--text-muted); max-height:395px; overflow-y:auto; flex:1; min-width:395px; background:var(--bg); border:2px solid var(--border); padding:8px;">マスをクリックすると該当する拍構造パターンが表示されます</div>
+    </div>
   </div>
 
   <!-- Default structure + Tree visualization -->
@@ -93,7 +96,7 @@
 <script src="genRhythm.js"></script>
 <script src="genRepeat.js"></script>
 <script src="js/constants.js"></script>
-<script src="js/structureData.js"></script>
+<script src="js/structures.js"></script>
 <script src="js/ui.js?v=4"></script>
 <script src="js/pattern.js"></script>
 <script src="js/audio.js"></script>

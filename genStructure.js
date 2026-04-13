@@ -445,11 +445,11 @@ function main() {
   fs.writeFileSync(outPath, lines.join('\n') + '\n', 'utf8');
   console.error('Wrote ' + rows.length + ' rows to ' + outPath);
 
-  // Output chart data as JS (avoids CORS issues with file:// protocol)
+  // Output full data as JS (avoids CORS issues with file:// protocol)
   var chartData = rows.map(function(r) {
-    return [r.structure, +r.div.toFixed(6), +r.simpson.toFixed(6)];
+    return [r.structure, +r.div.toFixed(6), +r.simpson.toFixed(6), r.leaves, +r.minCycle.toFixed(4), +r.maxCycle.toFixed(4), r.beatLevel];
   });
-  var jsPath = path.join(__dirname, 'js', 'structureData.js');
+  var jsPath = path.join(__dirname, 'js', 'structures.js');
   fs.writeFileSync(jsPath, 'window.STRUCTURE_DATA=' + JSON.stringify(chartData) + ';\n', 'utf8');
   console.error('Wrote ' + chartData.length + ' entries to ' + jsPath);
 }
