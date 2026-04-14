@@ -285,7 +285,7 @@ TR.buildTreeHTML = function(tree, beatLevel) {
   getMaxDepth(tree, 0);
 
   var beatColorDepth = maxDepth - beatLevel + 1;
-  var colors = ['#666', '#888', '#aaa', '#bbb', '#ccc'];
+  var lineColor = '#888';
   var levels = TR.computeLevels(tree);
   var leafIdx = 0;
 
@@ -306,7 +306,7 @@ TR.buildTreeHTML = function(tree, beatLevel) {
   }
 
   function build(node, depth) {
-    var color = colors[depth % colors.length];
+    var color = lineColor;
     if (!Array.isArray(node)) {
       var cells = '';
       for (var j = 0; j < node; j++) {
@@ -326,7 +326,8 @@ TR.buildTreeHTML = function(tree, beatLevel) {
            '<div class="tv-arms">' + arms + '</div></div>';
   }
 
-  return build(tree, 0);
+  var rootSl = stemFraction(tree) * 100;
+  return '<div class="tv-root" style="--sl:calc(' + rootSl.toFixed(1) + '% - 1px)">' + build(tree, 0) + '</div>';
 };
 
 /**
@@ -375,6 +376,7 @@ TR.renderTreeViz = function() {
  * and set --sl to the exact pixel value.
  */
 TR.fixStemPositions = function(container) {
+  // Fix arm stems
   var arms = container.querySelectorAll('.tv-arm');
   for (var i = 0; i < arms.length; i++) {
     var arm = arms[i];
@@ -384,6 +386,17 @@ TR.fixStemPositions = function(container) {
     var leafRect = firstLeaf.getBoundingClientRect();
     var stemLeft = leafRect.left + leafRect.width / 2 - armRect.left - 1;
     arm.style.setProperty('--sl', stemLeft + 'px');
+  }
+  // Fix root stem
+  var root = container.querySelector('.tv-root');
+  if (root) {
+    var firstLeaf = root.querySelector('.tv-leaf');
+    if (firstLeaf) {
+      var rootRect = root.getBoundingClientRect();
+      var leafRect = firstLeaf.getBoundingClientRect();
+      var stemLeft = leafRect.left + leafRect.width / 2 - rootRect.left - 1;
+      root.style.setProperty('--sl', stemLeft + 'px');
+    }
   }
 };
 

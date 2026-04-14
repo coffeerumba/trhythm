@@ -417,6 +417,29 @@ input[type="range"]::-moz-range-thumb {
   margin-bottom: 14px;
   overflow-x: auto;
 }
+.tv-root {
+  display: inline-block;
+  position: relative;
+  padding-top: 18px;
+}
+.tv-root::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: var(--sl, 0);
+  height: 18px;
+  border-left: 2px solid #888;
+}
+.tv-root::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: calc(var(--sl, 0) - 2px);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #888;
+}
 .tv-fork {
   display: inline-flex;
   flex-direction: column;
@@ -441,7 +464,7 @@ input[type="range"]::-moz-range-thumb {
   top: 0;
   left: 0;
   right: 0;
-  border-top: 2px solid var(--fc, #555);
+  border-top: 2px solid var(--fc, #888);
 }
 .tv-arm:first-child::before { left: var(--sl, calc(50% - 1px)); }
 .tv-arm:last-child::before { right: calc(100% - var(--sl, calc(50% - 1px)) - 2px); }
@@ -453,7 +476,7 @@ input[type="range"]::-moz-range-thumb {
   top: 0;
   left: var(--sl, calc(50% - 1px));
   height: 18px;
-  border-left: 2px solid var(--fc, #555);
+  border-left: 2px solid var(--fc, #888);
 }
 .tv-arm:only-child::after { display: none; }
 /* Leaf group */
@@ -470,11 +493,13 @@ input[type="range"]::-moz-range-thumb {
   justify-content: center;
   font-size: 14px;
   font-family: var(--pixel-font);
-  border: 2px solid var(--border);
+  border: 2px solid #888;
+  margin-left: -2px;
   background: var(--bg);
   color: var(--text-muted);
   flex-shrink: 0;
 }
+.tv-leaf:first-child { margin-left: 0; }
 .tv-leaf.beat { color: #fff; background: var(--accent); border-color: #a02040; }
 
 /* --- Empty state --- */
