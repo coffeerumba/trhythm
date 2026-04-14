@@ -500,7 +500,7 @@ input[type="range"]::-moz-range-thumb {
   flex-shrink: 0;
 }
 .tv-leaf:first-child { margin-left: 0; }
-.tv-leaf.beat { color: #fff; background: var(--accent); border-color: #a02040; }
+.tv-leaf.beat { color: #fff; background: #444; border-color: #333; }
 
 /* --- Empty state --- */
 .empty-msg {

@@ -387,9 +387,10 @@ TR.fixStemPositions = function(container) {
     var stemLeft = leafRect.left + leafRect.width / 2 - armRect.left - 1;
     arm.style.setProperty('--sl', stemLeft + 'px');
   }
-  // Fix root stem
-  var root = container.querySelector('.tv-root');
-  if (root) {
+  // Fix root stems
+  var roots = container.querySelectorAll('.tv-root');
+  for (var j = 0; j < roots.length; j++) {
+    var root = roots[j];
     var firstLeaf = root.querySelector('.tv-leaf');
     if (firstLeaf) {
       var rootRect = root.getBoundingClientRect();
@@ -595,11 +596,12 @@ defSel.innerHTML = TR.buildStructOptions(false);
     for (var i = 0; i < structures.length; i++) {
       var tree = JSON.parse(structures[i].structure);
       html += '<div style="padding:6px 0; border-bottom:1px solid #ccc;">' +
-        '<div style="font-family:monospace; font-size:13px; margin-bottom:4px;">' + structures[i].structure + ' (steps=' + structures[i].leaves + ', beats=' + TR.computeBeats({ tree: tree, beatLevel: structures[i].beatLevel }) + ')</div>' +
-        '<div style="display:flex;"><div style="margin:0 auto;">' + TR.buildTreeHTML(tree, structures[i].beatLevel) + '</div></div>' +
+        '<div style="font-family:monospace; font-size:14px; margin-bottom:4px;">' + structures[i].structure + ' (steps=' + structures[i].leaves + ', beats=' + TR.computeBeats({ tree: tree, beatLevel: structures[i].beatLevel }) + ')</div>' +
+        '<div>' + TR.buildTreeHTML(tree, structures[i].beatLevel) + '</div>' +
         '</div>';
     }
     listDiv.innerHTML = html;
+    TR.fixStemPositions(listDiv);
   });
 })();
 
