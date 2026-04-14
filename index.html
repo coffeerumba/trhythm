@@ -58,25 +58,18 @@
     </div>
   </div>
 
-  <!-- Structure map -->
+  <!-- Default structure + Structure map -->
   <div class="tree-viz">
-    <div class="inst-header">拍構造マップ</div>
-    <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:flex-start;">
-      <canvas id="div-simpson-chart" width="395" height="395" style="cursor:pointer; flex-shrink:0;"></canvas>
-      <div id="map-cell-list" style="font-size:14px; color:var(--text-muted); max-height:395px; overflow-y:auto; flex:1; min-width:395px; background:var(--bg); border:2px solid var(--border); padding:8px;">マスをクリックすると該当する拍構造パターンが表示されます</div>
-    </div>
-  </div>
-
-  <!-- Default structure + Tree visualization -->
-  <div class="tree-viz" id="tree-viz-wrap">
     <div class="inst-header">既定拍構造</div>
     <div class="param-row" style="margin-bottom:10px;">
       <button class="btn-nav" id="struct-prev">&#9664;</button>
       <select id="default-struct" class="struct-select"></select>
       <button class="btn-nav" id="struct-next">&#9654;</button>
     </div>
-    <div id="tree-struct-label" style="text-align:center; font-size:16px; font-family:var(--pixel-font); color:var(--text-muted); margin-bottom:10px;"></div>
-    <div><div id="tree-viz"></div></div>
+    <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:flex-start;">
+      <canvas id="div-simpson-chart" width="395" height="395" style="cursor:pointer; flex-shrink:0;"></canvas>
+      <div id="map-cell-list" style="font-size:14px; color:var(--text-muted); max-height:395px; overflow-y:auto; flex:1; min-width:395px; background:var(--bg); border:2px solid var(--border); padding:8px;">マスをクリックすると該当する拍構造パターンが表示されます</div>
+    </div>
   </div>
 
   <!-- Instruments (dynamically generated) -->
@@ -95,9 +88,9 @@
 <script src="https://cdn.jsdelivr.net/npm/tone@15.1.22/build/Tone.js"></script>
 <script src="genRhythm.js"></script>
 <script src="genRepeat.js"></script>
-<script src="js/constants.js"></script>
+<script src="js/constants.js?v=2"></script>
 <script src="js/structures.js"></script>
-<script src="js/ui.js?v=4"></script>
+<script src="js/ui.js?v=6"></script>
 <script src="js/pattern.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/visualizer.js"></script>

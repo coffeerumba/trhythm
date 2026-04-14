@@ -130,7 +130,6 @@ TR.setDefaultParams = function() {
   setSlider('rf-bias-hihat', 0.00);
   // Refresh UI
   TR.renderAllProbCharts();
-  TR.renderTreeViz();
   TR.updateAllBeatsSelects();
 };
 

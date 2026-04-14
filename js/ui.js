@@ -330,46 +330,6 @@ TR.buildTreeHTML = function(tree, beatLevel) {
   return '<div class="tv-root" style="--sl:calc(' + rootSl.toFixed(1) + '% - 1px)">' + build(tree, 0) + '</div>';
 };
 
-/**
- * Build structure label HTML (bracket notation with beat-level coloring).
- */
-TR.buildStructLabel = function(tree, beatLevel) {
-  var maxDepth = 0;
-  function getMaxDepth(node, d) {
-    if (!Array.isArray(node)) { if (d > maxDepth) maxDepth = d; return; }
-    for (var i = 0; i < node.length; i++) getMaxDepth(node[i], d + 1);
-  }
-  getMaxDepth(tree, 0);
-
-  var beatColorDepth = maxDepth - beatLevel + 1;
-  function structLabel(node, depth) {
-    if (!Array.isArray(node)) {
-      if (depth === beatColorDepth) {
-        return '<span style="color:var(--accent)">' + node + '</span>';
-      }
-      return String(node);
-    }
-    var inner = '';
-    for (var i = 0; i < node.length; i++) {
-      if (i > 0) inner += ',';
-      inner += structLabel(node[i], depth + 1);
-    }
-    if (depth === beatColorDepth) {
-      return '<span style="color:var(--accent)">[</span>' + inner + '<span style="color:var(--accent)">]</span>';
-    }
-    return '[' + inner + ']';
-  }
-  return structLabel(tree, 0);
-};
-
-TR.renderTreeViz = function() {
-  var key = document.getElementById('default-struct').value;
-  var def = TR.STRUCTURES[key];
-  document.getElementById('tree-struct-label').innerHTML = TR.buildStructLabel(def.tree, def.beatLevel);
-  var el = document.getElementById('tree-viz');
-  el.innerHTML = TR.buildTreeHTML(def.tree, def.beatLevel);
-  TR.fixStemPositions(el);
-};
 
 /**
  * Post-render fix: measure actual first-leaf center position in each arm
@@ -417,7 +377,6 @@ TR.navigateStruct = function(delta) {
 /* ─── Default structure change ─── */
 document.getElementById('default-struct').addEventListener('change', function() {
   TR.renderAllProbCharts();
-  TR.renderTreeViz();
   TR.updateAllBeatsSelects();
   document.getElementById('btn-generate').click();
 });
@@ -437,7 +396,6 @@ defSel.innerHTML = TR.buildStructOptions(false);
 
   if (!window.STRUCTURE_DATA) return;
 
-  // Both axes: 10 equal-width bins [0,0.1), [0.1,0.2), ... [0.9,1.0]
   var nCols = 10;
   var nRows = 10;
   function bin(v) {
@@ -445,31 +403,35 @@ defSel.innerHTML = TR.buildStructOptions(false);
     return b >= 10 ? 9 : b;
   }
 
-  // Count per cell + collect structures per cell
-  var grid = [];
-  var cellStructures = [];
-  for (var r = 0; r < nRows; r++) {
-    grid[r] = [];
-    cellStructures[r] = [];
-    for (var c = 0; c < nCols; c++) {
-      grid[r][c] = 0;
-      cellStructures[r][c] = [];
-    }
-  }
-  for (var i = 0; i < window.STRUCTURE_DATA.length; i++) {
-    var d = window.STRUCTURE_DATA[i][1];
-    var s = window.STRUCTURE_DATA[i][2];
-    var bc = bin(d), br = bin(s);
-    grid[br][bc]++;
-    cellStructures[br][bc].push({ structure: window.STRUCTURE_DATA[i][0], leaves: window.STRUCTURE_DATA[i][3], beatLevel: window.STRUCTURE_DATA[i][6] });
-  }
+  var allData = window.STRUCTURE_DATA; // [structure, div, simpson, leaves, ...]
+  var grid, cellStructures;
 
-  // Sort each cell by leaves
-  for (var r = 0; r < nRows; r++) {
-    for (var c = 0; c < nCols; c++) {
-      cellStructures[r][c].sort(function(a, b) { return a.leaves - b.leaves; });
+  function rebuildGrid() {
+    grid = [];
+    cellStructures = [];
+    for (var r = 0; r < nRows; r++) {
+      grid[r] = [];
+      cellStructures[r] = [];
+      for (var c = 0; c < nCols; c++) {
+        grid[r][c] = 0;
+        cellStructures[r][c] = [];
+      }
+    }
+    for (var i = 0; i < allData.length; i++) {
+      var leaves = allData[i][3];
+      var d = allData[i][1];
+      var s = allData[i][2];
+      var bc = bin(d), br = bin(s);
+      grid[br][bc]++;
+      cellStructures[br][bc].push({ structure: allData[i][0], leaves: leaves, beatLevel: allData[i][6] });
+    }
+    for (var r = 0; r < nRows; r++) {
+      for (var c = 0; c < nCols; c++) {
+        cellStructures[r][c].sort(function(a, b) { return a.leaves - b.leaves; });
+      }
     }
   }
+  rebuildGrid();
 
   // Layout
   var pad = { top: 25, right: 25, bottom: 50, left: 50 };
@@ -477,67 +439,68 @@ defSel.innerHTML = TR.buildStructOptions(false);
   var plotH = H - pad.top - pad.bottom;
   var cellW = plotW / nCols;
   var cellH = plotH / nRows;
+  var baseImage;
+  var selectedCol = -1, selectedRow = -1;
 
-  // Background
-  ctx.fillStyle = '#e8e8e8';
-  ctx.fillRect(0, 0, W, H);
+  // Lookup: structure JSON string → { col, row }
+  var structCell = {};
+  for (var i = 0; i < allData.length; i++) {
+    structCell[allData[i][0]] = { col: bin(allData[i][1]), row: bin(allData[i][2]) };
+  }
 
-  // Draw grid cells
-  for (var r = 0; r < nRows; r++) {
-    for (var c = 0; c < nCols; c++) {
-      var x = pad.left + c * cellW;
-      var y = pad.top + (nRows - 1 - r) * cellH; // row 0 = bottom (low simpson)
-      var count = grid[r][c];
+  function drawChart() {
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#e8e8e8';
+    ctx.fillRect(0, 0, W, H);
 
-      // Cell background
-      ctx.fillStyle = count > 0 ? '#ccc' : '#d8d8d8';
-      ctx.fillRect(x, y, cellW, cellH);
-      ctx.strokeStyle = '#b0b0b0';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x, y, cellW, cellH);
-
-      // Count number
-      if (count > 0) {
-        ctx.fillStyle = '#1a1a1a';
-        ctx.font = '14px DotGothic16, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(count, x + cellW / 2, y + cellH / 2);
+    for (var r = 0; r < nRows; r++) {
+      for (var c = 0; c < nCols; c++) {
+        var x = pad.left + c * cellW;
+        var y = pad.top + (nRows - 1 - r) * cellH;
+        var count = grid[r][c];
+        var isSelected = (c === selectedCol && r === selectedRow);
+        ctx.fillStyle = isSelected ? '#ffd54f' : (count > 0 ? '#ccc' : '#d8d8d8');
+        ctx.fillRect(x, y, cellW, cellH);
+        ctx.strokeStyle = isSelected ? '#c08800' : '#b0b0b0';
+        ctx.lineWidth = isSelected ? 2 : 1;
+        ctx.strokeRect(x, y, cellW, cellH);
+        if (count > 0) {
+          ctx.fillStyle = '#1a1a1a';
+          ctx.font = '14px DotGothic16, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(count, x + cellW / 2, y + cellH / 2);
+        }
       }
     }
+
+    ctx.fillStyle = '#777';
+    ctx.font = '14px DotGothic16, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    for (var c = 0; c <= nCols; c += 2) {
+      ctx.fillText((c / 10).toFixed(1), pad.left + c * cellW, pad.top + plotH + 4);
+    }
+    ctx.fillText('\u5272\u308a\u3084\u3059\u3055', pad.left + plotW / 2, pad.top + plotH + 28);
+
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (var r = 0; r <= nRows; r += 2) {
+      var y = pad.top + (nRows - r) * cellH;
+      ctx.fillText((r / 10).toFixed(1), pad.left - 4, y);
+    }
+    ctx.save();
+    ctx.font = '14px DotGothic16, sans-serif';
+    ctx.translate(14, pad.top + plotH / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('\u5747\u4e00\u6027', 0, 0);
+    ctx.restore();
+
+    baseImage = ctx.getImageData(0, 0, W, H);
   }
-
-  // Axis labels
-  ctx.fillStyle = '#777';
-  ctx.font = '14px DotGothic16, sans-serif';
-
-  // X axis: div bins (label at left edge, every 0.2)
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  for (var c = 0; c <= nCols; c += 2) {
-    ctx.fillText((c / 10).toFixed(1), pad.left + c * cellW, pad.top + plotH + 4);
-  }
-  ctx.font = '14px DotGothic16, sans-serif';
-  ctx.fillText('\u5272\u308a\u3084\u3059\u3055', pad.left + plotW / 2, pad.top + plotH + 28);
-
-  // Y axis: simpson bins (label at bottom edge, every 0.2)
-  ctx.textAlign = 'right';
-  ctx.textBaseline = 'middle';
-  for (var r = 0; r <= nRows; r += 2) {
-    var y = pad.top + (nRows - r) * cellH;
-    ctx.fillText((r / 10).toFixed(1), pad.left - 4, y);
-  }
-  ctx.save();
-  ctx.font = '14px DotGothic16, sans-serif';
-  ctx.translate(14, pad.top + plotH / 2);
-  ctx.rotate(-Math.PI / 2);
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('\u5747\u4e00\u6027', 0, 0);
-  ctx.restore();
-
-  // Save base image for hover overlay
-  var baseImage = ctx.getImageData(0, 0, W, H);
+  drawChart();
   var hoverCol = -1, hoverRow = -1;
 
   function getCell(e) {
@@ -603,6 +566,20 @@ defSel.innerHTML = TR.buildStructOptions(false);
     listDiv.innerHTML = html;
     TR.fixStemPositions(listDiv);
   });
+
+  // Highlight the cell of the current default structure
+  function updateSelection() {
+    var key = document.getElementById('default-struct').value;
+    var def = TR.STRUCTURES[key];
+    if (!def) return;
+    var cell = structCell[JSON.stringify(def.tree)];
+    if (!cell) { selectedCol = -1; selectedRow = -1; }
+    else { selectedCol = cell.col; selectedRow = cell.row; }
+    drawChart();
+    hoverCol = -1; hoverRow = -1;
+  }
+  document.getElementById('default-struct').addEventListener('change', updateSelection);
+  updateSelection();
 })();
 
 /* ═══ Repeat Map ═══ */
