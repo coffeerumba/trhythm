@@ -289,8 +289,24 @@ TR.buildTreeHTML = function(tree, beatLevel) {
   var levels = TR.computeLevels(tree);
   var leafIdx = 0;
 
+  function leafCount(node) {
+    if (!Array.isArray(node)) return node;
+    var s = 0;
+    for (var i = 0; i < node.length; i++) s += leafCount(node[i]);
+    return s;
+  }
+
+  // Recursively compute stem position as fraction [0,1] of node's total width.
+  // For leaf: 0.5 (center). For fork: position of leftmost leaf's center.
+  function stemFraction(node) {
+    if (!Array.isArray(node)) return 0.5;
+    var total = leafCount(node);
+    var firstTotal = leafCount(node[0]);
+    return (stemFraction(node[0]) * firstTotal) / total;
+  }
+
   function build(node, depth) {
-    var color = (depth === beatColorDepth && depth < maxDepth) ? 'var(--accent)' : colors[depth % colors.length];
+    var color = colors[depth % colors.length];
     if (!Array.isArray(node)) {
       var cells = '';
       for (var j = 0; j < node; j++) {
@@ -303,7 +319,8 @@ TR.buildTreeHTML = function(tree, beatLevel) {
     }
     var arms = '';
     for (var i = 0; i < node.length; i++) {
-      arms += '<div class="tv-arm">' + build(node[i], depth + 1) + '</div>';
+      var sl = stemFraction(node[i]) * 100;
+      arms += '<div class="tv-arm" style="--sl:calc(' + sl.toFixed(1) + '% - 1px)">' + build(node[i], depth + 1) + '</div>';
     }
     return '<div class="tv-fork" style="--fc:' + color + '">' +
            '<div class="tv-arms">' + arms + '</div></div>';
@@ -348,7 +365,26 @@ TR.renderTreeViz = function() {
   var key = document.getElementById('default-struct').value;
   var def = TR.STRUCTURES[key];
   document.getElementById('tree-struct-label').innerHTML = TR.buildStructLabel(def.tree, def.beatLevel);
-  document.getElementById('tree-viz').innerHTML = TR.buildTreeHTML(def.tree, def.beatLevel);
+  var el = document.getElementById('tree-viz');
+  el.innerHTML = TR.buildTreeHTML(def.tree, def.beatLevel);
+  TR.fixStemPositions(el);
+};
+
+/**
+ * Post-render fix: measure actual first-leaf center position in each arm
+ * and set --sl to the exact pixel value.
+ */
+TR.fixStemPositions = function(container) {
+  var arms = container.querySelectorAll('.tv-arm');
+  for (var i = 0; i < arms.length; i++) {
+    var arm = arms[i];
+    var firstLeaf = arm.querySelector('.tv-leaf');
+    if (!firstLeaf) continue;
+    var armRect = arm.getBoundingClientRect();
+    var leafRect = firstLeaf.getBoundingClientRect();
+    var stemLeft = leafRect.left + leafRect.width / 2 - armRect.left - 1;
+    arm.style.setProperty('--sl', stemLeft + 'px');
+  }
 };
 
 /* ─── Prev/Next structure navigation ─── */
