@@ -7,36 +7,36 @@ window.TR = {};
    See structures.tsv for full catalog. */
 TR.STRUCTURES = {
   // ── 西洋標準拍子 ──
-  '2beat':       { tree: [2,2], beatLevel: 1, label: '2拍子 (steps=4, beats=2)' },
-  '6-8':         { tree: [3,3], beatLevel: 1, label: '6/8拍子 (steps=6, beats=2)' },
-  '3beat':       { tree: [2,2,2], beatLevel: 1, label: '3拍子 / Waltz (steps=6, beats=3)' },
-  '8beat':       { tree: [[2,2],[2,2]], beatLevel: 1, label: '8ビート (steps=8, beats=4)' },
-  '9-8':         { tree: [3,3,3], beatLevel: 1, label: '9/8拍子 (steps=9, beats=3)' },
-  '12-8':        { tree: [[3,3],[3,3]], beatLevel: 1, label: '12/8拍子 (steps=12, beats=4)' },
-  '6-4':         { tree: [[2,2,2],[2,2,2]], beatLevel: 1, label: '6/4拍子 (steps=12, beats=6)' },
-  '6beatB':      { tree: [[2,2],[2,2],[2,2]], beatLevel: 1, label: '6拍子B (steps=12, beats=6)' },
-  '16beat':      { tree: [[[2,2],[2,2]],[[2,2],[2,2]]], beatLevel: 2, label: '16ビート (steps=16, beats=4)' },
-  '18-8':        { tree: [[3,3],[3,3],[3,3]], beatLevel: 1, label: '18/8 (steps=18, beats=6)' },
-  '18-8B':       { tree: [[3,3,3],[3,3,3]], beatLevel: 1, label: '18/8B (steps=18, beats=6)' },
+  '2beat':       { tree: [2,2], beatLevel: 1, label: '2拍子 (4ステップ, 2拍)' },
+  '6-8':         { tree: [3,3], beatLevel: 1, label: '6/8拍子 (6ステップ, 2拍)' },
+  '3beat':       { tree: [2,2,2], beatLevel: 1, label: '3拍子 / Waltz (6ステップ, 3拍)' },
+  '8beat':       { tree: [[2,2],[2,2]], beatLevel: 1, label: '8ビート (8ステップ, 4拍)' },
+  '9-8':         { tree: [3,3,3], beatLevel: 1, label: '9/8拍子 (9ステップ, 3拍)' },
+  '12-8':        { tree: [[3,3],[3,3]], beatLevel: 1, label: '12/8拍子 (12ステップ, 4拍)' },
+  '6-4':         { tree: [[2,2,2],[2,2,2]], beatLevel: 1, label: '6/4拍子 (12ステップ, 6拍)' },
+  '6beatB':      { tree: [[2,2],[2,2],[2,2]], beatLevel: 1, label: '6拍子B (12ステップ, 6拍)' },
+  '16beat':      { tree: [[[2,2],[2,2]],[[2,2],[2,2]]], beatLevel: 2, label: '16ビート (16ステップ, 4拍)' },
+  '18-8':        { tree: [[3,3],[3,3],[3,3]], beatLevel: 1, label: '18/8 (18ステップ, 6拍)' },
+  '18-8B':       { tree: [[3,3,3],[3,3,3]], beatLevel: 1, label: '18/8B (18ステップ, 6拍)' },
   // ── アフロキューバン系 ──
-  'tresillo':    { tree: [3,3,2], beatLevel: 1, label: 'トレシーロ (steps=8, beats=3)' },
-  'revtresillo': { tree: [2,3,3], beatLevel: 1, label: '逆トレシーロ (steps=8, beats=3)' },
-  'sonclave':    { tree: [3,2,3], beatLevel: 1, label: 'Son clave前半型 (steps=8, beats=3)' },
-  'tresillox2':  { tree: [[3,3,2],[3,3,2]], beatLevel: 1, label: 'ダブルトレシーロ (steps=16, beats=6)' },
-  'hemiola':     { tree: [[3,3],[2,2,2]], beatLevel: 1, label: 'ヘミオラ (steps=12, beats=5)' },
+  'tresillo':    { tree: [3,3,2], beatLevel: 1, label: 'トレシーロ (8ステップ, 3拍)' },
+  'revtresillo': { tree: [2,3,3], beatLevel: 1, label: '逆トレシーロ (8ステップ, 3拍)' },
+  'sonclave':    { tree: [3,2,3], beatLevel: 1, label: 'Son clave前半型 (8ステップ, 3拍)' },
+  'tresillox2':  { tree: [[3,3,2],[3,3,2]], beatLevel: 1, label: 'ダブルトレシーロ (16ステップ, 6拍)' },
+  'hemiola':     { tree: [[3,3],[2,2,2]], beatLevel: 1, label: 'ヘミオラ (12ステップ, 5拍)' },
   // ── バルカン・トルコ系変拍子 ──
-  'paydushko':   { tree: [2,3], beatLevel: 1, label: '5/8 Paydushko (steps=5, beats=2)' },
-  'paydushkoR':  { tree: [3,2], beatLevel: 1, label: '5/8逆 (steps=5, beats=2)' },
-  'rachenitsa':  { tree: [2,2,3], beatLevel: 1, label: '7/8 Rachenitsa (steps=7, beats=3)' },
-  'lesnoto':     { tree: [3,2,2], beatLevel: 1, label: '7/8 Lesnoto / Rupak (steps=7, beats=3)' },
-  'chetvorno':   { tree: [2,3,2], beatLevel: 1, label: '7/8 Chetvorno (steps=7, beats=3)' },
+  'paydushko':   { tree: [2,3], beatLevel: 1, label: '5/8 Paydushko (5ステップ, 2拍)' },
+  'paydushkoR':  { tree: [3,2], beatLevel: 1, label: '5/8逆 (5ステップ, 2拍)' },
+  'rachenitsa':  { tree: [2,2,3], beatLevel: 1, label: '7/8 Rachenitsa (7ステップ, 3拍)' },
+  'lesnoto':     { tree: [3,2,2], beatLevel: 1, label: '7/8 Lesnoto / Rupak (7ステップ, 3拍)' },
+  'chetvorno':   { tree: [2,3,2], beatLevel: 1, label: '7/8 Chetvorno (7ステップ, 3拍)' },
   // ── 反復・複合系 ──
-  'revhemiola':  { tree: [[2,2,2],[3,3]], beatLevel: 1, label: '逆ヘミオラ (steps=12, beats=5)' },
-  '5-8x2':       { tree: [[2,3],[2,3]], beatLevel: 1, label: '5/8×2 (steps=10, beats=4)' },
-  '7-8x2':       { tree: [[2,2,3],[2,2,3]], beatLevel: 1, label: '7/8×2 (steps=14, beats=6)' },
-  '5-8x3':       { tree: [[2,3],[2,3],[2,3]], beatLevel: 1, label: '5/8×3 (steps=15, beats=6)' },
-  'hemiolax2':   { tree: [[[2,2],[3,3]],[[2,2],[3,3]]], beatLevel: 2, label: 'ヘミオラ×2 (steps=20, beats=4)' },
-  '8plus12':     { tree: [[[2,2],[2,2]],[[2,2],[2,2],[2,2]]], beatLevel: 2, label: '8+12 ポリメトリック (steps=20, beats=5)' }
+  'revhemiola':  { tree: [[2,2,2],[3,3]], beatLevel: 1, label: '逆ヘミオラ (12ステップ, 5拍)' },
+  '5-8x2':       { tree: [[2,3],[2,3]], beatLevel: 1, label: '5/8×2 (10ステップ, 4拍)' },
+  '7-8x2':       { tree: [[2,2,3],[2,2,3]], beatLevel: 1, label: '7/8×2 (14ステップ, 6拍)' },
+  '5-8x3':       { tree: [[2,3],[2,3],[2,3]], beatLevel: 1, label: '5/8×3 (15ステップ, 6拍)' },
+  'hemiolax2':   { tree: [[[2,2],[3,3]],[[2,2],[3,3]]], beatLevel: 2, label: 'ヘミオラ×2 (20ステップ, 4拍)' },
+  '8plus12':     { tree: [[[2,2],[2,2]],[[2,2],[2,2],[2,2]]], beatLevel: 2, label: '8+12 ポリメトリック (20ステップ, 5拍)' }
 };
 
 TR.PATTERN_COUNT = 16;

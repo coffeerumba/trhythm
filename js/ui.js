@@ -434,7 +434,7 @@ defSel.innerHTML = TR.buildStructOptions(false);
   rebuildGrid();
 
   // Layout
-  var pad = { top: 25, right: 25, bottom: 50, left: 50 };
+  var pad = { top: 20, right: 20, bottom: 50, left: 50 };
   var plotW = W - pad.left - pad.right;
   var plotH = H - pad.top - pad.bottom;
   var cellW = plotW / nCols;
@@ -461,14 +461,14 @@ defSel.innerHTML = TR.buildStructOptions(false);
         var count = grid[r][c];
         var isSelected = (c === selectedCol && r === selectedRow);
         var isDefault = (c === defaultCol && r === defaultRow);
-        ctx.fillStyle = isSelected ? '#ffd54f' : (count > 0 ? '#ccc' : '#d8d8d8');
+        ctx.fillStyle = isDefault ? '#ffd54f' : (count > 0 ? '#ccc' : '#d8d8d8');
         ctx.fillRect(x, y, cellW, cellH);
-        ctx.strokeStyle = isSelected ? '#c08800' : '#b0b0b0';
-        ctx.lineWidth = isSelected ? 2 : 1;
+        ctx.strokeStyle = isDefault ? '#c08800' : '#b0b0b0';
+        ctx.lineWidth = isDefault ? 2 : 1;
         ctx.strokeRect(x, y, cellW, cellH);
-        // Default cell: inner accent frame
-        if (isDefault) {
-          ctx.strokeStyle = '#8a6500';
+        // Selected cell: inner accent frame
+        if (isSelected) {
+          ctx.strokeStyle = '#333';
           ctx.lineWidth = 2;
           ctx.strokeRect(x + 3, y + 3, cellW - 6, cellH - 6);
         }
@@ -531,9 +531,9 @@ defSel.innerHTML = TR.buildStructOptions(false);
     if (c >= 0 && r >= 0) {
       var x = pad.left + c * cellW;
       var y = pad.top + (nRows - 1 - r) * cellH;
-      ctx.fillStyle = 'rgba(255,213,79,0.4)';
+      ctx.fillStyle = 'rgba(80,80,80,0.35)';
       ctx.fillRect(x, y, cellW, cellH);
-      ctx.strokeStyle = '#c08800';
+      ctx.strokeStyle = '#555';
       ctx.lineWidth = 2;
       ctx.strokeRect(x + 1, y + 1, cellW - 2, cellH - 2);
     }
@@ -552,19 +552,13 @@ defSel.innerHTML = TR.buildStructOptions(false);
       listDiv.textContent = '\u3053\u306e\u30de\u30b9\u306b\u30d1\u30bf\u30fc\u30f3\u306f\u3042\u308a\u307e\u305b\u3093';
       return;
     }
-    var divLo = (c / 10).toFixed(1), divHi = ((c + 1) / 10).toFixed(1);
-    var simpLo = (r / 10).toFixed(1), simpHi = ((r + 1) / 10).toFixed(1);
-    var divBracket = c === nCols - 1 ? ']' : ')';
-    var simpBracket = r === nRows - 1 ? ']' : ')';
-    var html = '<div style="padding:4px 0; font-weight:bold; color:var(--text);">' +
-      'div=[' + divLo + ',' + divHi + divBracket + ' simp=[' + simpLo + ',' + simpHi + simpBracket + ' \u2014 ' +
-      structures.length + '\u500b</div>';
+    var html = '';
     for (var i = 0; i < structures.length; i++) {
       var tree = JSON.parse(structures[i].structure);
       var isHi = structures[i].structure === highlightStruct;
       var bg = isHi ? 'background:#ffd54f;' : '';
       html += '<div class="map-struct-row" data-hi="' + (isHi ? '1' : '0') + '" style="padding:6px 0; border-bottom:1px solid #ccc;' + bg + '">' +
-        '<div style="font-family:monospace; font-size:14px; margin-bottom:4px;">' + structures[i].structure + ' (steps=' + structures[i].leaves + ', beats=' + TR.computeBeats({ tree: tree, beatLevel: structures[i].beatLevel }) + ')</div>' +
+        '<div style="font-family:monospace; font-size:14px; margin-bottom:4px;">' + structures[i].structure + ' (' + structures[i].leaves + '\u30b9\u30c6\u30c3\u30d7, ' + TR.computeBeats({ tree: tree, beatLevel: structures[i].beatLevel }) + '\u62cd)</div>' +
         '<div>' + TR.buildTreeHTML(tree, structures[i].beatLevel) + '</div>' +
         '</div>';
     }

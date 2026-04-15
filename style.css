@@ -157,15 +157,15 @@ input[type="range"]::-moz-range-thumb {
   transform: translate(2px, 2px);
 }
 .pattern-bank button.active {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
+  background: #ffd54f;
+  color: #222;
+  border-color: #c08800;
   font-weight: bold;
   box-shadow: 2px 2px 0 #999;
 }
 .pattern-bank span.active {
-  background: var(--accent);
-  color: #fff;
+  background: #ffd54f;
+  color: #222;
   font-weight: bold;
 }
 .pattern-bank button.has-data {
