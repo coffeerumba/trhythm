@@ -441,6 +441,7 @@ defSel.innerHTML = TR.buildStructOptions(false);
   var cellH = plotH / nRows;
   var baseImage;
   var selectedCol = -1, selectedRow = -1;
+  var defaultCol = -1, defaultRow = -1;
 
   // Lookup: structure JSON string → { col, row }
   var structCell = {};
@@ -459,11 +460,18 @@ defSel.innerHTML = TR.buildStructOptions(false);
         var y = pad.top + (nRows - 1 - r) * cellH;
         var count = grid[r][c];
         var isSelected = (c === selectedCol && r === selectedRow);
+        var isDefault = (c === defaultCol && r === defaultRow);
         ctx.fillStyle = isSelected ? '#ffd54f' : (count > 0 ? '#ccc' : '#d8d8d8');
         ctx.fillRect(x, y, cellW, cellH);
         ctx.strokeStyle = isSelected ? '#c08800' : '#b0b0b0';
         ctx.lineWidth = isSelected ? 2 : 1;
         ctx.strokeRect(x, y, cellW, cellH);
+        // Default cell: inner accent frame
+        if (isDefault) {
+          ctx.strokeStyle = '#8a6500';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x + 3, y + 3, cellW - 6, cellH - 6);
+        }
         if (count > 0) {
           ctx.fillStyle = '#1a1a1a';
           ctx.font = '14px DotGothic16, sans-serif';
@@ -523,9 +531,9 @@ defSel.innerHTML = TR.buildStructOptions(false);
     if (c >= 0 && r >= 0) {
       var x = pad.left + c * cellW;
       var y = pad.top + (nRows - 1 - r) * cellH;
-      ctx.fillStyle = 'rgba(208,48,80,0.2)';
+      ctx.fillStyle = 'rgba(255,213,79,0.4)';
       ctx.fillRect(x, y, cellW, cellH);
-      ctx.strokeStyle = '#d03050';
+      ctx.strokeStyle = '#c08800';
       ctx.lineWidth = 2;
       ctx.strokeRect(x + 1, y + 1, cellW - 2, cellH - 2);
     }
@@ -536,19 +544,14 @@ defSel.innerHTML = TR.buildStructOptions(false);
     ctx.putImageData(baseImage, 0, 0);
   });
 
-  // Click to show structures in selected cell
+  // Show structures for a given cell; optionally highlight & scroll to one
   var listDiv = document.getElementById('map-cell-list');
-  canvas.addEventListener('click', function(e) {
-    var cell = getCell(e);
-    if (!cell) { listDiv.textContent = '\u30de\u30b9\u3092\u30af\u30ea\u30c3\u30af\u3059\u308b\u3068\u8a72\u5f53\u3059\u308b\u62cd\u69cb\u9020\u30d1\u30bf\u30fc\u30f3\u304c\u8868\u793a\u3055\u308c\u307e\u3059'; return; }
-    var c = cell.col, r = cell.row;
-
+  function showCellList(c, r, highlightStruct) {
     var structures = cellStructures[r][c];
     if (structures.length === 0) {
       listDiv.textContent = '\u3053\u306e\u30de\u30b9\u306b\u30d1\u30bf\u30fc\u30f3\u306f\u3042\u308a\u307e\u305b\u3093';
       return;
     }
-
     var divLo = (c / 10).toFixed(1), divHi = ((c + 1) / 10).toFixed(1);
     var simpLo = (r / 10).toFixed(1), simpHi = ((r + 1) / 10).toFixed(1);
     var divBracket = c === nCols - 1 ? ']' : ')';
@@ -558,27 +561,62 @@ defSel.innerHTML = TR.buildStructOptions(false);
       structures.length + '\u500b</div>';
     for (var i = 0; i < structures.length; i++) {
       var tree = JSON.parse(structures[i].structure);
-      html += '<div style="padding:6px 0; border-bottom:1px solid #ccc;">' +
+      var isHi = structures[i].structure === highlightStruct;
+      var bg = isHi ? 'background:#ffd54f;' : '';
+      html += '<div class="map-struct-row" data-hi="' + (isHi ? '1' : '0') + '" style="padding:6px 0; border-bottom:1px solid #ccc;' + bg + '">' +
         '<div style="font-family:monospace; font-size:14px; margin-bottom:4px;">' + structures[i].structure + ' (steps=' + structures[i].leaves + ', beats=' + TR.computeBeats({ tree: tree, beatLevel: structures[i].beatLevel }) + ')</div>' +
         '<div>' + TR.buildTreeHTML(tree, structures[i].beatLevel) + '</div>' +
         '</div>';
     }
     listDiv.innerHTML = html;
     TR.fixStemPositions(listDiv);
+    // Scroll highlighted row into view
+    var hiRow = listDiv.querySelector('.map-struct-row[data-hi="1"]');
+    if (hiRow) {
+      var listRect = listDiv.getBoundingClientRect();
+      var rowRect = hiRow.getBoundingClientRect();
+      if (rowRect.top < listRect.top || rowRect.bottom > listRect.bottom) {
+        listDiv.scrollTop += (rowRect.top - listRect.top) - 8;
+      }
+    }
+  }
+
+  canvas.addEventListener('click', function(e) {
+    var cell = getCell(e);
+    if (!cell) { listDiv.textContent = '\u30de\u30b9\u3092\u30af\u30ea\u30c3\u30af\u3059\u308b\u3068\u8a72\u5f53\u3059\u308b\u62cd\u69cb\u9020\u30d1\u30bf\u30fc\u30f3\u304c\u8868\u793a\u3055\u308c\u307e\u3059'; return; }
+    selectedCol = cell.col; selectedRow = cell.row;
+    // If the default structure falls in this cell, highlight its row
+    var defKey = document.getElementById('default-struct').value;
+    var defDef = TR.STRUCTURES[defKey];
+    var hi = null;
+    if (defDef && cell.col === defaultCol && cell.row === defaultRow) {
+      hi = JSON.stringify(defDef.tree);
+    }
+    showCellList(cell.col, cell.row, hi);
+    drawChart();
+    hoverCol = -1; hoverRow = -1;
   });
 
-  // Highlight the cell of the current default structure
+  // When default-struct changes: move both default and selected markers to its cell
   function updateSelection() {
     var key = document.getElementById('default-struct').value;
     var def = TR.STRUCTURES[key];
     if (!def) return;
-    var cell = structCell[JSON.stringify(def.tree)];
-    if (!cell) { selectedCol = -1; selectedRow = -1; }
-    else { selectedCol = cell.col; selectedRow = cell.row; }
+    var treeStr = JSON.stringify(def.tree);
+    var cell = structCell[treeStr];
+    if (!cell) {
+      defaultCol = -1; defaultRow = -1;
+      selectedCol = -1; selectedRow = -1;
+    } else {
+      defaultCol = cell.col; defaultRow = cell.row;
+      selectedCol = cell.col; selectedRow = cell.row;
+      showCellList(cell.col, cell.row, treeStr);
+    }
     drawChart();
     hoverCol = -1; hoverRow = -1;
   }
   document.getElementById('default-struct').addEventListener('change', updateSelection);
+  TR.updateMapSelection = updateSelection;
   updateSelection();
 })();
 

@@ -131,6 +131,7 @@ TR.setDefaultParams = function() {
   // Refresh UI
   TR.renderAllProbCharts();
   TR.updateAllBeatsSelects();
+  if (TR.updateMapSelection) TR.updateMapSelection();
 };
 
 document.getElementById('btn-default').addEventListener('click', function() {
