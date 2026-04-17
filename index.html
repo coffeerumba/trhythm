@@ -68,7 +68,25 @@
       <button class="btn-nav" id="struct-next">&#9654;</button>
     </div>
     <div style="display:flex; flex-direction:column; gap:10px; align-items:stretch;">
-      <canvas id="div-simpson-chart" width="310" height="310" style="cursor:pointer; align-self:center;"></canvas>
+      <div class="map-row">
+        <canvas id="div-simpson-chart" width="310" height="310" style="cursor:pointer;"></canvas>
+        <div class="map-explain">
+          <div class="map-section">
+            <div class="map-section-head">横軸：割りやすさ</div>
+            <div>2や3でどれだけ均等に分けられるか。右ほど2・3でスパッと割れる構造です。</div>
+          </div>
+          <div class="map-section">
+            <div class="map-section-head">縦軸：均一性</div>
+            <div>枝ごとの構造のばらつき。上ほど全体が整った構造です。</div>
+          </div>
+          <div class="map-section">
+            <div class="map-section-head">凡例</div>
+            <div class="legend-row"><span class="swatch swatch-default"></span>現在の既定拍構造</div>
+            <div class="legend-row"><span class="swatch swatch-selected"></span>選択中のマス</div>
+          </div>
+          <div class="map-section map-hint">マスをクリックすると、下のリストに該当する拍構造が表示されます。</div>
+        </div>
+      </div>
       <div id="map-cell-list" style="font-size:14px; color:var(--text-muted); max-height:310px; overflow-y:auto; background:var(--bg); border:2px solid var(--border); padding:8px;">マスをクリックすると該当する拍構造パターンが表示されます</div>
     </div>
   </div>

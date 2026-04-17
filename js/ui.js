@@ -672,13 +672,42 @@ defSel.innerHTML = TR.buildStructOptions(false);
 
 /* ═══ Repeat Map ═══ */
 TR.updateRepeatMap = function(key) {
-  var chunkRatio = parseFloat(document.getElementById('rf-chunk-' + key).value);
+  var chunkSize = parseInt(document.getElementById('rf-chunk-' + key).value, 10);
   var bias = parseFloat(document.getElementById('rf-bias-' + key).value);
-  var result = genRepeat(TR.PATTERN_COUNT, chunkRatio, bias);
+  var result = genRepeat(TR.PATTERN_COUNT, chunkSize, bias);
   var cells = document.getElementById('rf-blocks-' + key).children;
   for (var i = 0; i < cells.length; i++) {
     cells[i].textContent = result.indexes[i];
   }
+  TR.renderRepeatProbChart(key);
+};
+
+/* ─── Repeat probability chart ─── */
+TR.renderRepeatProbChart = function(key) {
+  var el = document.getElementById('prob-repeat-' + key);
+  if (!el) return;
+  var chunkSize = parseInt(document.getElementById('rf-chunk-' + key).value, 10);
+  var bias = parseFloat(document.getElementById('rf-bias-' + key).value);
+  var res = genRepeatProbabilities(TR.PATTERN_COUNT, chunkSize, bias);
+  var probs = res.probs;
+
+  var instColors = {
+    kick:  'rgb(208,48,80)',
+    snare: 'rgb(34,119,204)',
+    hihat: 'rgb(85,153,85)'
+  };
+  var color = instColors[key];
+  var BAR_MAX = 60;
+  var html = '';
+  for (var i = 0; i < probs.length; i++) {
+    var p = probs[i];
+    var h = Math.round(p * BAR_MAX);
+    if (h < 1) h = 1;
+    html += '<div class="prob-bar-wrap">' +
+      '<div class="prob-bar" style="height:' + h + 'px;background:' + color + '"></div>' +
+      '</div>';
+  }
+  el.innerHTML = html;
 };
 
 /* ─── Repeat Map UI ─── */
@@ -704,16 +733,16 @@ TR.updateRepeatMap = function(key) {
     header.textContent = labels[key];
     body.appendChild(header);
 
-    // chunkRatio slider
+    // chunkSize slider (integer, 1..PATTERN_COUNT)
     var chunkGroup = document.createElement('div');
     chunkGroup.className = 'param-group';
     chunkGroup.innerHTML =
       '<div class="param-row">' +
       '<span class="param-label">\u307e\u3068\u307e\u308a<button class="help-btn" onclick="TR.toggleHelp(this)">?</button></span>' +
-      '<input type="range" id="rf-chunk-' + key + '" min="0" max="1" step="' + (1 / TR.PATTERN_COUNT) + '" value="0" style="flex:1;">' +
-      '<span class="param-value" id="rf-chunk-' + key + '-val">0.00</span>' +
+      '<input type="range" id="rf-chunk-' + key + '" min="1" max="' + TR.PATTERN_COUNT + '" step="1" value="1" style="flex:1;">' +
+      '<span class="param-value" id="rf-chunk-' + key + '-val">1</span>' +
       '</div>' +
-      '<div class="help-popup">\u3072\u3068\u307e\u3068\u307e\u308a\u3068\u3057\u3066\u6271\u3046\u30d1\u30bf\u30fc\u30f3\u306e\u6570\u3092\u3001\u5168\u30d1\u30bf\u30fc\u30f3\u306e\u6570\u306b\u5bfe\u3059\u308b\u5272\u5408\u3068\u3057\u3066\u6307\u5b9a\u3057\u307e\u3059\u30020\u3060\u3068\u5404\u30d1\u30bf\u30fc\u30f3\u304c\u305d\u308c\u305e\u308c\u72ec\u7acb\u306b\u6271\u308f\u308c\u307e\u3059\u3002\u5024\u3092\u4e0a\u3052\u308b\u3068\u3001\u3088\u308a\u591a\u304f\u306e\u30d1\u30bf\u30fc\u30f3\u3092\u3072\u3068\u307e\u3068\u307e\u308a\u3068\u3057\u3066\u6271\u3044\u307e\u3059\u3002</div>';
+      '<div class="help-popup">\u3072\u3068\u307e\u3068\u307e\u308a\u3068\u3057\u3066\u6271\u3046\u30d1\u30bf\u30fc\u30f3\u306e\u6570\u3092\u6307\u5b9a\u3057\u307e\u3059\u30021\u3060\u3068\u5404\u30d1\u30bf\u30fc\u30f3\u304c\u305d\u308c\u305e\u308c\u72ec\u7acb\u306b\u6271\u308f\u308c\u307e\u3059\u3002\u5024\u3092\u4e0a\u3052\u308b\u3068\u3001\u3088\u308a\u591a\u304f\u306e\u30d1\u30bf\u30fc\u30f3\u3092\u3072\u3068\u307e\u3068\u307e\u308a\u3068\u3057\u3066\u6271\u3044\u307e\u3059\u3002</div>';
     body.appendChild(chunkGroup);
 
     // bias slider
@@ -740,12 +769,18 @@ TR.updateRepeatMap = function(key) {
     }
     body.appendChild(blockRow);
 
+    // Probability distribution chart for this track
+    var probRow = document.createElement('div');
+    probRow.className = 'prob-chart prob-chart-repeat';
+    probRow.id = 'prob-repeat-' + key;
+    body.appendChild(probRow);
+
     // Wire up sliders
     (function(key) {
       var chunkSlider = document.getElementById('rf-chunk-' + key);
       var chunkVal = document.getElementById('rf-chunk-' + key + '-val');
       chunkSlider.addEventListener('input', function() {
-        chunkVal.textContent = parseFloat(this.value).toFixed(2);
+        chunkVal.textContent = this.value;
         TR.updateRepeatMap(key);
       });
 

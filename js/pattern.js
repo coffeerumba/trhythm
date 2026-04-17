@@ -98,6 +98,12 @@ function setSlider(id, value) {
   var display = document.getElementById(id + '-val');
   if (display) display.textContent = parseFloat(value).toFixed(2);
 }
+function setSliderInt(id, value) {
+  var el = document.getElementById(id);
+  el.value = value;
+  var display = document.getElementById(id + '-val');
+  if (display) display.textContent = String(value);
+}
 
 /* ─── Default params (single source of truth for all defaults) ─── */
 TR.setDefaultParams = function() {
@@ -111,21 +117,21 @@ TR.setDefaultParams = function() {
   setSlider('kick-rate', 0.50);
   setSlider('kick-center', 0.00);
   setSlider('kick-fidelity', 0.75);
-  setSlider('rf-chunk-kick', 1 / TR.PATTERN_COUNT);
+  setSliderInt('rf-chunk-kick', 1);
   setSlider('rf-bias-kick', 0.50);
   // Snare
   document.getElementById('snare-struct').value = 'default';
   setSlider('snare-rate', 0.33);
   setSlider('snare-center', 0.50);
   setSlider('snare-fidelity', 0.50);
-  setSlider('rf-chunk-snare', 1 / TR.PATTERN_COUNT);
+  setSliderInt('rf-chunk-snare', 1);
   setSlider('rf-bias-snare', 0.25);
   // Hihat
   document.getElementById('hihat-struct').value = 'default';
   setSlider('hihat-rate', 0.67);
   setSlider('hihat-center', 1.00);
   setSlider('hihat-fidelity', 0.25);
-  setSlider('rf-chunk-hihat', 1 / TR.PATTERN_COUNT);
+  setSliderInt('rf-chunk-hihat', 1);
   setSlider('rf-bias-hihat', 0.00);
   // Refresh UI
   TR.renderAllProbCharts();
