@@ -92,17 +92,13 @@ TR.generateForSlot = function(slotIndex) {
 };
 
 /* ─── Helper: set slider value + display ─── */
-function setSlider(id, value) {
+function setSliderValue(id, value, opts) {
   var el = document.getElementById(id);
   el.value = value;
   var display = document.getElementById(id + '-val');
-  if (display) display.textContent = parseFloat(value).toFixed(2);
-}
-function setSliderInt(id, value) {
-  var el = document.getElementById(id);
-  el.value = value;
-  var display = document.getElementById(id + '-val');
-  if (display) display.textContent = String(value);
+  if (display) {
+    display.textContent = (opts && opts.integer) ? String(value) : parseFloat(value).toFixed(2);
+  }
 }
 
 /* ─── Default params (single source of truth for all defaults) ─── */
@@ -114,25 +110,25 @@ TR.setDefaultParams = function() {
   document.getElementById('bpm-val').textContent = '120';
   // Kick
   document.getElementById('kick-struct').value = 'default';
-  setSlider('kick-rate', 0.50);
-  setSlider('kick-center', 0.00);
-  setSlider('kick-fidelity', 0.75);
-  setSliderInt('rf-chunk-kick', 1);
-  setSlider('rf-bias-kick', 0.50);
+  setSliderValue('kick-rate', 0.50);
+  setSliderValue('kick-center', 0.00);
+  setSliderValue('kick-fidelity', 0.75);
+  setSliderValue('rf-chunk-kick', 1, { integer: true });
+  setSliderValue('rf-bias-kick', 0.50);
   // Snare
   document.getElementById('snare-struct').value = 'default';
-  setSlider('snare-rate', 0.33);
-  setSlider('snare-center', 0.50);
-  setSlider('snare-fidelity', 0.50);
-  setSliderInt('rf-chunk-snare', 1);
-  setSlider('rf-bias-snare', 0.25);
+  setSliderValue('snare-rate', 0.33);
+  setSliderValue('snare-center', 0.50);
+  setSliderValue('snare-fidelity', 0.50);
+  setSliderValue('rf-chunk-snare', 1, { integer: true });
+  setSliderValue('rf-bias-snare', 0.25);
   // Hihat
   document.getElementById('hihat-struct').value = 'default';
-  setSlider('hihat-rate', 0.67);
-  setSlider('hihat-center', 1.00);
-  setSlider('hihat-fidelity', 0.25);
-  setSliderInt('rf-chunk-hihat', 1);
-  setSlider('rf-bias-hihat', 0.00);
+  setSliderValue('hihat-rate', 0.67);
+  setSliderValue('hihat-center', 1.00);
+  setSliderValue('hihat-fidelity', 0.25);
+  setSliderValue('rf-chunk-hihat', 1, { integer: true });
+  setSliderValue('rf-bias-hihat', 0.00);
   // Refresh UI
   TR.renderAllProbCharts();
   TR.updateAllBeatsSelects();

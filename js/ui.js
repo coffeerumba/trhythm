@@ -203,6 +203,22 @@ for (var i = 0; i < instruments.length; i++) {
 })();
 
 /* ═══ Probability Chart ═══ */
+/* ─── Shared bar builder for any .prob-chart container ───
+ * entries: [{ height: px, color: css, marker?: string, boundary?: bool }]
+ */
+TR.buildProbChartHTML = function(entries) {
+  var html = '';
+  for (var i = 0; i < entries.length; i++) {
+    var e = entries[i];
+    var cls = 'prob-bar-wrap' + (e.boundary ? ' bar-line' : '');
+    html += '<div class="' + cls + '">' +
+      '<div class="prob-bar" style="height:' + e.height + 'px;background:' + e.color + '"></div>' +
+      (e.marker !== undefined ? '<span class="prob-level">' + e.marker + '</span>' : '') +
+      '</div>';
+  }
+  return html;
+};
+
 /* ─── Probability visualization ─── */
 TR.renderProbChart = function(inst) {
   var def = TR.getInstStructure(inst);
@@ -246,13 +262,8 @@ TR.renderProbChart = function(inst) {
   var hitSet = {};
   for (var i = 0; i < expectedHits && i < N; i++) hitSet[ranked[i]] = true;
 
-  var instColors = {
-    kick:  [208, 48, 80],
-    snare: [34, 119, 204],
-    hihat: [85, 153, 85]
-  };
   var mutedRGB = [187, 187, 187];
-  var instRGB = instColors[inst];
+  var instRGB = TR.INST_COLORS[inst];
 
   var uniformBlend = expectedHits / N;
 
@@ -262,10 +273,8 @@ TR.renderProbChart = function(inst) {
   }
 
   var BAR_MAX = 60;
-  var el = document.getElementById('prob-' + inst);
-  var html = '';
+  var entries = [];
   for (var i = 0; i < N; i++) {
-    var bar = boundaries[i] ? ' bar-line' : '';
     var h = maxWeight > 0 ? Math.round(weights[i] / maxWeight * BAR_MAX) : 1;
     if (h < 1) h = 1;
     var hard = hitSet[i] ? 1 : 0;
@@ -273,12 +282,14 @@ TR.renderProbChart = function(inst) {
     var r = Math.round(mutedRGB[0] + (instRGB[0] - mutedRGB[0]) * blend);
     var g = Math.round(mutedRGB[1] + (instRGB[1] - mutedRGB[1]) * blend);
     var b = Math.round(mutedRGB[2] + (instRGB[2] - mutedRGB[2]) * blend);
-    html += '<div class="prob-bar-wrap' + bar + '">' +
-      '<div class="prob-bar" style="height:' + h + 'px;background:rgb(' + r + ',' + g + ',' + b + ')"></div>' +
-      '<span class="prob-level">' + (hitSet[i] ? '*' : '&nbsp;') + '</span>' +
-      '</div>';
+    entries.push({
+      height: h,
+      color: 'rgb(' + r + ',' + g + ',' + b + ')',
+      marker: hitSet[i] ? '*' : '&nbsp;',
+      boundary: !!boundaries[i]
+    });
   }
-  el.innerHTML = html;
+  document.getElementById('prob-' + inst).innerHTML = TR.buildProbChartHTML(entries);
 };
 
 TR.renderAllProbCharts = function() {
@@ -432,6 +443,19 @@ defSel.innerHTML = TR.buildStructOptions(false);
 
   if (!window.STRUCTURE_DATA) return;
 
+  // Color constants (canvas 2D context can't read CSS variables directly)
+  var COL_DEFAULT_FILL = '#ffd54f';
+  var COL_DEFAULT_BORDER = '#c08800';
+  var COL_SELECTED_FRAME = '#333';        // matches --surface-dark
+  var COL_HOVER_FILL = 'rgba(80,80,80,0.35)';
+  var COL_HOVER_BORDER = '#555';          // matches --border-strong
+  var COL_CELL_FILLED = '#ccc';
+  var COL_CELL_EMPTY = '#d8d8d8';         // matches --bg
+  var COL_CELL_BORDER = '#b0b0b0';
+  var COL_AXIS_TEXT = '#777';             // matches --text-muted
+  var COL_COUNT_TEXT = '#1a1a1a';         // matches --text
+  var COL_CHART_BG = '#e8e8e8';           // matches --surface
+
   var nCols = 10;
   var nRows = 10;
   function bin(v) {
@@ -487,7 +511,7 @@ defSel.innerHTML = TR.buildStructOptions(false);
 
   function drawChart() {
     ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#e8e8e8';
+    ctx.fillStyle = COL_CHART_BG;
     ctx.fillRect(0, 0, W, H);
 
     for (var r = 0; r < nRows; r++) {
@@ -497,19 +521,19 @@ defSel.innerHTML = TR.buildStructOptions(false);
         var count = grid[r][c];
         var isSelected = (c === selectedCol && r === selectedRow);
         var isDefault = (c === defaultCol && r === defaultRow);
-        ctx.fillStyle = isDefault ? '#ffd54f' : (count > 0 ? '#ccc' : '#d8d8d8');
+        ctx.fillStyle = isDefault ? COL_DEFAULT_FILL : (count > 0 ? COL_CELL_FILLED : COL_CELL_EMPTY);
         ctx.fillRect(x, y, cellW, cellH);
-        ctx.strokeStyle = isDefault ? '#c08800' : '#b0b0b0';
+        ctx.strokeStyle = isDefault ? COL_DEFAULT_BORDER : COL_CELL_BORDER;
         ctx.lineWidth = isDefault ? 2 : 1;
         ctx.strokeRect(x, y, cellW, cellH);
         // Selected cell: inner accent frame
         if (isSelected) {
-          ctx.strokeStyle = '#333';
+          ctx.strokeStyle = COL_SELECTED_FRAME;
           ctx.lineWidth = 2;
           ctx.strokeRect(x + 3, y + 3, cellW - 6, cellH - 6);
         }
         if (count > 0) {
-          ctx.fillStyle = '#1a1a1a';
+          ctx.fillStyle = COL_COUNT_TEXT;
           ctx.font = '14px DotGothic16, sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
@@ -518,7 +542,7 @@ defSel.innerHTML = TR.buildStructOptions(false);
       }
     }
 
-    ctx.fillStyle = '#777';
+    ctx.fillStyle = COL_AXIS_TEXT;
     ctx.font = '14px DotGothic16, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
@@ -567,9 +591,9 @@ defSel.innerHTML = TR.buildStructOptions(false);
     if (c >= 0 && r >= 0) {
       var x = pad.left + c * cellW;
       var y = pad.top + (nRows - 1 - r) * cellH;
-      ctx.fillStyle = 'rgba(80,80,80,0.35)';
+      ctx.fillStyle = COL_HOVER_FILL;
       ctx.fillRect(x, y, cellW, cellH);
-      ctx.strokeStyle = '#555';
+      ctx.strokeStyle = COL_HOVER_BORDER;
       ctx.lineWidth = 2;
       ctx.strokeRect(x + 1, y + 1, cellW - 2, cellH - 2);
     }
@@ -592,11 +616,10 @@ defSel.innerHTML = TR.buildStructOptions(false);
     for (var i = 0; i < structures.length; i++) {
       var tree = JSON.parse(structures[i].structure);
       var isHi = structures[i].structure === highlightStruct;
-      var bg = isHi ? 'background:#ffd54f;' : '';
       var treeAttr = structures[i].structure.replace(/"/g, '&quot;');
-      html += '<div class="map-struct-row" data-hi="' + (isHi ? '1' : '0') + '" data-tree="' + treeAttr + '" data-beatlevel="' + structures[i].beatLevel + '" style="padding:6px 0; border-bottom:1px solid #ccc;' + bg + '">' +
-        '<div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:4px;">' +
-          '<div style="font-family:monospace; font-size:14px;">' + structures[i].structure + ' (' + structures[i].leaves + '\u30b9\u30c6\u30c3\u30d7, ' + TR.computeBeats({ tree: tree, beatLevel: structures[i].beatLevel }) + '\u62cd)</div>' +
+      html += '<div class="map-struct-row" data-hi="' + (isHi ? '1' : '0') + '" data-tree="' + treeAttr + '" data-beatlevel="' + structures[i].beatLevel + '">' +
+        '<div class="map-struct-row-title">' +
+          '<div class="map-struct-row-tree">' + structures[i].structure + ' (' + structures[i].leaves + '\u30b9\u30c6\u30c3\u30d7, ' + TR.computeBeats({ tree: tree, beatLevel: structures[i].beatLevel }) + '\u62cd)</div>' +
           '<div class="struct-actions">' +
             '<span class="struct-actions-label">Set as:</span>' +
             '<button class="btn-apply-struct default" data-target="default" title="\u65e2\u5b9a\u62cd\u69cb\u9020\u306b\u8a2d\u5b9a">\u65e2</button>' +
@@ -690,24 +713,15 @@ TR.renderRepeatProbChart = function(key) {
   var bias = parseFloat(document.getElementById('rf-bias-' + key).value);
   var res = genRepeatProbabilities(TR.PATTERN_COUNT, chunkSize, bias);
   var probs = res.probs;
-
-  var instColors = {
-    kick:  'rgb(208,48,80)',
-    snare: 'rgb(34,119,204)',
-    hihat: 'rgb(85,153,85)'
-  };
-  var color = instColors[key];
+  var color = TR.rgbCSS(TR.INST_COLORS[key]);
   var BAR_MAX = 60;
-  var html = '';
+  var entries = [];
   for (var i = 0; i < probs.length; i++) {
-    var p = probs[i];
-    var h = Math.round(p * BAR_MAX);
+    var h = Math.round(probs[i] * BAR_MAX);
     if (h < 1) h = 1;
-    html += '<div class="prob-bar-wrap">' +
-      '<div class="prob-bar" style="height:' + h + 'px;background:' + color + '"></div>' +
-      '</div>';
+    entries.push({ height: h, color: color });
   }
-  el.innerHTML = html;
+  el.innerHTML = TR.buildProbChartHTML(entries);
 };
 
 /* ─── Repeat Map UI ─── */

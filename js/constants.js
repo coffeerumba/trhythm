@@ -1,7 +1,8 @@
-/* ─── Global namespace & Constants ─── */
+/* ═══ Global namespace ═══ */
 (function() {
 window.TR = {};
 
+/* ═══ Constants ═══ */
 /* All patterns are balanced-depth trees with 2-or-3 children per node.
    Two-axis scoring: div (step count divisibility) + simpson (structural uniformity).
    See structures.tsv for full catalog. */
@@ -44,6 +45,14 @@ TR.INSTRUMENTS = ['kick', 'snare', 'hihat'];
 TR.SCHEDULER_LOOKAHEAD = 0.1;
 TR.SCHEDULER_INTERVAL = 25;
 
+/* Instrument colors as RGB arrays (mirrors --kick/snare/hihat-color in style.css). */
+TR.INST_COLORS = {
+  kick:  [208, 48, 80],
+  snare: [34, 119, 204],
+  hihat: [85, 153, 85]
+};
+TR.rgbCSS = function(arr) { return 'rgb(' + arr[0] + ',' + arr[1] + ',' + arr[2] + ')'; };
+
 TR.STRUCT_GROUPS = [
   { prefix: '西洋標準拍子', keys: ['2beat','6-8','3beat','8beat','9-8','12-8','6-4','6beatB','16beat','18-8','18-8B'] },
   { prefix: 'アフロキューバン系', keys: ['tresillo','revtresillo','sonclave','tresillox2','hemiola'] },
@@ -69,7 +78,7 @@ TR.buildStructOptions = function(includeDefault) {
   return html;
 };
 
-/* ─── State ─── */
+/* ═══ Runtime state ═══ */
 TR.state = {
   patterns: new Array(TR.PATTERN_COUNT).fill(null),
   currentPattern: 0,
@@ -91,7 +100,7 @@ TR.state = {
 
 document.documentElement.style.setProperty('--pattern-count', TR.PATTERN_COUNT);
 
-/* ─── Tree utility functions ─── */
+/* ═══ Pure helper functions (tree structure utilities) ═══ */
 TR.flattenTree = function(node) {
   if (!Array.isArray(node)) return [node];
   var result = [];

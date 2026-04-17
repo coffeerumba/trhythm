@@ -174,11 +174,6 @@ input[type="range"]::-moz-range-thumb {
   font-family: var(--pixel-font);
   color: var(--text-muted);
 }
-.pattern-bank span.active {
-  background: #ffd54f;
-  color: var(--text);
-  font-weight: bold;
-}
 .pattern-bank button.has-data {
   border-color: var(--text-muted);
   color: var(--text);
@@ -442,6 +437,33 @@ input[type="range"]::-moz-range-thumb {
   color: var(--text-muted);
   margin-top: 2px;
   line-height: 1;
+}
+
+/* --- Structure map cell list (beneath the heatmap) --- */
+.map-cell-list {
+  font-size: 14px;
+  color: var(--text-muted);
+  max-height: 310px;
+  overflow-y: auto;
+  background: var(--bg);
+  border: 2px solid var(--border);
+  padding: 8px;
+}
+.map-struct-row {
+  padding: 6px 0;
+  border-bottom: 1px solid #ccc;
+}
+.map-struct-row[data-hi="1"] { background: #ffd54f; }
+.map-struct-row-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.map-struct-row-tree {
+  font-family: monospace;
+  font-size: 14px;
 }
 
 /* --- Structure map row (heatmap + explanation side by side) --- */
