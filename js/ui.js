@@ -24,11 +24,47 @@ TR.setupSlider = function(id) {
   });
 };
 
+/* ─── Structure resolver (preset or custom) ─── */
+TR.resolveStructure = function(target) {
+  var key = document.getElementById(target + '-struct').value;
+  if (key === 'custom') return TR.state.customStructures[target];
+  return TR.STRUCTURES[key];
+};
+
 /* ─── Per-instrument structure helper ─── */
 TR.getInstStructure = function(inst) {
   var key = document.getElementById(inst + '-struct').value;
-  if (key === 'default') key = document.getElementById('default-struct').value;
+  if (key === 'default') return TR.resolveStructure('default');
+  if (key === 'custom') return TR.state.customStructures[inst];
   return TR.STRUCTURES[key];
+};
+
+/* ─── Set a custom (or preset) structure for a target from the map list ─── */
+TR.setCustomStructure = function(target, tree, beatLevel) {
+  var treeStr = JSON.stringify(tree);
+  var presetKey = null;
+  for (var k in TR.STRUCTURES) {
+    var s = TR.STRUCTURES[k];
+    if (JSON.stringify(s.tree) === treeStr && s.beatLevel === beatLevel) { presetKey = k; break; }
+  }
+  var sel = document.getElementById(target + '-struct');
+  if (presetKey) {
+    sel.value = presetKey;
+  } else {
+    var leaves = TR.countLeaves(tree);
+    var beats = TR.computeBeats({ tree: tree, beatLevel: beatLevel });
+    var label = '\u30ab\u30b9\u30bf\u30e0: ' + treeStr + ' (' + leaves + '\u30b9\u30c6\u30c3\u30d7, ' + beats + '\u62cd)';
+    TR.state.customStructures[target] = { tree: tree, beatLevel: beatLevel, label: label };
+    var opt = sel.querySelector('option[value="custom"]');
+    if (!opt) {
+      opt = document.createElement('option');
+      opt.value = 'custom';
+      sel.appendChild(opt);
+    }
+    opt.textContent = label;
+    sel.value = 'custom';
+  }
+  sel.dispatchEvent(new Event('change'));
 };
 
 /* ─── Update beats select for an instrument ─── */
@@ -36,7 +72,7 @@ TR.updateBeatsSelect = function(inst) {
   var def = TR.getInstStructure(inst);
   var naturalBeats = TR.computeBeats(def);
   var sel = document.getElementById(inst + '-beats');
-  var defaultBeats = TR.computeBeats(TR.STRUCTURES[document.getElementById('default-struct').value]);
+  var defaultBeats = TR.computeBeats(TR.resolveStructure('default'));
 
   if (naturalBeats === defaultBeats) {
     sel.innerHTML = '<option value="' + defaultBeats + '" selected>\u540c\u671f</option>';
@@ -557,9 +593,16 @@ defSel.innerHTML = TR.buildStructOptions(false);
       var tree = JSON.parse(structures[i].structure);
       var isHi = structures[i].structure === highlightStruct;
       var bg = isHi ? 'background:#ffd54f;' : '';
-      html += '<div class="map-struct-row" data-hi="' + (isHi ? '1' : '0') + '" style="padding:6px 0; border-bottom:1px solid #ccc;' + bg + '">' +
+      var treeAttr = structures[i].structure.replace(/"/g, '&quot;');
+      html += '<div class="map-struct-row" data-hi="' + (isHi ? '1' : '0') + '" data-tree="' + treeAttr + '" data-beatlevel="' + structures[i].beatLevel + '" style="padding:6px 0; border-bottom:1px solid #ccc;' + bg + '">' +
         '<div style="font-family:monospace; font-size:14px; margin-bottom:4px;">' + structures[i].structure + ' (' + structures[i].leaves + '\u30b9\u30c6\u30c3\u30d7, ' + TR.computeBeats({ tree: tree, beatLevel: structures[i].beatLevel }) + '\u62cd)</div>' +
         '<div>' + TR.buildTreeHTML(tree, structures[i].beatLevel) + '</div>' +
+        '<div class="struct-actions">' +
+          '<button class="btn-apply-struct" data-target="default">\u2192\u65e2\u5b9a</button>' +
+          '<button class="btn-apply-struct" data-target="kick">\u2192K</button>' +
+          '<button class="btn-apply-struct" data-target="snare">\u2192S</button>' +
+          '<button class="btn-apply-struct" data-target="hihat">\u2192H</button>' +
+        '</div>' +
         '</div>';
     }
     listDiv.innerHTML = html;
@@ -580,8 +623,7 @@ defSel.innerHTML = TR.buildStructOptions(false);
     if (!cell) { listDiv.textContent = '\u30de\u30b9\u3092\u30af\u30ea\u30c3\u30af\u3059\u308b\u3068\u8a72\u5f53\u3059\u308b\u62cd\u69cb\u9020\u30d1\u30bf\u30fc\u30f3\u304c\u8868\u793a\u3055\u308c\u307e\u3059'; return; }
     selectedCol = cell.col; selectedRow = cell.row;
     // If the default structure falls in this cell, highlight its row
-    var defKey = document.getElementById('default-struct').value;
-    var defDef = TR.STRUCTURES[defKey];
+    var defDef = TR.resolveStructure('default');
     var hi = null;
     if (defDef && cell.col === defaultCol && cell.row === defaultRow) {
       hi = JSON.stringify(defDef.tree);
@@ -593,8 +635,7 @@ defSel.innerHTML = TR.buildStructOptions(false);
 
   // When default-struct changes: move both default and selected markers to its cell
   function updateSelection() {
-    var key = document.getElementById('default-struct').value;
-    var def = TR.STRUCTURES[key];
+    var def = TR.resolveStructure('default');
     if (!def) return;
     var treeStr = JSON.stringify(def.tree);
     var cell = structCell[treeStr];
@@ -611,6 +652,18 @@ defSel.innerHTML = TR.buildStructOptions(false);
   }
   document.getElementById('default-struct').addEventListener('change', updateSelection);
   TR.updateMapSelection = updateSelection;
+
+  // Delegated click handler for "apply to target" buttons in the cell list
+  listDiv.addEventListener('click', function(e) {
+    var btn = e.target.closest && e.target.closest('.btn-apply-struct');
+    if (!btn) return;
+    var row = btn.closest('.map-struct-row');
+    if (!row) return;
+    var tree = JSON.parse(row.dataset.tree);
+    var bl = parseInt(row.dataset.beatlevel, 10);
+    TR.setCustomStructure(btn.dataset.target, tree, bl);
+  });
+
   updateSelection();
 })();
 

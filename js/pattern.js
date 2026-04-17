@@ -79,8 +79,7 @@ TR.generateForSlot = function(slotIndex) {
   var kickBeats = parseInt(document.getElementById('kick-beats').value);
   var snareBeats = parseInt(document.getElementById('snare-beats').value);
   var hihatBeats = parseInt(document.getElementById('hihat-beats').value);
-  var defaultStructKey = document.getElementById('default-struct').value;
-  var defaultDef = TR.STRUCTURES[defaultStructKey];
+  var defaultDef = TR.resolveStructure('default');
 
   TR.state.patterns[slotIndex] = {
     kick: kFlat, snare: sFlat, hihat: hFlat,

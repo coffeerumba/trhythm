@@ -81,6 +81,7 @@ TR.state = {
   toneStarted: false,
   masterGain: null,
   noiseBuffer: null,
+  customStructures: { default: null, kick: null, snare: null, hihat: null },
   instPlayback: [
     { key: 'kick',  gridId: 'grid-kick',  getFlat: function() { return TR.state.kickFlat; },  play: null },
     { key: 'snare', gridId: 'grid-snare', getFlat: function() { return TR.state.snareFlat; }, play: null },
