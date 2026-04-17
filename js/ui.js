@@ -595,14 +595,17 @@ defSel.innerHTML = TR.buildStructOptions(false);
       var bg = isHi ? 'background:#ffd54f;' : '';
       var treeAttr = structures[i].structure.replace(/"/g, '&quot;');
       html += '<div class="map-struct-row" data-hi="' + (isHi ? '1' : '0') + '" data-tree="' + treeAttr + '" data-beatlevel="' + structures[i].beatLevel + '" style="padding:6px 0; border-bottom:1px solid #ccc;' + bg + '">' +
-        '<div style="font-family:monospace; font-size:14px; margin-bottom:4px;">' + structures[i].structure + ' (' + structures[i].leaves + '\u30b9\u30c6\u30c3\u30d7, ' + TR.computeBeats({ tree: tree, beatLevel: structures[i].beatLevel }) + '\u62cd)</div>' +
-        '<div>' + TR.buildTreeHTML(tree, structures[i].beatLevel) + '</div>' +
-        '<div class="struct-actions">' +
-          '<button class="btn-apply-struct" data-target="default">\u2192\u65e2\u5b9a</button>' +
-          '<button class="btn-apply-struct" data-target="kick">\u2192K</button>' +
-          '<button class="btn-apply-struct" data-target="snare">\u2192S</button>' +
-          '<button class="btn-apply-struct" data-target="hihat">\u2192H</button>' +
+        '<div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:4px;">' +
+          '<div style="font-family:monospace; font-size:14px;">' + structures[i].structure + ' (' + structures[i].leaves + '\u30b9\u30c6\u30c3\u30d7, ' + TR.computeBeats({ tree: tree, beatLevel: structures[i].beatLevel }) + '\u62cd)</div>' +
+          '<div class="struct-actions">' +
+            '<span class="struct-actions-label">Set as:</span>' +
+            '<button class="btn-apply-struct default" data-target="default" title="\u65e2\u5b9a\u62cd\u69cb\u9020\u306b\u8a2d\u5b9a">\u65e2</button>' +
+            '<button class="btn-apply-struct kick" data-target="kick" title="\u30ad\u30c3\u30af\u306e\u62cd\u69cb\u9020\u306b\u8a2d\u5b9a">K</button>' +
+            '<button class="btn-apply-struct snare" data-target="snare" title="\u30b9\u30cd\u30a2\u306e\u62cd\u69cb\u9020\u306b\u8a2d\u5b9a">S</button>' +
+            '<button class="btn-apply-struct hihat" data-target="hihat" title="\u30cf\u30a4\u30cf\u30c3\u30c8\u306e\u62cd\u69cb\u9020\u306b\u8a2d\u5b9a">H</button>' +
+          '</div>' +
         '</div>' +
+        '<div>' + TR.buildTreeHTML(tree, structures[i].beatLevel) + '</div>' +
         '</div>';
     }
     listDiv.innerHTML = html;

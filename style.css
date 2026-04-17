@@ -509,24 +509,54 @@ input[type="range"]::-moz-range-thumb {
 /* --- Apply-to-target buttons on map cell list rows --- */
 .struct-actions {
   display: flex;
+  align-items: center;
   gap: 4px;
-  margin-top: 6px;
+  flex-shrink: 0;
   flex-wrap: wrap;
 }
+.struct-actions-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-right: 2px;
+  white-space: nowrap;
+}
 .btn-apply-struct {
-  padding: 2px 8px;
+  width: 28px;
   height: 24px;
-  background: var(--bg);
+  padding: 0;
   border: 2px solid var(--border);
-  color: var(--text);
   font-family: var(--pixel-font);
   font-size: 14px;
+  font-weight: bold;
   cursor: pointer;
   box-shadow: 2px 2px 0 #999;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
-.btn-apply-struct:hover { background: var(--border); color: #fff; }
+.btn-apply-struct:hover { filter: brightness(1.15); }
 .btn-apply-struct:active { box-shadow: none; transform: translate(2px, 2px); }
+.btn-apply-struct.default {
+  background: #ffd54f;
+  border-color: #c08800;
+  color: #222;
+}
+.btn-apply-struct.kick {
+  background: var(--kick-color);
+  border-color: var(--kick-color);
+  color: #fff;
+}
+.btn-apply-struct.snare {
+  background: var(--snare-color);
+  border-color: var(--snare-color);
+  color: #fff;
+}
+.btn-apply-struct.hihat {
+  background: var(--hihat-color);
+  border-color: var(--hihat-color);
+  color: #fff;
+}
 
 /* --- Empty state --- */
 .empty-msg {
