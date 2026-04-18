@@ -141,8 +141,13 @@ document.getElementById('btn-default').addEventListener('click', function() {
 
 document.getElementById('btn-generate').addEventListener('click', function() {
   for (var i = 0; i < TR.PATTERN_COUNT; i++) TR.generateForSlot(i);
-  var pat = TR.state.patterns[TR.state.currentPattern];
+
+  // Reset playback position to pattern 0, step 0 on every regenerate
+  TR.state.currentPattern = 0;
+  var pat = TR.state.patterns[0];
   TR.state.kickFlat = pat.kick; TR.state.snareFlat = pat.snare; TR.state.hihatFlat = pat.hihat;
+  var bankBtns = document.getElementById('pattern-bank').children;
+  for (var i = 0; i < bankBtns.length; i++) bankBtns[i].classList.toggle('active', i === 0);
 
   // Regenerate and apply repeat map
   TR.updateRepeatMap('kick');
@@ -150,7 +155,7 @@ document.getElementById('btn-generate').addEventListener('click', function() {
   TR.updateRepeatMap('hihat');
   TR.applyRepeatMap();
 
-  TR.renderAllGrids(TR.state.patterns[TR.state.currentPattern]);
+  TR.renderAllGrids(TR.state.patterns[0]);
 
   TR.updatePatternBankIndicators();
 
