@@ -18,19 +18,21 @@ TR.STRUCTURES = {
   '6beatB':      { tree: [[2,2],[2,2],[2,2]], beatLevel: 1, label: '6拍子B (12ステップ, 6拍)' },
   '16beat':      { tree: [[[2,2],[2,2]],[[2,2],[2,2]]], beatLevel: 2, label: '16ビート (16ステップ, 4拍)' },
   '18-8':        { tree: [[3,3],[3,3],[3,3]], beatLevel: 1, label: '18/8 (18ステップ, 6拍)' },
-  '18-8B':       { tree: [[3,3,3],[3,3,3]], beatLevel: 1, label: '18/8B (18ステップ, 6拍)' },
   // ── アフロキューバン系 ──
-  'tresillo':    { tree: [3,3,2], beatLevel: 1, label: 'トレシーロ (8ステップ, 3拍)' },
-  'revtresillo': { tree: [2,3,3], beatLevel: 1, label: '逆トレシーロ (8ステップ, 3拍)' },
-  'sonclave':    { tree: [3,2,3], beatLevel: 1, label: 'Son clave前半型 (8ステップ, 3拍)' },
+  'tresillo':    { tree: [3,3,2], beatLevel: 1, label: 'トレシーロ 3+3+2 (8ステップ, 3拍)' },
+  'revtresillo': { tree: [2,3,3], beatLevel: 1, label: '逆トレシーロ 2+3+3 (8ステップ, 3拍)' },
+  'sonclave':    { tree: [3,2,3], beatLevel: 1, label: 'Son clave前半型 3+2+3 (8ステップ, 3拍)' },
   'tresillox2':  { tree: [[3,3,2],[3,3,2]], beatLevel: 1, label: 'ダブルトレシーロ (16ステップ, 6拍)' },
   'hemiola':     { tree: [[3,3],[2,2,2]], beatLevel: 1, label: 'ヘミオラ (12ステップ, 5拍)' },
+  '10-8':        { tree: [[3,3],[2,2]], beatLevel: 1, label: '10/8 拡張トレシーロ 3+3+2+2 (10ステップ, 4拍)' },
+  '10-8R':       { tree: [[2,2],[3,3]], beatLevel: 1, label: '10/8 逆拡張トレシーロ 2+2+3+3 (10ステップ, 4拍)' },
   // ── バルカン・トルコ系変拍子 ──
-  'paydushko':   { tree: [2,3], beatLevel: 1, label: '5/8 Paydushko (5ステップ, 2拍)' },
-  'paydushkoR':  { tree: [3,2], beatLevel: 1, label: '5/8逆 (5ステップ, 2拍)' },
-  'rachenitsa':  { tree: [2,2,3], beatLevel: 1, label: '7/8 Rachenitsa (7ステップ, 3拍)' },
-  'lesnoto':     { tree: [3,2,2], beatLevel: 1, label: '7/8 Lesnoto / Rupak (7ステップ, 3拍)' },
-  'chetvorno':   { tree: [2,3,2], beatLevel: 1, label: '7/8 Chetvorno (7ステップ, 3拍)' },
+  'paydushko':   { tree: [2,3], beatLevel: 1, label: '5/8 Paydushko 2+3 (5ステップ, 2拍)' },
+  'paydushkoR':  { tree: [3,2], beatLevel: 1, label: '5/8逆 3+2 (5ステップ, 2拍)' },
+  'rachenitsa':  { tree: [2,2,3], beatLevel: 1, label: '7/8 Rachenitsa 2+2+3 (7ステップ, 3拍)' },
+  'lesnoto':     { tree: [3,2,2], beatLevel: 1, label: '7/8 Lesnoto / Rupak 3+2+2 (7ステップ, 3拍)' },
+  'chetvorno':   { tree: [2,3,2], beatLevel: 1, label: '7/8 Chetvorno 2+3+2 (7ステップ, 3拍)' },
+  'aksak9':      { tree: [[2,2],[2,3]], beatLevel: 1, label: '9/8 アクサク 2+2+2+3 (9ステップ, 4拍)' },
   // ── 反復・複合系 ──
   'revhemiola':  { tree: [[2,2,2],[3,3]], beatLevel: 1, label: '逆ヘミオラ (12ステップ, 5拍)' },
   '5-8x2':       { tree: [[2,3],[2,3]], beatLevel: 1, label: '5/8×2 (10ステップ, 4拍)' },
@@ -54,10 +56,10 @@ TR.INST_COLORS = {
 TR.rgbCSS = function(arr) { return 'rgb(' + arr[0] + ',' + arr[1] + ',' + arr[2] + ')'; };
 
 TR.STRUCT_GROUPS = [
-  { prefix: '西洋標準拍子', keys: ['2beat','6-8','3beat','8beat','9-8','12-8','6-4','6beatB','16beat','18-8','18-8B'] },
-  { prefix: 'アフロキューバン系', keys: ['tresillo','revtresillo','sonclave','tresillox2','hemiola'] },
-  { prefix: 'バルカン・トルコ系変拍子', keys: ['paydushko','paydushkoR','rachenitsa','lesnoto','chetvorno'] },
-  { prefix: '反復・複合系', keys: ['revhemiola','5-8x2','7-8x2','5-8x3','hemiolax2','8plus12'] }
+  { prefix: '西洋標準拍子', keys: ['2beat','6-8','3beat','8beat','9-8','12-8','6-4','6beatB','16beat','18-8'] },
+  { prefix: 'アフロキューバン系', keys: ['tresillo','revtresillo','sonclave','tresillox2','hemiola','10-8','10-8R'] },
+  { prefix: 'バルカン・トルコ系変拍子', keys: ['paydushko','paydushkoR','rachenitsa','lesnoto','chetvorno','aksak9'] },
+  { prefix: '反復・複合系（上級）', keys: ['revhemiola','5-8x2','7-8x2','5-8x3','hemiolax2','8plus12'] }
 ];
 
 TR.buildStructOptions = function(includeDefault) {
