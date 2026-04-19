@@ -104,7 +104,7 @@ function setSliderValue(id, value, opts) {
 /* ─── Default params (single source of truth for all defaults) ─── */
 TR.setDefaultParams = function() {
   // Default structure
-  document.getElementById('default-struct').value = '16beat';
+  document.getElementById('default-struct').value = '16ビート';
   // BPM
   document.getElementById('bpm').value = 120;
   document.getElementById('bpm-val').textContent = '120';
