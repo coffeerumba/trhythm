@@ -130,6 +130,11 @@ TR.startPlayback = async function() {
 
   var longestIdx = findLongestTrack(bpm);
 
+  // Cancel token: guards pending setTimeouts so stopPlayback/switchPattern
+  // can invalidate them without waiting for the lookahead window to clear.
+  var token = { aborted: false };
+  TR.state.cancelToken = token;
+
   function scheduler() {
     var lookAhead = Tone.now() + TR.SCHEDULER_LOOKAHEAD;
 
@@ -146,7 +151,10 @@ TR.startPlayback = async function() {
         if (flat && flat[ip.step]) ip.play(ip.nextTime);
         var delay = Math.max(0, (ip.nextTime - Tone.now()) * 1000);
         (function(gridId, step, patternIdx) {
-          setTimeout(function() { TR.showInstCursor(gridId, step, patternIdx); }, delay);
+          setTimeout(function() {
+            if (token.aborted) return;
+            TR.showInstCursor(gridId, step, patternIdx);
+          }, delay);
         })(ip.gridId, ip.step, ip.currentPattern);
         ip.nextTime += ip.secPerStep;
         ip.step = (ip.step + 1) % ip.count;
@@ -165,7 +173,10 @@ TR.startPlayback = async function() {
               // cursor-show(0) setTimeout that shares the same target time.
               var updateDelay = Math.max(0, (ip.nextTime - Tone.now()) * 1000 - 1);
               (function(idx, d) {
-                setTimeout(function() { TR.loadPatternForPlayback(idx); }, d);
+                setTimeout(function() {
+                  if (token.aborted) return;
+                  TR.loadPatternForPlayback(idx);
+                }, d);
               })(nextIdx, updateDelay);
             }
           }
@@ -181,6 +192,8 @@ TR.startPlayback = async function() {
 
 TR.stopPlayback = function() {
   if (TR.state.schedulerTimer !== null) { clearTimeout(TR.state.schedulerTimer); TR.state.schedulerTimer = null; }
+  // Invalidate pending setTimeouts from this playback session
+  if (TR.state.cancelToken) { TR.state.cancelToken.aborted = true; TR.state.cancelToken = null; }
   TR.state.isPlaying = false;
   TR.clearCursor();
   TR.updatePlayBtn();

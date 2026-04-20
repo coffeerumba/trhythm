@@ -97,6 +97,7 @@ TR.state = {
   hihatFlat: null,
   isPlaying: false,
   schedulerTimer: null,
+  cancelToken: null,
   toneStarted: false,
   masterGain: null,
   noiseBuffer: null,
