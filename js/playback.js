@@ -1,19 +1,21 @@
 (function(TR) {
 /* ═══ Cursor ═══ */
-TR.showInstCursor = function(gridId, step) {
+TR.showInstCursor = function(gridId, step, patternIdx) {
   var el = document.getElementById(gridId);
   if (!el) return;
   var dots = el.querySelectorAll('.grid-step');
   for (var i = 0; i < dots.length; i++) dots[i].classList.remove('cursor-on');
   if (dots[step]) dots[step].classList.add('cursor-on');
-  // Visualizer hook
+  // Visualizer hook (uses the track's actual playing pattern when provided)
   var keyMap = { 'grid-kick': 'kick', 'grid-snare': 'snare', 'grid-hihat': 'hihat' };
   var key = keyMap[gridId];
   if (key && typeof TR.vizOnHit === 'function') {
-    var flat = key === 'kick' ? TR.state.kickFlat : key === 'snare' ? TR.state.snareFlat : TR.state.hihatFlat;
+    var idx = (patternIdx !== undefined) ? patternIdx : TR.state.currentPattern;
+    var pat = TR.state.patterns[idx];
+    if (!pat) return;
+    var flat = pat[key];
     if (flat && flat[step]) {
-      var pat = TR.state.patterns[TR.state.currentPattern];
-      var def = pat ? pat[key + 'Def'] : null;
+      var def = pat[key + 'Def'];
       if (def) {
         var levels = TR.computeLevels(def.tree);
         TR.vizOnHit(key, step, levels[step] || 0);
@@ -115,60 +117,46 @@ TR.startPlayback = async function() {
     var beatsKey = ip.key + 'Beats';
     var beats = curPat[beatsKey];
     var cycle = 60.0 * beats / bpm;
+    ip.currentPattern = TR.state.currentPattern;  // per-track pattern index
     ip.step = 0;
     ip.count = leaves;
     ip.beats = beats;
     ip.secPerStep = cycle / leaves;
     ip.nextTime = now;
-    ip.flatKey = ip.key;
   }
 
   var longestIdx = findLongestTrack(bpm);
-  var needsAdvance = false;
 
   function scheduler() {
     var lookAhead = Tone.now() + TR.SCHEDULER_LOOKAHEAD;
 
-    if (needsAdvance) {
-      needsAdvance = false;
-      var nextIdx = TR.findNextPatternIndex(TR.state.currentPattern);
-      if (nextIdx >= 0) {
-        TR.loadPatternForPlayback(nextIdx);
-        var bpm2 = parseInt(document.getElementById('bpm').value);
-        var nextPat = TR.state.patterns[nextIdx];
-        for (var j = 0; j < TR.state.instPlayback.length; j++) {
-          var ip2 = TR.state.instPlayback[j];
-          var defKey = ip2.key + 'Def';
-          var def2 = nextPat[defKey];
-          var levels2 = TR.computeLevels(def2.tree);
-          var beatsKey2 = ip2.key + 'Beats';
-          ip2.step = 0;
-          ip2.count = levels2.length;
-          ip2.beats = nextPat[beatsKey2] || TR.computeBeats(def2);
-          ip2.secPerStep = 60.0 * ip2.beats / bpm2 / ip2.count;
-        }
-        longestIdx = findLongestTrack(bpm2);
-      }
-    }
-
     for (var i = 0; i < TR.state.instPlayback.length; i++) {
       var ip = TR.state.instPlayback[i];
       while (ip.nextTime < lookAhead) {
-        // Open hihat at cycle start of longest track
+        // Open hihat at cycle start of longest track (primary)
         if (i === longestIdx && ip.step === 0) {
           TR.audio.playOpenHihat(ip.nextTime);
         }
-        var flat = ip.getFlat();
+        // Per-track flat lookup from this track's own currentPattern
+        var pat = TR.state.patterns[ip.currentPattern];
+        var flat = pat ? pat[ip.key] : null;
         if (flat && flat[ip.step]) ip.play(ip.nextTime);
         var delay = Math.max(0, (ip.nextTime - Tone.now()) * 1000);
-        (function(gridId, step) {
-          setTimeout(function() { TR.showInstCursor(gridId, step); }, delay);
-        })(ip.gridId, ip.step);
+        (function(gridId, step, patternIdx) {
+          setTimeout(function() { TR.showInstCursor(gridId, step, patternIdx); }, delay);
+        })(ip.gridId, ip.step, ip.currentPattern);
         ip.nextTime += ip.secPerStep;
         ip.step = (ip.step + 1) % ip.count;
-        // Pattern advance when longest track completes cycle
-        if (i === longestIdx && ip.step === 0) {
-          needsAdvance = true;
+        // Per-track pattern advance when this track completes its own cycle
+        if (ip.step === 0) {
+          var nextIdx = TR.findNextPatternIndex(ip.currentPattern);
+          if (nextIdx >= 0) {
+            ip.currentPattern = nextIdx;
+            // Primary (longest) track drives the UI (pattern-bank + grids)
+            if (i === longestIdx) {
+              TR.loadPatternForPlayback(nextIdx);
+            }
+          }
         }
       }
     }
