@@ -67,19 +67,35 @@ TR.setCustomStructure = function(target, tree, beatLevel) {
   sel.dispatchEvent(new Event('change'));
 };
 
+/* ─── Longest natural beats across all tracks (sync reference) ─── */
+TR.computeLongestNaturalBeats = function() {
+  var longest = 0;
+  for (var i = 0; i < TR.INSTRUMENTS.length; i++) {
+    var d = TR.getInstStructure(TR.INSTRUMENTS[i]);
+    if (!d) continue;
+    var b = TR.computeBeats(d);
+    if (b > longest) longest = b;
+  }
+  return longest;
+};
+
 /* ─── Update beats select for an instrument ─── */
 TR.updateBeatsSelect = function(inst) {
   var def = TR.getInstStructure(inst);
   var naturalBeats = TR.computeBeats(def);
   var sel = document.getElementById(inst + '-beats');
-  var defaultBeats = TR.computeBeats(TR.resolveStructure('default'));
+  var longestBeats = TR.computeLongestNaturalBeats();
 
-  if (naturalBeats === defaultBeats) {
-    sel.innerHTML = '<option value="' + defaultBeats + '" selected>\u540c\u671f</option>';
+  // Preserve the user's previous choice across refreshes
+  var wasAsync = sel.options.length > 1 && sel.selectedIndex === 1;
+
+  if (naturalBeats === longestBeats) {
+    sel.innerHTML = '<option value="' + longestBeats + '" selected>同期</option>';
     sel.disabled = true;
   } else {
-    sel.innerHTML = '<option value="' + defaultBeats + '" selected>\u540c\u671f</option>' +
-                    '<option value="' + naturalBeats + '">\u975e\u540c\u671f</option>';
+    var syncOpt = '<option value="' + longestBeats + '"' + (wasAsync ? '' : ' selected') + '>同期</option>';
+    var asyncOpt = '<option value="' + naturalBeats + '"' + (wasAsync ? ' selected' : '') + '>非同期</option>';
+    sel.innerHTML = syncOpt + asyncOpt;
     sel.disabled = false;
   }
 };
@@ -137,7 +153,7 @@ var instruments = [
 ];
 
 var helpTexts = {
-  struct: '\u697d\u5668\u3054\u3068\u306b\u62cd\u69cb\u9020\u3092\u5909\u3048\u3089\u308c\u307e\u3059\u3002\u300c\u65e2\u5b9a\u300d\u3092\u9078\u3076\u3068\u65e2\u5b9a\u62cd\u69cb\u9020\u3092\u4f7f\u3044\u307e\u3059\u3002\u7570\u306a\u308b\u62cd\u69cb\u9020\u3092\u9078\u3076\u3068\u62cd\u6570\u304c\u5909\u308f\u308a\u3001\u300c\u975e\u540c\u671f\u300d\u3067\u30dd\u30ea\u30e1\u30fc\u30bf\u30fc\u518d\u751f\u304c\u3067\u304d\u307e\u3059\u3002',
+  struct: '楽器ごとに拍構造を変えられます。「既定」を選ぶと既定拍構造を使います。「同期」を選ぶと最も長いトラックの拍数に合わせます。異なる拍数同士を「非同期」にするとポリメーター再生ができます。',
   rate: '\u5404\u30b9\u30c6\u30c3\u30d7\u3092\u9cf4\u3089\u3059\u304b\u3069\u3046\u304b\u306e\u78ba\u7387\u3067\u3059\u3002\u5168\u30b9\u30c6\u30c3\u30d7\u306b\u5bfe\u3057\u3066\u72ec\u7acb\u306b\u30b3\u30a4\u30f3\u30c8\u30b9\u3059\u308b\u306e\u3067\u3001\u540c\u3058\u8a2d\u5b9a\u3067\u3082\u751f\u6210\u306e\u305f\u3073\u306b\u7d50\u679c\u304c\u5909\u308f\u308a\u307e\u3059\u30020\u306a\u3089\u5168\u30df\u30e5\u30fc\u30c8\u30010.5\u306a\u3089\u5e73\u5747\u3057\u3066\u62cd\u6570\u3076\u3093\u9cf4\u308a\u30011\u306a\u3089\u5168\u30b9\u30c6\u30c3\u30d7\u304c\u9cf4\u308a\u307e\u3059\u3002',
   center: '\u97f3\u3092\u9cf4\u3089\u3059\u4f4d\u7f6e\u306e\u50be\u5411\u3092\u6c7a\u3081\u307e\u3059\u30020\u3067\u6700\u3082\u5f37\u3044\u62cd\uff081\u62cd\u76ee\u306a\u3069\uff09\u306b\u96c6\u4e2d\u3057\u30011\u3067\u6700\u3082\u5f31\u3044\u62cd\uff08\u88cf\u62cd\uff09\u306b\u96c6\u4e2d\u3057\u307e\u3059\u30020.5\u306f\u305d\u306e\u4e2d\u9593\u3067\u3001\u62cd\u30ec\u30d9\u30eb\u306e\u4f4d\u7f6e\u3092\u30d4\u30fc\u30af\u306b\u8868\u62cd\u5074\u3082\u88cf\u62cd\u5074\u3082\u5747\u7b49\u306b\u843d\u3061\u307e\u3059\u3002',
   fidelity: '\u62cd\u69cb\u9020\u306b\u3069\u308c\u3060\u3051\u5fe0\u5b9f\u306b\u30d1\u30bf\u30fc\u30f3\u3092\u751f\u6210\u3059\u308b\u304b\u3092\u6c7a\u3081\u307e\u3059\u30021\u3060\u3068\u91cd\u307f\u306e\u9ad8\u3044\u4f4d\u7f6e\u304b\u3089\u9806\u306b\u78ba\u5b9f\u306b\u9078\u3070\u308c\u30010\u3060\u3068\u3069\u306e\u4f4d\u7f6e\u304c\u9078\u3070\u308c\u308b\u304b\u5b8c\u5168\u306b\u30e9\u30f3\u30c0\u30e0\u306b\u306a\u308a\u307e\u3059\u3002\u4e2d\u9593\u5024\u3067\u307b\u3069\u3088\u3044\u63fa\u3089\u304e\u304c\u751f\u307e\u308c\u307e\u3059\u3002'
@@ -312,7 +328,8 @@ for (var ii = 0; ii < TR.INSTRUMENTS.length; ii++) {
     });
     document.getElementById(inst + '-struct').addEventListener('change', function() {
       TR.renderProbChart(inst);
-      TR.updateBeatsSelect(inst);
+      // Any track's struct change may shift the longest-natural-beats reference, so refresh all selects
+      TR.updateAllBeatsSelects();
     });
   })(TR.INSTRUMENTS[ii]);
 }
