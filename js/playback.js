@@ -5,8 +5,11 @@ TR.showInstCursor = function(gridId, step, patternIdx) {
   if (!el) return;
   var dots = el.querySelectorAll('.grid-step');
   for (var i = 0; i < dots.length; i++) dots[i].classList.remove('cursor-on');
-  if (dots[step]) dots[step].classList.add('cursor-on');
-  // Visualizer hook (uses the track's actual playing pattern when provided)
+  // Only show cursor when the track is on the currently-displayed pattern.
+  // For async tracks on a different pattern, we leave the cursor off (no visual lie).
+  var onDisplayed = (patternIdx === undefined) || (patternIdx === TR.state.currentPattern);
+  if (onDisplayed && dots[step]) dots[step].classList.add('cursor-on');
+  // Visualizer hook fires on actual hits regardless of whether cursor is shown
   var keyMap = { 'grid-kick': 'kick', 'grid-snare': 'snare', 'grid-hihat': 'hihat' };
   var key = keyMap[gridId];
   if (key && typeof TR.vizOnHit === 'function') {
@@ -152,9 +155,18 @@ TR.startPlayback = async function() {
           var nextIdx = TR.findNextPatternIndex(ip.currentPattern);
           if (nextIdx >= 0) {
             ip.currentPattern = nextIdx;
-            // Primary (longest) track drives the UI (pattern-bank + grids)
+            // Only the primary (longest) track drives the UI refresh.
+            // Non-primary tracks advance silently; their cursors are suppressed
+            // while they're off the displayed pattern.
             if (i === longestIdx) {
-              TR.loadPatternForPlayback(nextIdx);
+              // Delay UI refresh to coincide with the new pattern's step 0 audio
+              // time, so the old pattern stays displayed until its last step sounds.
+              // The -1 ms margin ensures the refresh wins the race against the
+              // cursor-show(0) setTimeout that shares the same target time.
+              var updateDelay = Math.max(0, (ip.nextTime - Tone.now()) * 1000 - 1);
+              (function(idx, d) {
+                setTimeout(function() { TR.loadPatternForPlayback(idx); }, d);
+              })(nextIdx, updateDelay);
             }
           }
         }
