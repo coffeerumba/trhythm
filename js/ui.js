@@ -176,7 +176,7 @@ var helpTexts = {
 };
 
 var section = document.createElement('div');
-section.className = 'inst-section';
+section.className = 'inst-section collapsible';
 var html = '<div class="inst-header">\u697d\u5668\u30d1\u30e9\u30e1\u30fc\u30bf\u30fc</div>';
 
 for (var i = 0; i < instruments.length; i++) {

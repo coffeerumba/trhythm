@@ -11,6 +11,15 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
+/* ─── Collapsible sections: click the top header to toggle ─── */
+document.querySelectorAll('.collapsible').forEach(function(section) {
+  var header = section.firstElementChild;
+  if (!header) return;
+  header.addEventListener('click', function() {
+    section.classList.toggle('collapsed');
+  });
+});
+
 /* ─── Set defaults and auto-generate on load ─── */
 TR.setDefaultParams();
 document.getElementById('btn-generate').click();

@@ -388,6 +388,25 @@ input[type="range"]::-moz-range-thumb {
 .grid-step.on-hihat { background: var(--hihat-color); border-color: var(--hihat-color); color: #fff; }
 .grid-step.cursor-on { box-shadow: 0 0 0 2px var(--cursor); }
 
+/* --- Collapsible sections --- */
+.collapsible > .inst-header:first-child {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.collapsible > .inst-header:first-child::after {
+  content: '\25bc';
+  font-size: 0.8em;
+}
+.collapsible.collapsed > .inst-header:first-child::after {
+  content: '\25b6';
+}
+.collapsible.collapsed > *:not(:first-child) {
+  display: none !important;
+}
+
 /* --- Probability chart --- */
 .prob-chart {
   display: flex;
