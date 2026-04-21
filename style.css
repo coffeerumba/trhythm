@@ -283,6 +283,25 @@ input[type="range"]::-moz-range-thumb {
 .btn-nav:hover { background: var(--border); }
 .btn-nav:active { box-shadow: none; transform: translate(2px, 2px); }
 
+.btn-accent {
+  background: var(--bg);
+  border: 2px solid var(--border);
+  box-shadow: 2px 2px 0 var(--border);
+  color: var(--text-muted);
+  font-family: var(--pixel-font);
+  font-size: 14px;
+  padding: 4px 14px;
+  cursor: pointer;
+}
+.btn-accent:hover { background: var(--border); color: #fff; }
+.btn-accent:active { box-shadow: none; transform: translate(2px, 2px); }
+.btn-accent.active {
+  background: var(--cursor);
+  color: var(--text);
+  border-color: #c08800;
+  font-weight: bold;
+}
+
 /* --- Buttons --- */
 .btn-row {
   display: flex;

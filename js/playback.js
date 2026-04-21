@@ -72,6 +72,13 @@ TR.findNextPatternIndex = function(fromIndex) {
   return -1;
 };
 
+/* Accent is a mode toggle (not a per-step pattern). Returns true when the
+ * open-hihat cue should fire at virtual cycle boundaries. */
+TR.isAccentOhh = function() {
+  var active = document.querySelector('.btn-accent.active');
+  return !!(active && active.dataset.value === 'ohh');
+};
+
 /* Snapshot (pat, step, linear) for a track at the start of virtual cycle N.
  * Cycle N ≡ the Nth virtual pattern from pat 0. For async tracks this gives
  * the deterministic (pat, step) they'd be at if playback had progressed
@@ -190,8 +197,8 @@ TR.startPlayback = async function() {
   // initial ip.snapLinear = computeTrackSnap(.., firstIdx).linear.
   var virtualCycleNum = firstIdx;
 
-  // Open hihat at the very first cycle start
-  TR.audio.playOpenHihat(now);
+  // Open hihat at the very first cycle start (gated by the Accent mode toggle)
+  if (TR.isAccentOhh()) TR.audio.playOpenHihat(now);
 
   // Cancel token: guards pending setTimeouts so stopPlayback/switchPattern
   // can invalidate them without waiting for the lookahead window to clear.
@@ -207,8 +214,8 @@ TR.startPlayback = async function() {
       if (nextIdx >= 0) {
         virtualPattern = nextIdx;
         virtualCycleNum++;
-        // Open hihat cues the new cycle's downbeat
-        TR.audio.playOpenHihat(virtualCycleEnd);
+        // Open hihat cues the new cycle's downbeat (gated by Accent mode)
+        if (TR.isAccentOhh()) TR.audio.playOpenHihat(virtualCycleEnd);
 
         // Compute each track's new snapshot (snapPat, snapStep, snapLinear)
         // for this virtual cycle. Using ceil() so step indices that "start"
@@ -424,6 +431,7 @@ TR.renderOffline = async function() {
   var nData = offNoise.getChannelData(0);
   for (var i = 0; i < nLen; i++) nData[i] = Math.random() * 2 - 1;
 
+  var accentOhh = TR.isAccentOhh();
   for (var p = 0; p < patTimings.length; p++) {
     var pt = patTimings[p];
     var pat = pt.pat;
@@ -437,7 +445,7 @@ TR.renderOffline = async function() {
     for (var s = 0; s < pat.hihat.length; s++) {
       if (pat.hihat[s]) TR.audio.playHihat(pt.offset + s * pt.hihatSecPerStep, offCtx, offMaster, offNoise);
     }
-    TR.audio.playOpenHihat(pt.offset, offCtx, offMaster, offNoise);
+    if (accentOhh) TR.audio.playOpenHihat(pt.offset, offCtx, offMaster, offNoise);
   }
 
   var rendered = await offCtx.startRendering();

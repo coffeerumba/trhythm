@@ -227,6 +227,18 @@ for (var i = 0; i < instruments.length; i++) {
     '<div class="prob-chart" id="prob-' + inst.key + '"></div>';
 }
 
+// Accent track — controls whether the open-hihat cue fires at each
+// virtual cycle boundary. No per-step pattern, just a mode toggle.
+html += '<hr style="border:none; border-top:2px dashed var(--border); margin:10px 0;">' +
+  '<div class="inst-header accent" style="font-size:16px;">Accent</div>' +
+  '<div class="param-group">' +
+  '<div class="param-row">' +
+    '<span class="param-label">Accent</span>' +
+    '<button type="button" class="btn-accent" data-value="off">Off</button>' +
+    '<button type="button" class="btn-accent active" data-value="ohh">OHH</button>' +
+  '</div>' +
+  '</div>';
+
 section.innerHTML = html;
 container.appendChild(section);
 
@@ -235,6 +247,16 @@ for (var i = 0; i < instruments.length; i++) {
   TR.setupSlider(key + '-rate');
   TR.setupSlider(key + '-fidelity');
   TR.setupSlider(key + '-center');
+}
+
+// Wire up Accent mode buttons (radio behavior)
+var accentBtns = document.querySelectorAll('.btn-accent');
+for (var i = 0; i < accentBtns.length; i++) {
+  accentBtns[i].addEventListener('click', function() {
+    var all = document.querySelectorAll('.btn-accent');
+    for (var j = 0; j < all.length; j++) all[j].classList.remove('active');
+    this.classList.add('active');
+  });
 }
 })();
 
