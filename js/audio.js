@@ -7,12 +7,12 @@ TR.audio.init = function() {
   var ctx = Tone.getContext().rawContext;
 
   TR.state.masterGain = ctx.createGain();
-  TR.state.masterGain.gain.value = 6.0;
+  TR.state.masterGain.gain.value = 1;
 
   var limiter = ctx.createDynamicsCompressor();
-  limiter.threshold.value = -1;
+  limiter.threshold.value = 0;
   limiter.knee.value = 0;
-  limiter.ratio.value = 20;
+  limiter.ratio.value = 6;
   limiter.attack.value = 0.001;
   limiter.release.value = 0.02;
 

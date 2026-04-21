@@ -408,11 +408,11 @@ TR.renderOffline = async function() {
   var offCtx = new OfflineAudioContext(2, Math.ceil(sampleRate * totalDuration), sampleRate);
 
   var offMaster = offCtx.createGain();
-  offMaster.gain.value = 6.0;
+  offMaster.gain.value = 1;
   var offLimiter = offCtx.createDynamicsCompressor();
-  offLimiter.threshold.value = -1;
+  offLimiter.threshold.value = 0;
   offLimiter.knee.value = 0;
-  offLimiter.ratio.value = 20;
+  offLimiter.ratio.value = 6;
   offLimiter.attack.value = 0.001;
   offLimiter.release.value = 0.02;
   offMaster.connect(offLimiter);
