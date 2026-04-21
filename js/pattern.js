@@ -137,6 +137,7 @@ TR.setDefaultParams = function() {
 
 document.getElementById('btn-default').addEventListener('click', function() {
   TR.setDefaultParams();
+  document.getElementById('btn-generate').click();
 });
 
 document.getElementById('btn-generate').addEventListener('click', function() {
