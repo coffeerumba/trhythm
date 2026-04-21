@@ -1,15 +1,19 @@
 (function(TR) {
 /* ═══ Cursor ═══ */
-TR.showInstCursor = function(gridId, step, patternIdx) {
+/* Highlight the cell at cellIdx in the given grid. cellIdx < 0 (or undefined)
+ * means the step plays audibly but falls outside the current virtual cycle's
+ * display window — skip cursor update so the previous cell stays lit until
+ * the DOM refresh at the next cycle boundary.
+ * patternIdx / step are still needed for the visualizer hook, which fires on
+ * every real hit regardless of whether a cell is shown. */
+TR.showInstCursor = function(gridId, cellIdx, patternIdx, step) {
   var el = document.getElementById(gridId);
-  if (!el) return;
-  var dots = el.querySelectorAll('.grid-step');
-  for (var i = 0; i < dots.length; i++) dots[i].classList.remove('cursor-on');
-  // Only show cursor when the track is on the currently-displayed pattern.
-  // For async tracks on a different pattern, we leave the cursor off (no visual lie).
-  var onDisplayed = (patternIdx === undefined) || (patternIdx === TR.state.currentPattern);
-  if (onDisplayed && dots[step]) dots[step].classList.add('cursor-on');
-  // Visualizer hook fires on actual hits regardless of whether cursor is shown
+  if (el && cellIdx !== undefined && cellIdx >= 0) {
+    var dots = el.querySelectorAll('.grid-step');
+    for (var i = 0; i < dots.length; i++) dots[i].classList.remove('cursor-on');
+    if (dots[cellIdx]) dots[cellIdx].classList.add('cursor-on');
+  }
+  // Visualizer hook fires on actual hits regardless of cursor visibility
   var keyMap = { 'grid-kick': 'kick', 'grid-snare': 'snare', 'grid-hihat': 'hihat' };
   var key = keyMap[gridId];
   if (key && typeof TR.vizOnHit === 'function') {
@@ -75,7 +79,19 @@ TR.loadPatternForPlayback = function(idx) {
   TR.state.snareFlat = pat.snare;
   TR.state.hihatFlat = pat.hihat;
 
-  TR.renderAllGrids(pat);
+  // During playback, render each track's grid from its own virtual-cycle
+  // snapshot (snapPat, snapStep) — captured at the cycle boundary by the
+  // scheduler. When paused, fall back to (currentPattern, 0) inside
+  // renderAllGrids.
+  var snaps = null;
+  if (TR.state.isPlaying) {
+    snaps = {};
+    for (var i = 0; i < TR.state.instPlayback.length; i++) {
+      var ip = TR.state.instPlayback[i];
+      snaps[ip.key] = { pat: ip.snapPat, step: ip.snapStep };
+    }
+  }
+  TR.renderAllGrids(pat, snaps);
 
   var btns = document.getElementById('pattern-bank').children;
   for (var i = 0; i < btns.length; i++) btns[i].classList.toggle('active', i === idx);
@@ -83,18 +99,6 @@ TR.loadPatternForPlayback = function(idx) {
   document.getElementById('empty-msg').style.display = 'none';
   document.getElementById('pattern-display').style.display = '';
 };
-
-/* ─── Find longest cycle track index ─── */
-function findLongestTrack(bpm) {
-  var longestIdx = 0;
-  var longestCycle = 0;
-  for (var i = 0; i < TR.state.instPlayback.length; i++) {
-    var ip = TR.state.instPlayback[i];
-    var cycle = 60.0 * ip.beats / bpm;
-    if (cycle > longestCycle) { longestCycle = cycle; longestIdx = i; }
-  }
-  return longestIdx;
-}
 
 TR.startPlayback = async function() {
   if (!TR.state.toneStarted) {
@@ -105,12 +109,25 @@ TR.startPlayback = async function() {
 
   var firstIdx = TR.state.patterns[TR.state.currentPattern] ? TR.state.currentPattern : TR.findNextPatternIndex(TR.state.currentPattern);
   if (firstIdx < 0) return;
-  if (firstIdx !== TR.state.currentPattern) TR.loadPatternForPlayback(firstIdx);
 
   var bpm = parseInt(document.getElementById('bpm').value);
   var now = Tone.now() + 0.05;
 
-  var curPat = TR.state.patterns[TR.state.currentPattern];
+  var curPat = TR.state.patterns[firstIdx];
+  // Virtual track: the default 拍構造's beats. Acts as the conceptual
+  // "main pulse" — its cycle end triggers the pattern-bank / grid refresh
+  // and the open-hihat cue. Synced instruments share this cycle; async
+  // instruments deviate freely.
+  var virtualBeats = TR.computeBeats(curPat.defaultDef);
+  var virtualCycle = 60.0 * virtualBeats / bpm;
+
+  // Initialize per-track playback state and virtual-cycle display snapshots.
+  // stepsPerCycle = virtualBeats * trackSteps / trackBeats. For sync tracks
+  // this equals trackSteps exactly; for async tracks it's the true (possibly
+  // fractional) number of this track's steps that play per virtual cycle.
+  // cellCount = floor(stepsPerCycle) → number of cells shown in the grid.
+  // snapPat/snapStep/snapLinear track "where does the grid's cell 0 live in
+  // this track's (pattern, step) coordinates, as of the current virtual cycle".
   for (var i = 0; i < TR.state.instPlayback.length; i++) {
     var ip = TR.state.instPlayback[i];
     var defKey = ip.key + 'Def';
@@ -120,15 +137,31 @@ TR.startPlayback = async function() {
     var beatsKey = ip.key + 'Beats';
     var beats = curPat[beatsKey];
     var cycle = 60.0 * beats / bpm;
-    ip.currentPattern = TR.state.currentPattern;  // per-track pattern index
-    ip.step = 0;
+    ip.currentPattern = firstIdx;  // per-track pattern index (for audio scheduling)
+    ip.step = 0;                    // per-track step within its pattern
+    ip.stepLinearIdx = 0;           // total steps played since playback start (for cellIdx math)
     ip.count = leaves;
     ip.beats = beats;
     ip.secPerStep = cycle / leaves;
     ip.nextTime = now;
+    ip.stepsPerCycle = virtualBeats * leaves / beats;
+    ip.cellCount = Math.floor(ip.stepsPerCycle);
+    ip.snapPat = firstIdx;
+    ip.snapStep = 0;
+    ip.snapLinear = 0;              // stepLinearIdx at the start of the current virtual cycle
   }
 
-  var longestIdx = findLongestTrack(bpm);
+  TR.state.isPlaying = true;
+
+  // Initial render: cycle-0 snapshots already set on every ip above.
+  TR.loadPatternForPlayback(firstIdx);
+
+  var virtualCycleEnd = now + virtualCycle;
+  var virtualPattern = firstIdx;
+  var virtualCycleNum = 0;
+
+  // Open hihat at the very first cycle start
+  TR.audio.playOpenHihat(now);
 
   // Cancel token: guards pending setTimeouts so stopPlayback/switchPattern
   // can invalidate them without waiting for the lookahead window to clear.
@@ -138,55 +171,93 @@ TR.startPlayback = async function() {
   function scheduler() {
     var lookAhead = Tone.now() + TR.SCHEDULER_LOOKAHEAD;
 
+    // Advance the virtual track whenever its cycle ends within the lookahead
+    while (virtualCycleEnd < lookAhead) {
+      var nextIdx = TR.findNextPatternIndex(virtualPattern);
+      if (nextIdx >= 0) {
+        virtualPattern = nextIdx;
+        virtualCycleNum++;
+        // Open hihat cues the new cycle's downbeat
+        TR.audio.playOpenHihat(virtualCycleEnd);
+
+        // Compute each track's new snapshot (snapPat, snapStep, snapLinear)
+        // for this virtual cycle. Using ceil() so step indices that "start"
+        // inside the new cycle go into the new cycle's display — this is
+        // what makes "スネア9.33ステップ → cycle 0 = step 0..8, cycle 1 = step 10..18".
+        var pendingSnaps = [];
+        for (var j = 0; j < TR.state.instPlayback.length; j++) {
+          var ipj = TR.state.instPlayback[j];
+          var newSnapLinear = Math.ceil(virtualCycleNum * ipj.stepsPerCycle);
+          var advance = newSnapLinear - ipj.snapLinear;
+          var newSnapStep = ipj.snapStep + advance;
+          var newSnapPat = ipj.snapPat;
+          while (newSnapStep >= ipj.count) {
+            newSnapStep -= ipj.count;
+            var np = TR.findNextPatternIndex(newSnapPat);
+            if (np < 0) break;
+            newSnapPat = np;
+          }
+          pendingSnaps.push({ ip: ipj, pat: newSnapPat, step: newSnapStep, linear: newSnapLinear });
+        }
+
+        // Delay UI refresh to coincide with the new cycle's start.
+        // The -1 ms margin ensures this refresh runs before any cursor
+        // setTimeout scheduled at the same target time.
+        var updateDelay = Math.max(0, (virtualCycleEnd - Tone.now()) * 1000 - 1);
+        (function(idx, d, snaps) {
+          setTimeout(function() {
+            if (token.aborted) return;
+            // Apply the precomputed snapshots onto ip state, then render.
+            // After this fires, the grid matches what the tracks actually play
+            // during this new virtual cycle, and subsequent cursor setTimeouts
+            // map step→cellIdx against the new snapLinear.
+            for (var k = 0; k < snaps.length; k++) {
+              var s = snaps[k];
+              s.ip.snapPat = s.pat;
+              s.ip.snapStep = s.step;
+              s.ip.snapLinear = s.linear;
+            }
+            TR.loadPatternForPlayback(idx);
+          }, d);
+        })(nextIdx, updateDelay, pendingSnaps);
+      }
+      virtualCycleEnd += virtualCycle;
+    }
+
     for (var i = 0; i < TR.state.instPlayback.length; i++) {
       var ip = TR.state.instPlayback[i];
       while (ip.nextTime < lookAhead) {
-        // Open hihat at cycle start of longest track (primary)
-        if (i === longestIdx && ip.step === 0) {
-          TR.audio.playOpenHihat(ip.nextTime);
-        }
         // Per-track flat lookup from this track's own currentPattern
         var pat = TR.state.patterns[ip.currentPattern];
         var flat = pat ? pat[ip.key] : null;
         if (flat && flat[ip.step]) ip.play(ip.nextTime);
         var delay = Math.max(0, (ip.nextTime - Tone.now()) * 1000);
-        (function(gridId, step, patternIdx) {
+        // Capture stepLinearIdx / pattern / step at schedule time; recompute
+        // cellIdx = stepLinearIdx - snapLinear at fire time so steps that
+        // cross a virtual-cycle boundary pick up the updated snapshot.
+        (function(gridId, stepLinearIdx, patternIdx, step, ipRef) {
           setTimeout(function() {
             if (token.aborted) return;
-            TR.showInstCursor(gridId, step, patternIdx);
+            var cellIdx = stepLinearIdx - ipRef.snapLinear;
+            var displayIdx = (cellIdx >= 0 && cellIdx < ipRef.cellCount) ? cellIdx : -1;
+            TR.showInstCursor(gridId, displayIdx, patternIdx, step);
           }, delay);
-        })(ip.gridId, ip.step, ip.currentPattern);
+        })(ip.gridId, ip.stepLinearIdx, ip.currentPattern, ip.step, ip);
         ip.nextTime += ip.secPerStep;
         ip.step = (ip.step + 1) % ip.count;
-        // Per-track pattern advance when this track completes its own cycle
+        ip.stepLinearIdx++;
+        // Per-track pattern advance when this track completes its own cycle.
+        // Synced tracks wrap in sync with the virtual cycle and stay aligned;
+        // async tracks progress independently.
         if (ip.step === 0) {
-          var nextIdx = TR.findNextPatternIndex(ip.currentPattern);
-          if (nextIdx >= 0) {
-            ip.currentPattern = nextIdx;
-            // Only the primary (longest) track drives the UI refresh.
-            // Non-primary tracks advance silently; their cursors are suppressed
-            // while they're off the displayed pattern.
-            if (i === longestIdx) {
-              // Delay UI refresh to coincide with the new pattern's step 0 audio
-              // time, so the old pattern stays displayed until its last step sounds.
-              // The -1 ms margin ensures the refresh wins the race against the
-              // cursor-show(0) setTimeout that shares the same target time.
-              var updateDelay = Math.max(0, (ip.nextTime - Tone.now()) * 1000 - 1);
-              (function(idx, d) {
-                setTimeout(function() {
-                  if (token.aborted) return;
-                  TR.loadPatternForPlayback(idx);
-                }, d);
-              })(nextIdx, updateDelay);
-            }
-          }
+          var nextPatIdx = TR.findNextPatternIndex(ip.currentPattern);
+          if (nextPatIdx >= 0) ip.currentPattern = nextPatIdx;
         }
       }
     }
     TR.state.schedulerTimer = setTimeout(scheduler, TR.SCHEDULER_INTERVAL);
   }
   scheduler();
-  TR.state.isPlaying = true;
   TR.updatePlayBtn();
 };
 

@@ -95,35 +95,60 @@ TR.updateAllBeatsSelects = function() {
 };
 
 /* ═══ Grid ═══ */
-/* ─── Render a single track's grid from a given pattern ─── */
-TR.renderTrackGrid = function(trackKey, pat, maxBeats) {
-  if (!pat) return;
-  var flat = pat[trackKey];
-  var def = pat[trackKey + 'Def'];
-  var beats = pat[trackKey + 'Beats'];
-  if (!flat || !def) return;
-  var boundaries = TR.getGroupBoundaries(def.tree);
-  var stepsPerBeat = flat.length / beats;
-  var totalCols = maxBeats * stepsPerBeat;
-  var cls = 'on-' + trackKey;
+/* ─── Render a single track's grid ───
+ * Shows exactly what the track actually plays during one virtual cycle.
+ * Starting from (startPat, startStep), walk forward cellCount track-steps,
+ * wrapping through findNextPatternIndex when the track's own pattern ends.
+ *
+ * Sync tracks: cellCount == trackSteps, snap = (displayedPat, 0) → identical
+ * to the legacy one-pattern display.
+ * Async tracks: cellCount may be smaller or larger than trackSteps and the
+ * shown cells may span multiple of this track's own patterns.
+ */
+TR.renderTrackGrid = function(trackKey, startPat, startStep, cellCount) {
   var el = document.getElementById('grid-' + trackKey);
+  if (!el) return;
+  var pat = TR.state.patterns[startPat];
+  var flat = pat[trackKey];
+  var trackSteps = flat.length;
+  var curPat = startPat;
+  var step = startStep;
+  var cls = 'on-' + trackKey;
   var html = '';
-  for (var i = 0; i < flat.length; i++) {
-    var c = flat[i] ? 'grid-step ' + cls : 'grid-step';
-    var barStyle = boundaries[i] ? ' style="border-left:3px solid var(--border)"' : '';
-    html += '<div class="step-cell"><span class="' + c + '"' + barStyle + '></span></div>';
+  for (var i = 0; i < cellCount; i++) {
+    while (step >= trackSteps) {
+      step -= trackSteps;
+      var nextIdx = TR.findNextPatternIndex(curPat);
+      if (nextIdx < 0) break;
+      curPat = nextIdx;
+      pat = TR.state.patterns[curPat];
+      flat = pat[trackKey];
+      trackSteps = flat.length;
+    }
+    var c = flat[step] ? 'grid-step ' + cls : 'grid-step';
+    html += '<div class="step-cell"><span class="' + c + '"></span></div>';
+    step++;
   }
   el.innerHTML = html;
-  el.style.gridTemplateColumns = 'repeat(' + totalCols + ', 1fr)';
+  el.style.gridTemplateColumns = 'repeat(' + cellCount + ', 1fr)';
 };
 
-/* ─── Render all 3 grids with polymetric width scaling ─── */
-TR.renderAllGrids = function(pat) {
-  if (!pat) return;
-  var maxBeats = Math.max(pat.kickBeats || 0, pat.snareBeats || 0, pat.hihatBeats || 0);
-  TR.renderTrackGrid('kick', pat, maxBeats);
-  TR.renderTrackGrid('snare', pat, maxBeats);
-  TR.renderTrackGrid('hihat', pat, maxBeats);
+/* ─── Render all 3 grids ───
+ * Each track gets its own cell count: N = floor(virtualBeats * trackSteps / trackBeats).
+ * snaps (optional): { kick: {pat, step}, snare: ..., hihat: ... } — per-track start
+ * positions captured at the virtual cycle boundary during playback. When omitted
+ * (static / paused view), defaults to (currentPattern, 0) for every track.
+ */
+TR.renderAllGrids = function(pat, snaps) {
+  var virtualBeats = TR.computeBeats(pat.defaultDef);
+  var keys = ['kick', 'snare', 'hihat'];
+  for (var k = 0; k < keys.length; k++) {
+    var key = keys[k];
+    var r = virtualBeats * pat[key].length / pat[key + 'Beats'];
+    var cellCount = Math.floor(r);
+    var snap = (snaps && snaps[key]) ? snaps[key] : { pat: TR.state.currentPattern, step: 0 };
+    TR.renderTrackGrid(key, snap.pat, snap.step, cellCount);
+  }
 };
 
 /* ═══ Instrument UI ═══ */
