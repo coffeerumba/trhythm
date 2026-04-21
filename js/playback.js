@@ -72,6 +72,30 @@ TR.findNextPatternIndex = function(fromIndex) {
   return -1;
 };
 
+/* Snapshot (pat, step, linear) for a track at the start of virtual cycle N.
+ * Cycle N ≡ the Nth virtual pattern from pat 0. For async tracks this gives
+ * the deterministic (pat, step) they'd be at if playback had progressed
+ * through cycles 0..N from (pat 0, 0) — preserving async offsets under
+ * manual pattern jumps. Sync tracks collapse to (pat N, 0) naturally since
+ * stepsPerCycle === trackSteps. */
+TR.computeTrackSnap = function(key, cycleN) {
+  var pat0 = TR.state.patterns[0];
+  var virtualBeats = TR.computeBeats(pat0.defaultDef);
+  var leaves = pat0[key].length;
+  var beats = pat0[key + 'Beats'];
+  var stepsPerCycle = virtualBeats * leaves / beats;
+  var snapLinear = Math.ceil(cycleN * stepsPerCycle);
+  var curPat = 0;
+  var step = snapLinear;
+  while (step >= leaves) {
+    step -= leaves;
+    var next = TR.findNextPatternIndex(curPat);
+    if (next < 0) break;
+    curPat = next;
+  }
+  return { pat: curPat, step: step, linear: snapLinear };
+};
+
 TR.loadPatternForPlayback = function(idx) {
   TR.state.currentPattern = idx;
   var pat = TR.state.patterns[idx];
@@ -128,6 +152,8 @@ TR.startPlayback = async function() {
   // cellCount = floor(stepsPerCycle) → number of cells shown in the grid.
   // snapPat/snapStep/snapLinear track "where does the grid's cell 0 live in
   // this track's (pattern, step) coordinates, as of the current virtual cycle".
+  // When firstIdx != 0 (e.g. user jumped to pat N before hitting play), async
+  // tracks start at their deterministic cycle-N offset rather than (N, 0).
   for (var i = 0; i < TR.state.instPlayback.length; i++) {
     var ip = TR.state.instPlayback[i];
     var defKey = ip.key + 'Def';
@@ -137,18 +163,19 @@ TR.startPlayback = async function() {
     var beatsKey = ip.key + 'Beats';
     var beats = curPat[beatsKey];
     var cycle = 60.0 * beats / bpm;
-    ip.currentPattern = firstIdx;  // per-track pattern index (for audio scheduling)
-    ip.step = 0;                    // per-track step within its pattern
-    ip.stepLinearIdx = 0;           // total steps played since playback start (for cellIdx math)
+    var initSnap = TR.computeTrackSnap(ip.key, firstIdx);
+    ip.currentPattern = initSnap.pat;  // per-track pattern index (for audio scheduling)
+    ip.step = initSnap.step;            // per-track step within its pattern
+    ip.stepLinearIdx = initSnap.linear; // so cellIdx = stepLinearIdx - snapLinear starts at 0
     ip.count = leaves;
     ip.beats = beats;
     ip.secPerStep = cycle / leaves;
     ip.nextTime = now;
     ip.stepsPerCycle = virtualBeats * leaves / beats;
     ip.cellCount = Math.floor(ip.stepsPerCycle);
-    ip.snapPat = firstIdx;
-    ip.snapStep = 0;
-    ip.snapLinear = 0;              // stepLinearIdx at the start of the current virtual cycle
+    ip.snapPat = initSnap.pat;
+    ip.snapStep = initSnap.step;
+    ip.snapLinear = initSnap.linear;    // stepLinearIdx at the start of the current virtual cycle
   }
 
   TR.state.isPlaying = true;
@@ -158,7 +185,10 @@ TR.startPlayback = async function() {
 
   var virtualCycleEnd = now + virtualCycle;
   var virtualPattern = firstIdx;
-  var virtualCycleNum = 0;
+  // virtualCycleNum is the absolute cycle index: cycle N ≡ pat N. Starting
+  // at firstIdx keeps ceil(cycleNum * stepsPerCycle) consistent with the
+  // initial ip.snapLinear = computeTrackSnap(.., firstIdx).linear.
+  var virtualCycleNum = firstIdx;
 
   // Open hihat at the very first cycle start
   TR.audio.playOpenHihat(now);

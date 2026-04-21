@@ -153,7 +153,9 @@ TR.renderAllGrids = function(pat, snaps) {
     var key = keys[k];
     var r = virtualBeats * pat[key].length / pat[key + 'Beats'];
     var cellCount = Math.floor(r);
-    var snap = (snaps && snaps[key]) ? snaps[key] : { pat: TR.state.currentPattern, step: 0 };
+    // Default snap: treat currentPattern as virtual cycle N → async tracks
+    // reflect their deterministic offset. Sync tracks collapse to (N, 0).
+    var snap = (snaps && snaps[key]) ? snaps[key] : TR.computeTrackSnap(key, TR.state.currentPattern);
     TR.renderTrackGrid(key, snap.pat, snap.step, cellCount);
   }
 };
