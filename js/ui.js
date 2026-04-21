@@ -111,6 +111,12 @@ TR.renderTrackGrid = function(trackKey, startPat, startStep, cellCount) {
   var pat = TR.state.patterns[startPat];
   var flat = pat[trackKey];
   var trackSteps = flat.length;
+  // Async tracks label the first step of each pattern with that pattern's
+  // number, so the viewer can see which of this track's own patterns is
+  // currently under the cursor. Sync tracks omit labels (redundant with
+  // the pattern-bank indicator).
+  var virtualBeats = TR.computeBeats(pat.defaultDef);
+  var isAsync = (pat[trackKey + 'Beats'] !== virtualBeats);
   var curPat = startPat;
   var step = startStep;
   var cls = 'on-' + trackKey;
@@ -126,7 +132,8 @@ TR.renderTrackGrid = function(trackKey, startPat, startStep, cellCount) {
       trackSteps = flat.length;
     }
     var c = flat[step] ? 'grid-step ' + cls : 'grid-step';
-    html += '<div class="step-cell"><span class="' + c + '"></span></div>';
+    var label = (isAsync && step === 0) ? String(curPat) : '';
+    html += '<div class="step-cell"><span class="' + c + '">' + label + '</span></div>';
     step++;
   }
   el.innerHTML = html;
@@ -180,12 +187,14 @@ for (var i = 0; i < instruments.length; i++) {
     '<div class="param-group">' +
     '<div class="param-row">' +
       '<span class="param-label">\u62cd\u69cb\u9020<button class="help-btn" onclick="TR.toggleHelp(this)">?</button></span>' +
+      '<button class="btn-nav" id="' + inst.key + '-struct-prev">\u25c0</button>' +
       '<select id="' + inst.key + '-struct" class="struct-select">' +
         TR.buildStructOptions(true) +
       '</select>' +
       '<select id="' + inst.key + '-beats" class="beats-select" disabled>' +
         '<option value="4" selected>4\u62cd</option>' +
       '</select>' +
+      '<button class="btn-nav" id="' + inst.key + '-struct-next">\u25b6</button>' +
     '</div>' +
     '<div class="help-popup">' + helpTexts.struct + '</div>' +
     '</div>' +
@@ -338,7 +347,13 @@ for (var ii = 0; ii < TR.INSTRUMENTS.length; ii++) {
     document.getElementById(inst + '-struct').addEventListener('change', function() {
       TR.renderProbChart(inst);
       TR.updateBeatsSelect(inst);
+      document.getElementById('btn-generate').click();
     });
+    document.getElementById(inst + '-beats').addEventListener('change', function() {
+      document.getElementById('btn-generate').click();
+    });
+    document.getElementById(inst + '-struct-prev').addEventListener('click', function() { TR.navigateStruct(inst + '-struct', -1); });
+    document.getElementById(inst + '-struct-next').addEventListener('click', function() { TR.navigateStruct(inst + '-struct', 1); });
   })(TR.INSTRUMENTS[ii]);
 }
 
@@ -434,16 +449,16 @@ TR.fixStemPositions = function(container) {
 };
 
 /* ─── Prev/Next structure navigation ─── */
-TR.navigateStruct = function(delta) {
-  var sel = document.getElementById('default-struct');
+/* Regeneration is triggered by the select's change handler; navigateStruct
+ * just moves the selection and dispatches 'change'. */
+TR.navigateStruct = function(selectId, delta) {
+  var sel = document.getElementById(selectId);
   var options = sel.options;
-  var idx = sel.selectedIndex;
-  var newIdx = idx + delta;
+  var newIdx = sel.selectedIndex + delta;
   if (newIdx < 0) newIdx = options.length - 1;
   if (newIdx >= options.length) newIdx = 0;
   sel.selectedIndex = newIdx;
   sel.dispatchEvent(new Event('change'));
-  document.getElementById('btn-generate').click();
 };
 
 /* ─── Default structure change ─── */
@@ -453,8 +468,8 @@ document.getElementById('default-struct').addEventListener('change', function() 
   document.getElementById('btn-generate').click();
 });
 
-document.getElementById('struct-prev').addEventListener('click', function() { TR.navigateStruct(-1); });
-document.getElementById('struct-next').addEventListener('click', function() { TR.navigateStruct(1); });
+document.getElementById('struct-prev').addEventListener('click', function() { TR.navigateStruct('default-struct', -1); });
+document.getElementById('struct-next').addEventListener('click', function() { TR.navigateStruct('default-struct', 1); });
 
 /* ─── Populate default-struct select dynamically ─── */
 var defSel = document.getElementById('default-struct');
