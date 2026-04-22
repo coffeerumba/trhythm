@@ -15,52 +15,52 @@ TR.STRUCTURES = {
   //   '12-8':    '12/8拍子 / 複合4拍子 / シャッフル'   (シャッフル のみ残す)
   //   '6-4':     '6/4拍子 / エクタール'
   //   '16ビート': '16ビート / ティーンタール'
-  '2ビート':       { tree: [2,2], beatLevel: 1, label: '2ビート (4ステップ, 2拍)' },
-  '6-8':           { tree: [3,3], beatLevel: 1, label: '6/8拍子 (6ステップ, 2拍)' },
-  '3ビート':       { tree: [2,2,2], beatLevel: 1, label: '3ビート / ワルツ (6ステップ, 3拍)' },
-  '8ビート':       { tree: [[2,2],[2,2]], beatLevel: 1, label: '8ビート (8ステップ, 4拍)' },
-  '9-8':           { tree: [3,3,3], beatLevel: 1, label: '9/8拍子 (9ステップ, 3拍)' },
-  '12-8':          { tree: [[3,3],[3,3]], beatLevel: 1, label: '12/8拍子 / シャッフル (12ステップ, 4拍)' },
-  '6-4':           { tree: [[2,2,2],[2,2,2]], beatLevel: 1, label: '6/4拍子 (12ステップ, 6拍)' },
-  '16ビート':      { tree: [[[2,2],[2,2]],[[2,2],[2,2]]], beatLevel: 2, label: '16ビート (16ステップ, 4拍)' },
+  '2ビート':       { tree: [2,2], beatLevel: 1, label: '2ビート' },
+  '6-8':           { tree: [3,3], beatLevel: 1, label: '6/8拍子' },
+  '3ビート':       { tree: [2,2,2], beatLevel: 1, label: '3ビート / ワルツ' },
+  '8ビート':       { tree: [[2,2],[2,2]], beatLevel: 1, label: '8ビート' },
+  '9-8':           { tree: [3,3,3], beatLevel: 1, label: '9/8拍子' },
+  '12-8':          { tree: [[3,3],[3,3]], beatLevel: 1, label: '12/8拍子 / シャッフル' },
+  '6-4':           { tree: [[2,2,2],[2,2,2]], beatLevel: 1, label: '6/4拍子' },
+  '16ビート':      { tree: [[[2,2],[2,2]],[[2,2],[2,2]]], beatLevel: 2, label: '16ビート' },
   // ── クラーベ・ラテン系 ──
   // Removed alt names (restore into the `label` string if needed):
   //   'トレシーロ': 'トレシーロ / ハバネラ 近似 / シンキージョ 近似'
-  'トレシーロ':       { tree: [3,3,2], beatLevel: 1, label: 'トレシーロ (8ステップ, 3拍)' },
-  '逆トレシーロ':     { tree: [2,3,3], beatLevel: 1, label: '逆トレシーロ (8ステップ, 3拍)' },
-  'ソンクラーベ 3-2': { tree: [[3,3],[2,2],[2,2,2]], beatLevel: 1, label: 'ソン・クラーベ 3-2 近似 (16ステップ, 7拍)' },
-  'ソンクラーベ 2-3': { tree: [[2,2,2],[3,3],[2,2]], beatLevel: 1, label: 'ソン・クラーベ 2-3 近似 (16ステップ, 7拍)' },
-  'ルンバクラーベ 3-2': { tree: [[3,2,2],[3,2],[2,2]], beatLevel: 1, label: 'ルンバ・クラーベ 3-2 近似 (16ステップ, 7拍)' },
-  'ルンバクラーベ 2-3': { tree: [[2,2],[2,3],[2,2,3]], beatLevel: 1, label: 'ルンバ・クラーベ 2-3 近似 (16ステップ, 7拍)' },
-  'ボサノヴァクラーベ': { tree: [[3,3],[2,2],[3,3]], beatLevel: 1, label: 'ボサノヴァ・クラーベ 近似 (16ステップ, 6拍)' },
-  'カスカラ':         { tree: [[3,3,2],[3,3,2]], beatLevel: 1, label: 'ダブルトレシーロ / カスカラ 近似 (16ステップ, 6拍)' },
-  'ヘミオラ':         { tree: [[3,3],[2,2,2]], beatLevel: 1, label: 'ヘミオラ / ソレア・ブレリア 近似 / ベンベ 近似 (12ステップ, 5拍)' },
-  '逆ヘミオラ':       { tree: [[2,2,2],[3,3]], beatLevel: 1, label: '逆ヘミオラ (12ステップ, 5拍)' },
-  '10-8':             { tree: [[3,3],[2,2]], beatLevel: 1, label: '拡張トレシーロ (10ステップ, 4拍)' },
-  '10-8R':            { tree: [[2,2],[3,3]], beatLevel: 1, label: '逆拡張トレシーロ (10ステップ, 4拍)' },
-  'siguiriyas':       { tree: [[2,2,3],[3,2]], beatLevel: 1, label: 'シギリージャ（フラメンコ）(12ステップ, 5拍)' },
-  'standard_bell':    { tree: [[2,2,3],[2,3]], beatLevel: 1, label: 'スタンダード・ベル / アフロ・キー・パターン 近似 (12ステップ, 5拍)' },
+  'トレシーロ':       { tree: [3,3,2], beatLevel: 1, label: 'トレシーロ' },
+  '逆トレシーロ':     { tree: [2,3,3], beatLevel: 1, label: '逆トレシーロ' },
+  'ソンクラーベ 3-2': { tree: [[3,3],[2,2],[2,2,2]], beatLevel: 1, label: 'ソン・クラーベ 3-2 近似' },
+  'ソンクラーベ 2-3': { tree: [[2,2,2],[3,3],[2,2]], beatLevel: 1, label: 'ソン・クラーベ 2-3 近似' },
+  'ルンバクラーベ 3-2': { tree: [[3,2,2],[3,2],[2,2]], beatLevel: 1, label: 'ルンバ・クラーベ 3-2 近似' },
+  'ルンバクラーベ 2-3': { tree: [[2,2],[2,3],[2,2,3]], beatLevel: 1, label: 'ルンバ・クラーベ 2-3 近似' },
+  'ボサノヴァクラーベ': { tree: [[3,3],[2,2],[3,3]], beatLevel: 1, label: 'ボサノヴァ・クラーベ 近似' },
+  'カスカラ':         { tree: [[3,3,2],[3,3,2]], beatLevel: 1, label: 'ダブルトレシーロ / カスカラ 近似' },
+  'ヘミオラ':         { tree: [[3,3],[2,2,2]], beatLevel: 1, label: 'ヘミオラ / ソレア・ブレリア 近似 / ベンベ 近似' },
+  '逆ヘミオラ':       { tree: [[2,2,2],[3,3]], beatLevel: 1, label: '逆ヘミオラ' },
+  '10-8':             { tree: [[3,3],[2,2]], beatLevel: 1, label: '拡張トレシーロ' },
+  '10-8R':            { tree: [[2,2],[3,3]], beatLevel: 1, label: '逆拡張トレシーロ' },
+  'siguiriyas':       { tree: [[2,2,3],[3,2]], beatLevel: 1, label: 'シギリージャ（フラメンコ）' },
+  'standard_bell':    { tree: [[2,2,3],[2,3]], beatLevel: 1, label: 'スタンダード・ベル / アフロ・キー・パターン 近似' },
   // ── バルカン舞踊 ──
   // Removed alt names (restore into the `label` string if needed):
   //   'lesnoto': 'レスノト / カラマティアノス / ルパク / ミシュラ・チャプ / チェトヴォルノ'
-  'paydushko':       { tree: [2,3], beatLevel: 1, label: 'パイドゥシュコ / カンダ・チャプ (5ステップ, 2拍)' },
-  'paydushkoR':      { tree: [3,2], beatLevel: 1, label: '逆パイドゥシュコ (5ステップ, 2拍)' },
-  'rachenitsa':      { tree: [2,2,3], beatLevel: 1, label: 'ラチェニツァ / エレノ・モメ (7ステップ, 3拍)' },
-  'lesnoto':         { tree: [3,2,2], beatLevel: 1, label: 'レスノト / カラマティアノス / チェトヴォルノ (7ステップ, 3拍)' },
-  'devojce':         { tree: [[2,3],[2,2]], beatLevel: 1, label: 'デヴォイチェ / グランチャルスコ (9ステップ, 4拍)' },
-  'kopanitsa':       { tree: [[2,2,3],[2,2]], beatLevel: 1, label: 'コパニッツァ / ガンキノ・ホロ (11ステップ, 5拍)' },
-  'krivo':           { tree: [[2,2,2],[2,3,2]], beatLevel: 1, label: 'クリヴォ・サドフスコ・ホロ (13ステップ, 6拍)' },
-  'buchimish':       { tree: [[2,2,2],[2,3],[2,2]], beatLevel: 1, label: 'ブチミシュ (15ステップ, 7拍)' },
-  'aksak16':         { tree: [[3,3],[3,3],[2,2]], beatLevel: 1, label: 'バルカン・アクサク (16ステップ, 6拍)' },
-  'yove_male_mome':  { tree: [[3,2,2],[2,2,3],[2,2]], beatLevel: 1, label: 'ヨヴェ・マレ・モメ (18ステップ, 8拍)' },
+  'paydushko':       { tree: [2,3], beatLevel: 1, label: 'パイドゥシュコ / カンダ・チャプ' },
+  'paydushkoR':      { tree: [3,2], beatLevel: 1, label: '逆パイドゥシュコ' },
+  'rachenitsa':      { tree: [2,2,3], beatLevel: 1, label: 'ラチェニツァ / エレノ・モメ' },
+  'lesnoto':         { tree: [3,2,2], beatLevel: 1, label: 'レスノト / カラマティアノス / チェトヴォルノ' },
+  'devojce':         { tree: [[2,3],[2,2]], beatLevel: 1, label: 'デヴォイチェ / グランチャルスコ' },
+  'kopanitsa':       { tree: [[2,2,3],[2,2]], beatLevel: 1, label: 'コパニッツァ / ガンキノ・ホロ' },
+  'krivo':           { tree: [[2,2,2],[2,3,2]], beatLevel: 1, label: 'クリヴォ・サドフスコ・ホロ' },
+  'buchimish':       { tree: [[2,2,2],[2,3],[2,2]], beatLevel: 1, label: 'ブチミシュ' },
+  'aksak16':         { tree: [[3,3],[3,3],[2,2]], beatLevel: 1, label: 'バルカン・アクサク' },
+  'yove_male_mome':  { tree: [[3,2,2],[2,2,3],[2,2]], beatLevel: 1, label: 'ヨヴェ・マレ・モメ' },
   // ── トルコ・南アジア系 ──
   // Removed alt names (restore into the `label` string if needed):
   //   'aksak9': 'アクサク / トルコ・アクサク / ダイチョヴォ / デヴェトルカ / カルシュラマ'
-  'aksak9':          { tree: [[2,2],[2,3]], beatLevel: 1, label: 'アクサク / ダイチョヴォ / カルシュラマ (9ステップ, 4拍)' },
-  'aksak9R':         { tree: [[3,2],[2,2]], beatLevel: 1, label: 'アクサク逆 (9ステップ, 4拍)' },
-  'semai':           { tree: [[3,2],[2,3]], beatLevel: 1, label: 'アクサク・セマイ / サマーイー・サキール (10ステップ, 4拍)' },
-  'jhaptal':         { tree: [[2,3],[2,3]], beatLevel: 1, label: 'ジャプタル (10ステップ, 4拍)' },
-  'deepchandi':      { tree: [[3,2,2],[3,2,2]], beatLevel: 1, label: 'ディープチャンディ / チャンチャル 近似 (14ステップ, 6拍)' }
+  'aksak9':          { tree: [[2,2],[2,3]], beatLevel: 1, label: 'アクサク / ダイチョヴォ / カルシュラマ' },
+  'aksak9R':         { tree: [[3,2],[2,2]], beatLevel: 1, label: 'アクサク逆' },
+  'semai':           { tree: [[3,2],[2,3]], beatLevel: 1, label: 'アクサク・セマイ / サマーイー・サキール' },
+  'jhaptal':         { tree: [[2,3],[2,3]], beatLevel: 1, label: 'ジャプタル' },
+  'deepchandi':      { tree: [[3,2,2],[3,2,2]], beatLevel: 1, label: 'ディープチャンディ / チャンチャル 近似' }
 };
 
 TR.PATTERN_COUNT = 16;
@@ -83,6 +83,16 @@ TR.STRUCT_GROUPS = [
   { prefix: 'トルコ・南アジア系', keys: ['aksak9','aksak9R','semai','jhaptal','deepchandi'] }
 ];
 
+/* Unified display format: "(Ns, Mb) [name] [arrayJson]"
+ * The name part is omitted for defs without a label (custom structures). */
+TR.formatStructLabel = function(def) {
+  var leaves = TR.countLeaves(def.tree);
+  var beats = TR.computeBeats(def);
+  var name = def.label ? def.label + ' ' : '';
+  var arr = JSON.stringify(def.tree);
+  return '(' + leaves + 's,' + beats + 'b) ' + name + arr;
+};
+
 TR.buildStructOptions = function(includeDefault) {
   var html = '';
   if (includeDefault) {
@@ -91,10 +101,15 @@ TR.buildStructOptions = function(includeDefault) {
   for (var g = 0; g < TR.STRUCT_GROUPS.length; g++) {
     var group = TR.STRUCT_GROUPS[g];
     html += '<optgroup label="' + group.prefix + '">';
+    // Sort each group by step count ascending (matches the heatmap list ordering)
+    var entries = [];
     for (var k = 0; k < group.keys.length; k++) {
-      var key = group.keys[k];
-      var s = TR.STRUCTURES[key];
-      if (s) html += '<option value="' + key + '">' + s.label + '</option>';
+      var s = TR.STRUCTURES[group.keys[k]];
+      if (s) entries.push({ key: group.keys[k], def: s });
+    }
+    entries.sort(function(a, b) { return TR.countLeaves(a.def.tree) - TR.countLeaves(b.def.tree); });
+    for (var j = 0; j < entries.length; j++) {
+      html += '<option value="' + entries[j].key + '">' + TR.formatStructLabel(entries[j].def) + '</option>';
     }
     html += '</optgroup>';
   }

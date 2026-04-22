@@ -51,17 +51,15 @@ TR.setCustomStructure = function(target, tree, beatLevel) {
   if (presetKey) {
     sel.value = presetKey;
   } else {
-    var leaves = TR.countLeaves(tree);
-    var beats = TR.computeBeats({ tree: tree, beatLevel: beatLevel });
-    var label = '\u30ab\u30b9\u30bf\u30e0: ' + treeStr + ' (' + leaves + '\u30b9\u30c6\u30c3\u30d7, ' + beats + '\u62cd)';
-    TR.state.customStructures[target] = { tree: tree, beatLevel: beatLevel, label: label };
+    var def = { tree: tree, beatLevel: beatLevel };  // no label → "name" prefix omitted
+    TR.state.customStructures[target] = def;
     var opt = sel.querySelector('option[value="custom"]');
     if (!opt) {
       opt = document.createElement('option');
       opt.value = 'custom';
       sel.appendChild(opt);
     }
-    opt.textContent = label;
+    opt.textContent = TR.formatStructLabel(def);
     sel.value = 'custom';
   }
   sel.dispatchEvent(new Event('change'));
@@ -683,9 +681,18 @@ defSel.innerHTML = TR.buildStructOptions(false);
       var tree = JSON.parse(structures[i].structure);
       var isHi = structures[i].structure === highlightStruct;
       var treeAttr = structures[i].structure.replace(/"/g, '&quot;');
+      // Look up a preset by tree/beatLevel so named structures show their name
+      // in the same "[name] [arrayJson] (Nステップ M拍)" format as the dropdown.
+      var presetDef = null;
+      var treeJson = structures[i].structure;
+      for (var pk in TR.STRUCTURES) {
+        var ps = TR.STRUCTURES[pk];
+        if (JSON.stringify(ps.tree) === treeJson && ps.beatLevel === structures[i].beatLevel) { presetDef = ps; break; }
+      }
+      var displayDef = presetDef || { tree: tree, beatLevel: structures[i].beatLevel };
       html += '<div class="map-struct-row" data-hi="' + (isHi ? '1' : '0') + '" data-tree="' + treeAttr + '" data-beatlevel="' + structures[i].beatLevel + '">' +
         '<div class="map-struct-row-title">' +
-          '<div class="map-struct-row-tree">' + structures[i].structure + ' (' + structures[i].leaves + '\u30b9\u30c6\u30c3\u30d7, ' + TR.computeBeats({ tree: tree, beatLevel: structures[i].beatLevel }) + '\u62cd)</div>' +
+          '<div class="map-struct-row-tree">' + TR.formatStructLabel(displayDef) + '</div>' +
           '<div class="struct-actions">' +
             '<span class="struct-actions-label">Set as:</span>' +
             '<button class="btn-apply-struct default" data-target="default" title="\u65e2\u5b9a\u62cd\u69cb\u9020\u306b\u8a2d\u5b9a">\u65e2</button>' +
