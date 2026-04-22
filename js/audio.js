@@ -133,13 +133,27 @@ TR.audio.playCymbal = function(time, stage, _ctx, _master, _noiseBuf) {
   src.connect(filt); filt.connect(g); g.connect(master);
 };
 
-TR.audio.playAccent = function(mode, time, _ctx, _master, _noiseBuf) {
-  if      (mode === 'cy--') TR.audio.playCymbal(time, 0, _ctx, _master, _noiseBuf);
-  else if (mode === 'cy-')  TR.audio.playCymbal(time, 1, _ctx, _master, _noiseBuf);
-  else if (mode === 'cy')   TR.audio.playCymbal(time, 2, _ctx, _master, _noiseBuf);
-  else if (mode === 'cy+')  TR.audio.playCymbal(time, 3, _ctx, _master, _noiseBuf);
-  else if (mode === 'cy++') TR.audio.playCymbal(time, 4, _ctx, _master, _noiseBuf);
-  // 'off' or unknown → silent
+/* Pattern-driven accent. When mode is 'on', the cymbal stage is chosen from
+ * the 2-adic valuation of patternIdx (0 is treated as TR.PATTERN_COUNT so it
+ * gets the strongest cue). Stage is clamped to the highest index available
+ * in the cymbal voice, so a future expansion of PATTERN_COUNT or of the CY
+ * array doesn't require any code change here:
+ *
+ *   odd     → stage 0 (weakest)
+ *   v₂ = 1  → stage 1
+ *   v₂ = 2  → stage 2
+ *   v₂ = 3  → stage 3
+ *   v₂ = 4  → stage 4
+ *   v₂ ≥ 5  → stage 5 if it exists, else clamped to the top.
+ */
+TR.audio.playAccent = function(mode, time, patternIdx, _ctx, _master, _noiseBuf) {
+  if (mode !== 'on') return;  // 'off' or unknown → silent
+  var NUM_CY_STAGES = 5;  // matches cutoffs/gains/decays length in playCymbal
+  var n = patternIdx === 0 ? TR.PATTERN_COUNT : patternIdx;
+  var v2 = 0;
+  while (n > 0 && n % 2 === 0) { n /= 2; v2++; }
+  var stage = Math.min(v2, NUM_CY_STAGES - 1);
+  TR.audio.playCymbal(time, stage, _ctx, _master, _noiseBuf);
 };
 
 TR.audio.reset = function() {

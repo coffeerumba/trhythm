@@ -198,8 +198,8 @@ TR.startPlayback = async function() {
   // initial ip.snapLinear = computeTrackSnap(.., firstIdx).linear.
   var virtualCycleNum = firstIdx;
 
-  // Accent cue on the very first cycle start (voice selected by the Accent toggle)
-  TR.audio.playAccent(TR.getAccentMode(), now);
+  // Accent cue on the very first cycle start (voice derived from the pattern index)
+  TR.audio.playAccent(TR.getAccentMode(), now, firstIdx);
 
   // Cancel token: guards pending setTimeouts so stopPlayback/switchPattern
   // can invalidate them without waiting for the lookahead window to clear.
@@ -215,8 +215,8 @@ TR.startPlayback = async function() {
       if (nextIdx >= 0) {
         virtualPattern = nextIdx;
         virtualCycleNum++;
-        // Accent cue on the new cycle's downbeat (voice selected by Accent toggle)
-        TR.audio.playAccent(TR.getAccentMode(), virtualCycleEnd);
+        // Accent cue on the new cycle's downbeat (voice derived from the pattern index)
+        TR.audio.playAccent(TR.getAccentMode(), virtualCycleEnd, nextIdx);
 
         // Compute each track's new snapshot (snapPat, snapStep, snapLinear)
         // for this virtual cycle. Using ceil() so step indices that "start"
@@ -363,7 +363,7 @@ TR.encodeWAV = function(audioBuffer) {
 TR.collectPatternsForRender = function() {
   var list = [];
   for (var i = 0; i < TR.PATTERN_COUNT; i++) {
-    if (TR.state.patterns[i]) list.push(TR.state.patterns[i]);
+    if (TR.state.patterns[i]) list.push({ bankIdx: i, pat: TR.state.patterns[i] });
   }
   return list;
 };
@@ -380,7 +380,8 @@ TR.renderOffline = async function() {
   var totalDuration = startOffset;
   var patTimings = [];
   for (var p = 0; p < pats.length; p++) {
-    var pat = pats[p];
+    var pat = pats[p].pat;
+    var bankIdx = pats[p].bankIdx;
     var kickDef = pat.kickDef;
     var snareDef = pat.snareDef;
     var hihatDef = pat.hihatDef;
@@ -404,7 +405,7 @@ TR.renderOffline = async function() {
     );
 
     patTimings.push({
-      pat: pat, offset: totalDuration,
+      pat: pat, bankIdx: bankIdx, offset: totalDuration,
       kickDef: kickDef, snareDef: snareDef, hihatDef: hihatDef,
       kickSecPerStep: kickSecPerStep, snareSecPerStep: snareSecPerStep, hihatSecPerStep: hihatSecPerStep
     });
@@ -446,7 +447,7 @@ TR.renderOffline = async function() {
     for (var s = 0; s < pat.hihat.length; s++) {
       if (pat.hihat[s]) TR.audio.playHihat(pt.offset + s * pt.hihatSecPerStep, offCtx, offMaster, offNoise);
     }
-    TR.audio.playAccent(accentMode, pt.offset, offCtx, offMaster, offNoise);
+    TR.audio.playAccent(accentMode, pt.offset, pt.bankIdx, offCtx, offMaster, offNoise);
   }
 
   var rendered = await offCtx.startRendering();

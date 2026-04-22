@@ -227,19 +227,14 @@ for (var i = 0; i < instruments.length; i++) {
     '<div class="prob-chart" id="prob-' + inst.key + '"></div>';
 }
 
-// Accent track — controls whether the open-hihat cue fires at each
-// virtual cycle boundary. No per-step pattern, just a mode toggle.
+// Accent track — toggles the pattern-boundary cymbal cue. The cymbal
+// stage is picked per pattern from the 2-adic valuation (see playAccent).
 html += '<hr style="border:none; border-top:2px dashed var(--border); margin:10px 0;">' +
   '<div class="inst-header accent" style="font-size:16px;">Accent</div>' +
   '<div class="param-group">' +
-  '<div class="param-row" style="flex-wrap:wrap;">' +
-    '<span class="param-label">Accent</span>' +
-    '<button type="button" class="btn-accent active" data-value="off">Off</button>' +
-    '<button type="button" class="btn-accent" data-value="cy--">CY--</button>' +
-    '<button type="button" class="btn-accent" data-value="cy-">CY-</button>' +
-    '<button type="button" class="btn-accent" data-value="cy">CY</button>' +
-    '<button type="button" class="btn-accent" data-value="cy+">CY+</button>' +
-    '<button type="button" class="btn-accent" data-value="cy++">CY++</button>' +
+  '<div class="param-row">' +
+    '<button type="button" class="btn-accent" data-value="off">OFF</button>' +
+    '<button type="button" class="btn-accent active" data-value="on">シンバル</button>' +
   '</div>' +
   '</div>';
 
