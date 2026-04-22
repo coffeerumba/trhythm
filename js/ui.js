@@ -230,13 +230,15 @@ for (var i = 0; i < instruments.length; i++) {
 // Accent track — toggles the pattern-boundary cymbal cue. The cymbal
 // stage is picked per pattern from the 2-adic valuation (see playAccent).
 html += '<hr style="border:none; border-top:2px dashed var(--border); margin:10px 0;">' +
-  '<div class="inst-header accent" style="font-size:16px;">Accent</div>' +
+  '<div class="inst-header accent" style="font-size:16px;">Crash</div>' +
   '<div class="param-group">' +
   '<div class="param-row">' +
     '<button type="button" class="btn-accent" data-value="off">OFF</button>' +
     '<button type="button" class="btn-accent active" data-value="on">シンバル</button>' +
   '</div>' +
   '</div>';
+// js/audition.js injects a second row of audition buttons below the accent
+// radio. It's self-contained and safe to remove.
 
 section.innerHTML = html;
 container.appendChild(section);
@@ -257,6 +259,7 @@ for (var i = 0; i < accentBtns.length; i++) {
     this.classList.add('active');
   });
 }
+
 })();
 
 /* ═══ Probability Chart ═══ */

@@ -156,6 +156,8 @@ TR.audio.playAccent = function(mode, time, patternIdx, _ctx, _master, _noiseBuf)
   TR.audio.playCymbal(time, stage, _ctx, _master, _noiseBuf);
 };
 
+/* ─── Audition voices live in js/audition.js (self-contained module) ─── */
+
 TR.audio.reset = function() {
   if (TR.state.isPlaying) TR.stopPlayback();
   TR.state.masterGain = null;

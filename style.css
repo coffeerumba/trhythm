@@ -13,6 +13,7 @@
   --kick-color: #d03050;
   --snare-color: #2277cc;
   --hihat-color: #559955;
+  --accent-color: #8844cc;
   --pixel-font: 'DotGothic16', sans-serif;
 }
 
@@ -124,6 +125,7 @@ input[type="range"]::-moz-range-thumb {
 .inst-header.kick { color: var(--kick-color); }
 .inst-header.snare { color: var(--snare-color); }
 .inst-header.hihat { color: var(--hihat-color); }
+.inst-header.accent { color: var(--accent-color); }
 
 .pattern-bank {
   display: grid;
@@ -296,11 +298,24 @@ input[type="range"]::-moz-range-thumb {
 .btn-accent:hover { background: var(--border); color: #fff; }
 .btn-accent:active { box-shadow: none; transform: translate(2px, 2px); }
 .btn-accent.active {
-  background: var(--cursor);
-  color: var(--text);
-  border-color: #c08800;
+  background: var(--accent-color);
+  color: #fff;
+  border-color: #5522aa;
   font-weight: bold;
 }
+
+.btn-audition {
+  background: var(--bg);
+  border: 2px solid var(--border);
+  box-shadow: 2px 2px 0 var(--border);
+  color: var(--text-muted);
+  font-family: var(--pixel-font);
+  font-size: 14px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.btn-audition:hover { background: var(--border); color: #fff; }
+.btn-audition:active { box-shadow: none; transform: translate(2px, 2px); }
 
 /* --- Buttons --- */
 .btn-row {
