@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════
-   8-BIT CIRCUIT BOARD VISUALIZER
+   8-BIT CIRCUIT BOARD — viz mode
    ═══════════════════════════════════════════════════════════════ */
-TR.registerVisualizer((function(TR) {
+TR.registerVizMode((function(TR) {
 var ctx, vizW, vizH;
 var CELL = 8;
 var VIZ_FADE_FRAMES = 300;

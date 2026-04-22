@@ -4,7 +4,7 @@
  * means the step plays audibly but falls outside the current virtual cycle's
  * display window — skip cursor update so the previous cell stays lit until
  * the DOM refresh at the next cycle boundary.
- * patternIdx / step are still needed for the visualizer hook, which fires on
+ * patternIdx / step are still needed for the viz hook, which fires on
  * every real hit regardless of whether a cell is shown. */
 TR.showInstCursor = function(gridId, cellIdx, patternIdx, step) {
   var el = document.getElementById(gridId);
@@ -13,7 +13,7 @@ TR.showInstCursor = function(gridId, cellIdx, patternIdx, step) {
     for (var i = 0; i < dots.length; i++) dots[i].classList.remove('cursor-on');
     if (dots[cellIdx]) dots[cellIdx].classList.add('cursor-on');
   }
-  // Visualizer hook fires on actual hits regardless of cursor visibility
+  // Viz hook fires on actual hits regardless of cursor visibility
   var keyMap = { 'grid-kick': 'kick', 'grid-snare': 'snare', 'grid-hihat': 'hihat' };
   var key = keyMap[gridId];
   if (key && typeof TR.vizOnHit === 'function') {

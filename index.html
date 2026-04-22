@@ -15,11 +15,11 @@
     <p class="app-description">このアプリは、拍構造をもとにドラムパターンを自動生成します。拍構造は <code>[[2,2],[2,2]]</code> のようなカッコの入れ子で表され、拍の強弱が構造的に決まります。その拍構造に対して「打率・重心・忠実度」を設定することでさまざまなリズムパターンを生成します。キック・スネア・ハイハットそれぞれに違うパラメータを設定でき、拍構造も楽器ごとに変えられるので、ポリリズムやポリメーターも表現できます。</p>
   </header>
 
-  <!-- Visualizer -->
+  <!-- Viz -->
   <div class="viz-wrap collapsible" id="viz-wrap">
     <div class="inst-header">ビジュアライザー</div>
     <div class="param-row" style="margin-bottom:8px;">
-      <select id="viz-select" class="struct-select"></select>
+      <select id="viz-mode-select" class="struct-select"></select>
     </div>
     <canvas id="viz-canvas"></canvas>
   </div>
@@ -60,7 +60,7 @@
   </div>
 
   <!-- Default structure + Structure map -->
-  <div class="tree-viz collapsible">
+  <div class="default-struct-section collapsible">
     <div class="inst-header">既定拍構造</div>
     <div class="param-row" style="margin-bottom:10px;">
       <button class="btn-nav" id="struct-prev">&#9664;</button>
@@ -113,7 +113,8 @@
 <script src="js/pattern.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/audition.js"></script>
-<script src="js/visualizer.js"></script>
+<script src="js/viz.js"></script>
+<script src="js/viz/test.js"></script>
 <script src="js/viz/circuit.js"></script>
 <script src="js/viz/fractal-tree.js"></script>
 <script src="js/playback.js"></script>

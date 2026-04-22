@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════
-   FRACTAL TREE VISUALIZER — 80s Macintosh monochrome style
+   FRACTAL TREE — viz mode (80s Macintosh monochrome style)
    ═══════════════════════════════════════════════════════════════ */
-TR.registerVisualizer((function(TR) {
+TR.registerVizMode((function(TR) {
 var ctx, vizW, vizH;
 
 /* ── Monochrome palette ── */
