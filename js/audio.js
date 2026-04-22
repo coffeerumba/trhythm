@@ -105,20 +105,23 @@ TR.audio.playHihat = function(time, _ctx, _master, _noiseBuf) {
 };
 
 /* ─── Accent voice ───────────────────────────────────────────────────
- * Single CY family at 4 intensity stages.
+ * Single CY family at 5 intensity stages. cutoff / gain / decay all
+ * linearly interpolate between the CY-- and CY++ endpoints so the
+ * progression sounds like "same cymbal, progressively louder and fuller".
  *   CY-- : edge tap — bright and short
- *   CY-  : soft hit
- *   CY+  : full hit
- *   CY++ : same tonal character as CY+ but with an extended "shimmer" tail
+ *   CY-  : ⎫
+ *   CY   : ⎬ smooth interpolation between the endpoints
+ *   CY+  : ⎭
+ *   CY++ : full hit — longest shimmer
  */
 TR.audio.playCymbal = function(time, stage, _ctx, _master, _noiseBuf) {
   var ctx = _ctx || Tone.getContext().rawContext;
   var master = _master || TR.state.masterGain;
   var nb = _noiseBuf || TR.state.noiseBuffer;
-  //              CY--   CY-    CY+    CY++  (linearly interpolated)
-  var cutoffs = [6500, 5600, 4800, 4000];
-  var gains   = [0.45, 0.52, 0.58, 0.65];
-  var decays  = [0.25, 0.60, 0.95, 1.30];
+  //              CY--   CY-    CY     CY+    CY++
+  var cutoffs = [5875,  5406,  4938,  4469,  4000];
+  var gains   = [0.575, 0.594, 0.613, 0.631, 0.650];
+  var decays  = [0.44,  0.61,  0.77,  0.94,  1.10];
   var src = ctx.createBufferSource();
   src.buffer = nb;
   src.start(time, Math.random()); src.stop(time + decays[stage]);
@@ -133,8 +136,9 @@ TR.audio.playCymbal = function(time, stage, _ctx, _master, _noiseBuf) {
 TR.audio.playAccent = function(mode, time, _ctx, _master, _noiseBuf) {
   if      (mode === 'cy--') TR.audio.playCymbal(time, 0, _ctx, _master, _noiseBuf);
   else if (mode === 'cy-')  TR.audio.playCymbal(time, 1, _ctx, _master, _noiseBuf);
-  else if (mode === 'cy+')  TR.audio.playCymbal(time, 2, _ctx, _master, _noiseBuf);
-  else if (mode === 'cy++') TR.audio.playCymbal(time, 3, _ctx, _master, _noiseBuf);
+  else if (mode === 'cy')   TR.audio.playCymbal(time, 2, _ctx, _master, _noiseBuf);
+  else if (mode === 'cy+')  TR.audio.playCymbal(time, 3, _ctx, _master, _noiseBuf);
+  else if (mode === 'cy++') TR.audio.playCymbal(time, 4, _ctx, _master, _noiseBuf);
   // 'off' or unknown → silent
 };
 

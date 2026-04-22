@@ -237,6 +237,7 @@ html += '<hr style="border:none; border-top:2px dashed var(--border); margin:10p
     '<button type="button" class="btn-accent active" data-value="off">Off</button>' +
     '<button type="button" class="btn-accent" data-value="cy--">CY--</button>' +
     '<button type="button" class="btn-accent" data-value="cy-">CY-</button>' +
+    '<button type="button" class="btn-accent" data-value="cy">CY</button>' +
     '<button type="button" class="btn-accent" data-value="cy+">CY+</button>' +
     '<button type="button" class="btn-accent" data-value="cy++">CY++</button>' +
   '</div>' +
