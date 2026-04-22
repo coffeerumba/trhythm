@@ -104,19 +104,38 @@ TR.audio.playHihat = function(time, _ctx, _master, _noiseBuf) {
   sq.start(time); sq.stop(time + 0.03);
 };
 
-TR.audio.playOpenHihat = function(time, _ctx, _master, _noiseBuf) {
+/* ─── Accent voice ───────────────────────────────────────────────────
+ * Single CY family at 4 intensity stages.
+ *   CY-- : edge tap — bright and short
+ *   CY-  : soft hit
+ *   CY+  : full hit
+ *   CY++ : same tonal character as CY+ but with an extended "shimmer" tail
+ */
+TR.audio.playCymbal = function(time, stage, _ctx, _master, _noiseBuf) {
   var ctx = _ctx || Tone.getContext().rawContext;
   var master = _master || TR.state.masterGain;
   var nb = _noiseBuf || TR.state.noiseBuffer;
+  //              CY--   CY-    CY+    CY++  (linearly interpolated)
+  var cutoffs = [6500, 5600, 4800, 4000];
+  var gains   = [0.45, 0.52, 0.58, 0.65];
+  var decays  = [0.25, 0.60, 0.95, 1.30];
   var src = ctx.createBufferSource();
   src.buffer = nb;
-  src.start(time, Math.random()); src.stop(time + 0.25);
+  src.start(time, Math.random()); src.stop(time + decays[stage]);
   var filt = ctx.createBiquadFilter();
-  filt.type = 'highpass'; filt.frequency.value = 5000;
+  filt.type = 'highpass'; filt.frequency.value = cutoffs[stage];
   var g = ctx.createGain();
-  g.gain.setValueAtTime(0.3, time);
-  g.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
+  g.gain.setValueAtTime(gains[stage], time);
+  g.gain.exponentialRampToValueAtTime(0.001, time + decays[stage]);
   src.connect(filt); filt.connect(g); g.connect(master);
+};
+
+TR.audio.playAccent = function(mode, time, _ctx, _master, _noiseBuf) {
+  if      (mode === 'cy--') TR.audio.playCymbal(time, 0, _ctx, _master, _noiseBuf);
+  else if (mode === 'cy-')  TR.audio.playCymbal(time, 1, _ctx, _master, _noiseBuf);
+  else if (mode === 'cy+')  TR.audio.playCymbal(time, 2, _ctx, _master, _noiseBuf);
+  else if (mode === 'cy++') TR.audio.playCymbal(time, 3, _ctx, _master, _noiseBuf);
+  // 'off' or unknown → silent
 };
 
 TR.audio.reset = function() {
