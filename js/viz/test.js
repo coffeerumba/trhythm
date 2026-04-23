@@ -94,8 +94,11 @@ function drawBranch(tree, cx, cy, aStart, aEnd, parentX, parentY, pAngle, depthF
       var a = mid + open * (aDef - mid);
       var tx = cx + Math.cos(a) * rEnd;
       var ty = cy + Math.sin(a) * rEnd;
-      var vx = cx + Math.cos(pAngle) * rBend;
-      var vy = cy + Math.sin(pAngle) * rBend;
+      // At root, parent has no direction — anchor the L along the child's
+      // own angle (makes the first segment invisible, as expected).
+      var bendAngle = (depthFromRoot === 0) ? a : pAngle;
+      var vx = cx + Math.cos(bendAngle) * rBend;
+      var vy = cy + Math.sin(bendAngle) * rBend;
       drawEdge(parentX, parentY, tx, ty, vx, vy, curve);
       leafTips.push({ x: tx, y: ty });
     }
@@ -112,8 +115,9 @@ function drawBranch(tree, cx, cy, aStart, aEnd, parentX, parentY, pAngle, depthF
     var cAEnd   = cMid + scaledW / 2;
     var cxC = cx + Math.cos(cMid) * rChild;
     var cyC = cy + Math.sin(cMid) * rChild;
-    var vx  = cx + Math.cos(pAngle) * rBend;
-    var vy  = cy + Math.sin(pAngle) * rBend;
+    var bendAngle = (depthFromRoot === 0) ? cMid : pAngle;
+    var vx  = cx + Math.cos(bendAngle) * rBend;
+    var vy  = cy + Math.sin(bendAngle) * rBend;
     drawEdge(parentX, parentY, cxC, cyC, vx, vy, curve);
     drawBranch(tree[i], cx, cy, cAStart, cAEnd, cxC, cyC, cMid, depthFromRoot + 1, totalDepth);
   }
