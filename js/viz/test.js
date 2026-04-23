@@ -16,6 +16,9 @@ function dbgNum(id, def) {
 function depthPower()  { return dbgNum('test-depth-curve', 1.0); }
 function bendAlpha()   { return dbgNum('test-bend',        0.0); }
 function leafSpread()  { return dbgNum('test-leaf-spread', 0.0); }
+function branchOpen()  { return dbgNum('test-open',        1.0); }
+function leafLength()  { return dbgNum('test-leaf-len',    1.0); }
+function curveAmount() { return dbgNum('test-curve',       0.0); }
 /* ── END DEBUG SLIDERS ── */
 
 function treeDepth(t) {
@@ -25,52 +28,94 @@ function treeDepth(t) {
   return 1 + m;
 }
 
+// Return the angle closest to ref that is equivalent to target mod 2π.
+function nearestAngle(target, ref) {
+  var d = target - ref;
+  while (d >  Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
+  return ref + d;
+}
+
+// Draw a branch from (px,py) via the bend vertex (vx,vy) to (ex,ey).
+// curve=0: sharp L (two straight segments). curve=1: maximally rounded
+// corner (arcTo with the largest fitting radius). When the L is degenerate
+// (bend≈0, so vx≈px,py), just draws a straight line.
+function drawEdge(px, py, ex, ey, vx, vy, curve) {
+  var d1 = Math.hypot(vx - px, vy - py);
+  var d2 = Math.hypot(ex - vx, ey - vy);
+  ctx.beginPath();
+  ctx.moveTo(px, py);
+  if (d1 < 0.5 || d2 < 0.5) {
+    ctx.lineTo(ex, ey);
+  } else {
+    var maxR = Math.min(d1, d2) * 0.95;
+    var r = curve * maxR;
+    if (r < 0.5) {
+      ctx.lineTo(vx, vy);
+      ctx.lineTo(ex, ey);
+    } else {
+      ctx.arcTo(vx, vy, ex, ey, r);
+      ctx.lineTo(ex, ey);
+    }
+  }
+  ctx.stroke();
+}
+
 function drawBranch(tree, cx, cy, aStart, aEnd, parentX, parentY, pAngle, depthFromRoot, totalDepth) {
   var p      = depthPower();
   var bend   = bendAlpha();
   var spread = leafSpread();
+  var leafL  = leafLength();
+  var curve  = curveAmount();
+  // Soft opening: t=0 all closed, t=1 all open. Root-side branches rise
+  // fastest; descendants also respond (more weakly) for all t in (0,1).
+  // open_d = 1 - (1-t)^(D-d): larger exponent at shallow levels → steeper rise.
+  var openT  = branchOpen();
+  var open   = 1 - Math.pow(1 - openT, totalDepth - depthFromRoot);
   var rMax   = Math.min(vizW, vizH) * 0.45;
 
   var rCurrent = rMax * Math.pow(depthFromRoot     / totalDepth, p);
   var rChild   = rMax * Math.pow((depthFromRoot+1) / totalDepth, p);
-  var rBend    = rCurrent + bend * (rChild - rCurrent);
+  // Leaf rays: scale final step by leafL (1 = default, 0 = no ray, 2 = double)
+  var isLeaf   = !Array.isArray(tree);
+  var rEnd     = isLeaf ? (rCurrent + leafL * (rChild - rCurrent)) : rChild;
+  var rBend    = rCurrent + bend * (rEnd - rCurrent);
+  // At root, collapse children toward 12 o'clock (step 0's direction).
+  // At deeper levels, collapse toward the parent's wedge mid.
+  var mid = (depthFromRoot === 0) ? -Math.PI / 2 : (aStart + aEnd) / 2;
 
-  if (!Array.isArray(tree)) {
+  if (isLeaf) {
     var n = tree;
     for (var i = 0; i < n; i++) {
       var centered = (i + 0.5) / n;
       var edge     = (n > 1) ? i / (n - 1) : 0.5;
       var t = (1 - spread) * centered + spread * edge;
-      var a = aStart + t * (aEnd - aStart);
-      var tx = cx + Math.cos(a) * rChild;
-      var ty = cy + Math.sin(a) * rChild;
+      var aDef = nearestAngle(aStart + t * (aEnd - aStart), mid);
+      var a = mid + open * (aDef - mid);
+      var tx = cx + Math.cos(a) * rEnd;
+      var ty = cy + Math.sin(a) * rEnd;
       var vx = cx + Math.cos(pAngle) * rBend;
       var vy = cy + Math.sin(pAngle) * rBend;
-      ctx.beginPath();
-      ctx.moveTo(parentX, parentY);
-      ctx.lineTo(vx, vy);
-      ctx.lineTo(tx, ty);
-      ctx.stroke();
+      drawEdge(parentX, parentY, tx, ty, vx, vy, curve);
       leafTips.push({ x: tx, y: ty });
     }
     return;
   }
 
   var len = tree.length;
+  var wedgeW = (aEnd - aStart) / len;
+  var scaledW = wedgeW * open;
   for (var i = 0; i < len; i++) {
-    var cAStart = aStart + i * (aEnd - aStart) / len;
-    var cAEnd   = aStart + (i + 1) * (aEnd - aStart) / len;
-    var cAMid   = (cAStart + cAEnd) / 2;
-    var cxC = cx + Math.cos(cAMid) * rChild;
-    var cyC = cy + Math.sin(cAMid) * rChild;
+    var defCenter = nearestAngle(aStart + (i + 0.5) * wedgeW, mid);
+    var cMid = mid + open * (defCenter - mid);
+    var cAStart = cMid - scaledW / 2;
+    var cAEnd   = cMid + scaledW / 2;
+    var cxC = cx + Math.cos(cMid) * rChild;
+    var cyC = cy + Math.sin(cMid) * rChild;
     var vx  = cx + Math.cos(pAngle) * rBend;
     var vy  = cy + Math.sin(pAngle) * rBend;
-    ctx.beginPath();
-    ctx.moveTo(parentX, parentY);
-    ctx.lineTo(vx, vy);
-    ctx.lineTo(cxC, cyC);
-    ctx.stroke();
-    drawBranch(tree[i], cx, cy, cAStart, cAEnd, cxC, cyC, cAMid, depthFromRoot + 1, totalDepth);
+    drawEdge(parentX, parentY, cxC, cyC, vx, vy, curve);
+    drawBranch(tree[i], cx, cy, cAStart, cAEnd, cxC, cyC, cMid, depthFromRoot + 1, totalDepth);
   }
 }
 
@@ -88,6 +133,12 @@ function drawKickFlower() {
   var aEnd   = Math.PI * 3 / 2;
   leafTips = [];
   drawBranch(def.tree, cx, cy, aStart, aEnd, cx, cy, (aStart + aEnd) / 2, 0, depth);
+
+  // Small black dot at the flower center
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+  ctx.fill();
 
   // Circles only on active (on) steps, in kick track color
   if (!flat) return;
@@ -114,6 +165,9 @@ function bindSlider(inputId, displayId, digits) {
 bindSlider('test-depth-curve', 'test-p-val',          2);
 bindSlider('test-bend',        'test-bend-val',       2);
 bindSlider('test-leaf-spread', 'test-leaf-spread-val',2);
+bindSlider('test-open',        'test-open-val',       2);
+bindSlider('test-leaf-len',    'test-leaf-len-val',   2);
+bindSlider('test-curve',       'test-curve-val',      2);
 /* ── END DEBUG SLIDERS ── */
 
 return {
