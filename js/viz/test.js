@@ -15,6 +15,21 @@ var lastStep = { kick: -1, snare: -1, hihat: -1 };
 // negative and would wrap to count-1 — which would flash the trail as if
 // a full cycle had already run.
 var firstStepReached = { kick: false, snare: false, hihat: false };
+// Polyline nodes that are already part of the solid trail this cycle
+// (keyed by "x,y"). The next step's ball emerges from the deepest node
+// of its path that is already in this set — i.e. the branch point it
+// shares with the previously-traversed tree.
+var traversedNodes = { kick: {}, snare: {}, hihat: {} };
+var lastCurrent    = { kick: -1, snare: -1, hihat: -1 };
+
+function startIndexFromTraversed(path, set) {
+  var last = 0;
+  for (var i = 0; i < path.length; i++) {
+    if (set[path[i].x + ',' + path[i].y]) last = i;
+    else break;
+  }
+  return last;
+}
 
 /* ── DEBUG SLIDERS (remove this block + matching HTML in index.html
    to revert. Defaults: depthPower=1, bend=0, leafSpread=0, open=1,
@@ -179,7 +194,12 @@ function pointAlongPath(path, frac) {
 // already traversed during the current cycle: full polyline for completed
 // steps, partial polyline up to the ball for the current step.
 function drawTrail(key) {
-  if (!TR.state.isPlaying) { firstStepReached[key] = false; return; }
+  if (!TR.state.isPlaying) {
+    firstStepReached[key] = false;
+    traversedNodes[key] = {};
+    lastCurrent[key] = -1;
+    return;
+  }
   var ip = null;
   for (var i = 0; i < TR.state.instPlayback.length; i++) {
     if (TR.state.instPlayback[i].key === key) { ip = TR.state.instPlayback[i]; break; }
@@ -194,6 +214,17 @@ function drawTrail(key) {
   var stepIdx = Math.floor(contStep);
   var fracWithinStep = contStep - stepIdx;
   var current = ((stepIdx % ip.count) + ip.count) % ip.count;
+  // Cycle wrap: reset trail accumulation
+  if (lastCurrent[key] > current) traversedNodes[key] = {};
+  lastCurrent[key] = current;
+  // Mark all nodes of completed paths as traversed
+  for (var i = 0; i < current; i++) {
+    var p = leafPaths[key][i];
+    if (!p) continue;
+    for (var j = 0; j < p.length; j++) {
+      traversedNodes[key][p[j].x + ',' + p[j].y] = true;
+    }
+  }
 
   ctx.strokeStyle = '#000';
   ctx.lineWidth = 1;
@@ -236,7 +267,12 @@ function drawTrail(key) {
   }
 
   for (var i = 0; i < current; i++) drawFull(leafPaths[key][i]);
-  drawPartial(leafPaths[key][current], fracWithinStep);
+  // Current step: start from the deepest node shared with the trail so far
+  var curPath = leafPaths[key][current];
+  if (curPath) {
+    var startIdx = startIndexFromTraversed(curPath, traversedNodes[key]);
+    drawPartial(curPath.slice(startIdx), fracWithinStep);
+  }
 }
 
 function drawBall(key) {
@@ -254,7 +290,8 @@ function drawBall(key) {
   stepIdx = ((stepIdx % ip.count) + ip.count) % ip.count;
   var path = leafPaths[key][stepIdx];
   if (!path) return;
-  var pos = pointAlongPath(path, fracWithinStep);
+  var startIdx = startIndexFromTraversed(path, traversedNodes[key]);
+  var pos = pointAlongPath(path.slice(startIdx), fracWithinStep);
   if (!pos) return;
   ctx.fillStyle = '#ffcc00';
   ctx.beginPath();
@@ -326,11 +363,14 @@ function drawInstrumentFlower(key) {
     ctx.beginPath();
     ctx.arc(leafTips[i].x, leafTips[i].y, tipR, 0, Math.PI * 2);
     if (hitSet[key][i]) {
+      ctx.setLineDash([]);
       ctx.fill();
     } else {
+      ctx.setLineDash([2, 2]);
       ctx.stroke();
     }
   }
+  ctx.setLineDash([]);
 }
 
 /* ── DEBUG SLIDERS: live value readout (remove with the block above) ── */
