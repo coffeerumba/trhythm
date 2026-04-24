@@ -6,19 +6,21 @@ var ctx, vizW, vizH;
 var leafTips = [];
 
 /* ── DEBUG SLIDERS (remove this block + matching HTML in index.html
-   to revert to defaults: depthPower=1, bend=0, leafSpread=0) ── */
+   to revert. Defaults: depthPower=1, bend=0, leafSpread=0, open=1,
+   leafLen=1, curve=0 — per instrument). ── */
 function dbgNum(id, def) {
   var el = document.getElementById(id);
   if (!el) return def;
   var v = parseFloat(el.value);
   return isNaN(v) ? def : v;
 }
-function depthPower()  { return dbgNum('test-depth-curve', 1.0); }
-function bendAlpha()   { return dbgNum('test-bend',        0.0); }
-function leafSpread()  { return dbgNum('test-leaf-spread', 0.0); }
-function branchOpen()  { return dbgNum('test-open',        1.0); }
-function leafLength()  { return dbgNum('test-leaf-len',    1.0); }
-function curveAmount() { return dbgNum('test-curve',       0.0); }
+function depthPower(key)  { return dbgNum('test-' + key + '-depth-curve', 1.0); }
+function bendAlpha(key)   { return dbgNum('test-' + key + '-bend',        0.0); }
+function leafSpread(key)  { return dbgNum('test-' + key + '-leaf-spread', 0.0); }
+function branchOpen(key)  { return dbgNum('test-' + key + '-open',        1.0); }
+function radiusFrac(key)  { return dbgNum('test-' + key + '-radius',      0.45); }
+function curveAmount(key) { return dbgNum('test-' + key + '-curve',       0.0); }
+function leafLength(key)  { return dbgNum('test-' + key + '-leaf-len',    1.0); }
 /* ── END DEBUG SLIDERS ── */
 
 function treeDepth(t) {
@@ -61,25 +63,23 @@ function drawEdge(px, py, ex, ey, vx, vy, curve) {
   ctx.stroke();
 }
 
-function drawBranch(tree, cx, cy, aStart, aEnd, parentX, parentY, pAngle, depthFromRoot, totalDepth) {
-  var p      = depthPower();
-  var bend   = bendAlpha();
-  var spread = leafSpread();
-  var leafL  = leafLength();
-  var curve  = curveAmount();
+function drawBranch(key, tree, cx, cy, aStart, aEnd, parentX, parentY, pAngle, depthFromRoot, totalDepth) {
+  var p      = depthPower(key);
+  var bend   = bendAlpha(key);
+  var spread = leafSpread(key);
+  var curve  = curveAmount(key);
+  var leafL  = leafLength(key);
   // Soft opening: t=0 all closed, t=1 all open. Root-side branches rise
   // fastest; descendants also respond (more weakly) for all t in (0,1).
   // open_d = 1 - (1-t)^(D-d): larger exponent at shallow levels → steeper rise.
-  var openT  = branchOpen();
+  var openT  = branchOpen(key);
   var open   = 1 - Math.pow(1 - openT, totalDepth - depthFromRoot);
-  var rMax   = Math.min(vizW, vizH) * 0.45;
+  var rMax   = Math.min(vizW, vizH) * radiusFrac(key);
 
   var rCurrent = rMax * Math.pow(depthFromRoot     / totalDepth, p);
   var rChild   = rMax * Math.pow((depthFromRoot+1) / totalDepth, p);
-  // Leaf rays: scale final step by leafL (1 = default, 0 = no ray, 2 = double)
   var isLeaf   = !Array.isArray(tree);
-  var rEnd     = isLeaf ? (rCurrent + leafL * (rChild - rCurrent)) : rChild;
-  var rBend    = rCurrent + bend * (rEnd - rCurrent);
+  var rBend    = rCurrent + bend * (rChild - rCurrent);
   // At root, collapse children toward 12 o'clock (step 0's direction).
   // At deeper levels, collapse toward the parent's wedge mid.
   var mid = (depthFromRoot === 0) ? -Math.PI / 2 : (aStart + aEnd) / 2;
@@ -92,8 +92,12 @@ function drawBranch(tree, cx, cy, aStart, aEnd, parentX, parentY, pAngle, depthF
       var t = (1 - spread) * centered + spread * edge;
       var aDef = nearestAngle(aStart + t * (aEnd - aStart), mid);
       var a = mid + open * (aDef - mid);
-      var tx = cx + Math.cos(a) * rEnd;
-      var ty = cy + Math.sin(a) * rEnd;
+      // Pure length scaling: extend the parent→leaf segment by leafL in
+      // its native direction (keeps leaf-segment angle fixed as leafL varies).
+      var defX = cx + Math.cos(a) * rChild;
+      var defY = cy + Math.sin(a) * rChild;
+      var tx = parentX + leafL * (defX - parentX);
+      var ty = parentY + leafL * (defY - parentY);
       // At root, parent has no direction — anchor the L along the child's
       // own angle (makes the first segment invisible, as expected).
       var bendAngle = (depthFromRoot === 0) ? a : pAngle;
@@ -119,24 +123,30 @@ function drawBranch(tree, cx, cy, aStart, aEnd, parentX, parentY, pAngle, depthF
     var vx  = cx + Math.cos(bendAngle) * rBend;
     var vy  = cy + Math.sin(bendAngle) * rBend;
     drawEdge(parentX, parentY, cxC, cyC, vx, vy, curve);
-    drawBranch(tree[i], cx, cy, cAStart, cAEnd, cxC, cyC, cMid, depthFromRoot + 1, totalDepth);
+    drawBranch(key, tree[i], cx, cy, cAStart, cAEnd, cxC, cyC, cMid, depthFromRoot + 1, totalDepth);
   }
 }
 
-function drawKickFlower() {
-  // Prefer current pattern's kickDef so flat length always matches the tree
+function drawInstrumentFlower(key) {
+  // Prefer current pattern's def so flat length always matches the tree
   var curPat = TR.state.patterns[TR.state.currentPattern];
-  var def = (curPat && curPat.kickDef) || (TR.getInstStructure && TR.getInstStructure('kick'));
+  var def = (curPat && curPat[key + 'Def']) || (TR.getInstStructure && TR.getInstStructure(key));
   if (!def || !def.tree) return;
-  var flat = TR.state.kickFlat;
+  var flat = TR.state[key + 'Flat'];
+  var color = TR.rgbCSS(TR.INST_COLORS[key]);
 
   var depth = treeDepth(def.tree);
   var cx = vizW / 2;
   var cy = vizH / 2;
   var aStart = -Math.PI / 2;
   var aEnd   = Math.PI * 3 / 2;
+
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 1;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
   leafTips = [];
-  drawBranch(def.tree, cx, cy, aStart, aEnd, cx, cy, (aStart + aEnd) / 2, 0, depth);
+  drawBranch(key, def.tree, cx, cy, aStart, aEnd, cx, cy, (aStart + aEnd) / 2, 0, depth);
 
   // Small black dot at the flower center
   ctx.fillStyle = '#000';
@@ -144,9 +154,9 @@ function drawKickFlower() {
   ctx.arc(cx, cy, 4, 0, Math.PI * 2);
   ctx.fill();
 
-  // Circles only on active (on) steps, in kick track color
+  // Circles only on active (on) steps, in track color
   if (!flat) return;
-  ctx.strokeStyle = TR.rgbCSS(TR.INST_COLORS.kick);
+  ctx.strokeStyle = color;
   ctx.lineWidth = 1.5;
   var tipR = Math.max(3, Math.min(vizW, vizH) * 0.018);
   for (var i = 0; i < leafTips.length; i++) {
@@ -166,12 +176,15 @@ function bindSlider(inputId, displayId, digits) {
   input.addEventListener('input', update);
   update();
 }
-bindSlider('test-depth-curve', 'test-p-val',          2);
-bindSlider('test-bend',        'test-bend-val',       2);
-bindSlider('test-leaf-spread', 'test-leaf-spread-val',2);
-bindSlider('test-open',        'test-open-val',       2);
-bindSlider('test-leaf-len',    'test-leaf-len-val',   2);
-bindSlider('test-curve',       'test-curve-val',      2);
+['kick', 'snare'].forEach(function(k) {
+  bindSlider('test-' + k + '-depth-curve', 'test-' + k + '-depth-curve-val', 2);
+  bindSlider('test-' + k + '-bend',        'test-' + k + '-bend-val',        2);
+  bindSlider('test-' + k + '-leaf-spread', 'test-' + k + '-leaf-spread-val', 2);
+  bindSlider('test-' + k + '-open',        'test-' + k + '-open-val',        2);
+  bindSlider('test-' + k + '-radius',      'test-' + k + '-radius-val',      2);
+  bindSlider('test-' + k + '-curve',       'test-' + k + '-curve-val',       2);
+  bindSlider('test-' + k + '-leaf-len',    'test-' + k + '-leaf-len-val',    2);
+});
 /* ── END DEBUG SLIDERS ── */
 
 return {
@@ -191,11 +204,8 @@ return {
     vizH = h;
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 1;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    drawKickFlower();
+    drawInstrumentFlower('kick');
+    drawInstrumentFlower('snare');
   },
   onHit: function(_key, _step, _level) {
     // placeholder
