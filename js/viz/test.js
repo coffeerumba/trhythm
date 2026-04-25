@@ -211,8 +211,10 @@ function pointAlongPath(path, frac) {
 var maskCanvas = null, maskCtx = null;
 // Frame canvas: this cycle's masked flower + markers, before compositing onto persist.
 var frameCanvas = null, frameCtx = null;
-// Persist canvas: accumulates every cycle's render so previous cycles stay visible.
+// Persist canvas: accumulates every cycle's render. Each frame the alpha is
+// decayed so a stroke / marker fades to ~invisible over one virtual cycle.
 var persistCanvas = null, persistCtx = null;
+var lastFrameMs = null;
 function ensureMaskCanvas() {
   var w = ctx.canvas.width, h = ctx.canvas.height;
   if (!maskCanvas || maskCanvas.width !== w || maskCanvas.height !== h) {
@@ -515,6 +517,24 @@ return {
     // Reset accumulation when not playing — each play starts with a clean canvas.
     if (!TR.state.isPlaying) {
       persistCtx.clearRect(0, 0, w, h);
+      lastFrameMs = null;
+    } else {
+      // Time-based exponential alpha decay: a pixel left alone fades to ~2%
+      // after one virtual cycle, so each stroke / marker has a one-cycle
+      // visible lifetime even though new ones keep getting layered on top.
+      var nowMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      var cycle = TR.state.virtualCycle;
+      if (lastFrameMs !== null && cycle > 0) {
+        var dt = (nowMs - lastFrameMs) / 1000;
+        var srcAlpha = 1 - Math.exp(-4 * dt / cycle);
+        if (srcAlpha > 0) {
+          persistCtx.globalCompositeOperation = 'destination-out';
+          persistCtx.fillStyle = 'rgba(0,0,0,' + srcAlpha + ')';
+          persistCtx.fillRect(0, 0, w, h);
+          persistCtx.globalCompositeOperation = 'source-over';
+        }
+      }
+      lastFrameMs = nowMs;
     }
 
     maskCtx.clearRect(0, 0, w, h);
