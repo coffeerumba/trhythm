@@ -60,6 +60,24 @@ TR.updatePlayBtn = function() {
         var ip = TR.state.instPlayback[i];
         ip.secPerStep = 60.0 * ip.beats / bpm / ip.count;
       }
+      // Refresh the virtual cycle so the Crash/Accent timing follows
+      if (TR.state.virtualBeats) {
+        TR.state.virtualCycle = 60.0 * TR.state.virtualBeats / bpm;
+      }
+      // Realign virtualCycleEnd to the kick's next cycle-0 boundary in the
+      // new tempo so the Crash keeps firing on the downbeat. Stretches the
+      // remaining portion of the current cycle proportionally.
+      var kickIp = null;
+      for (var j = 0; j < TR.state.instPlayback.length; j++) {
+        if (TR.state.instPlayback[j].key === 'kick') {
+          kickIp = TR.state.instPlayback[j];
+          break;
+        }
+      }
+      if (kickIp && kickIp.count) {
+        var stepsToZero = (kickIp.count - kickIp.step) % kickIp.count;
+        TR.state.virtualCycleEnd = kickIp.nextTime + stepsToZero * kickIp.secPerStep;
+      }
     }
   });
 })();
@@ -151,7 +169,10 @@ TR.startPlayback = async function() {
   // and the open-hihat cue. Synced instruments share this cycle; async
   // instruments deviate freely.
   var virtualBeats = TR.computeBeats(curPat.defaultDef);
-  var virtualCycle = 60.0 * virtualBeats / bpm;
+  // Stored on TR.state so the BPM slider can recompute it mid-playback;
+  // the scheduler reads it through TR.state every iteration.
+  TR.state.virtualBeats = virtualBeats;
+  TR.state.virtualCycle = 60.0 * virtualBeats / bpm;
 
   // Initialize per-track playback state and virtual-cycle display snapshots.
   // stepsPerCycle = virtualBeats * trackSteps / trackBeats. For sync tracks
@@ -191,7 +212,8 @@ TR.startPlayback = async function() {
   // Initial render: cycle-0 snapshots already set on every ip above.
   TR.loadPatternForPlayback(firstIdx);
 
-  var virtualCycleEnd = now + virtualCycle;
+  // Stored on TR.state so the BPM slider can realign it mid-playback.
+  TR.state.virtualCycleEnd = now + TR.state.virtualCycle;
   var virtualPattern = firstIdx;
   // virtualCycleNum is the absolute cycle index: cycle N ≡ pat N. Starting
   // at firstIdx keeps ceil(cycleNum * stepsPerCycle) consistent with the
@@ -210,13 +232,13 @@ TR.startPlayback = async function() {
     var lookAhead = Tone.now() + TR.SCHEDULER_LOOKAHEAD;
 
     // Advance the virtual track whenever its cycle ends within the lookahead
-    while (virtualCycleEnd < lookAhead) {
+    while (TR.state.virtualCycleEnd < lookAhead) {
       var nextIdx = TR.findNextPatternIndex(virtualPattern);
       if (nextIdx >= 0) {
         virtualPattern = nextIdx;
         virtualCycleNum++;
         // Accent cue on the new cycle's downbeat (voice derived from the pattern index)
-        TR.audio.playAccent(TR.getAccentMode(), virtualCycleEnd, nextIdx);
+        TR.audio.playAccent(TR.getAccentMode(), TR.state.virtualCycleEnd, nextIdx);
 
         // Compute each track's new snapshot (snapPat, snapStep, snapLinear)
         // for this virtual cycle. Using ceil() so step indices that "start"
@@ -241,7 +263,7 @@ TR.startPlayback = async function() {
         // Delay UI refresh to coincide with the new cycle's start.
         // The -1 ms margin ensures this refresh runs before any cursor
         // setTimeout scheduled at the same target time.
-        var updateDelay = Math.max(0, (virtualCycleEnd - Tone.now()) * 1000 - 1);
+        var updateDelay = Math.max(0, (TR.state.virtualCycleEnd - Tone.now()) * 1000 - 1);
         (function(idx, d, snaps) {
           setTimeout(function() {
             if (token.aborted) return;
@@ -259,7 +281,7 @@ TR.startPlayback = async function() {
           }, d);
         })(nextIdx, updateDelay, pendingSnaps);
       }
-      virtualCycleEnd += virtualCycle;
+      TR.state.virtualCycleEnd += TR.state.virtualCycle;
     }
 
     for (var i = 0; i < TR.state.instPlayback.length; i++) {

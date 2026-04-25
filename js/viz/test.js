@@ -1,39 +1,26 @@
 /* ═══════════════════════════════════════════════════════════════
    TEST — viz mode (flower WIP)
+
+   Rendering model: every frame draws the same full flower, but only the
+   parts the ball has traversed *during a hit step in this cycle* survive,
+   thanks to a destination-in mask. So branches are not "stroked piece
+   by piece" — they fade in via mask growth, and curve / radius / etc.
+   are honored end-to-end because the underlying flower draw is one
+   complete pass with drawEdge.
    ═══════════════════════════════════════════════════════════════ */
 TR.registerVizMode((function(TR) {
 var ctx, vizW, vizH;
-var leafTips = [];
-// Polyline from center to each leaf (through bend vertices), per instrument.
-// Used to animate a small ball traveling along the branches each step.
-var leafPaths = { kick: [], snare: [], hihat: [] };
-// Steps that have fired this cycle, per instrument. Cleared at cycle wrap.
-var hitSet   = { kick: {}, snare: {}, hihat: {} };
-var lastStep = { kick: -1, snare: -1, hihat: -1 };
-// Becomes true once step 0 has actually played on this play session; reset
-// on stop. Before that (during the 50 ms startup delay), contStep is
-// negative and would wrap to count-1 — which would flash the trail as if
-// a full cycle had already run.
+var leafTips  = { kick: [], snare: [], hihat: [] };
+var leafPaths = { kick: [], snare: [], hihat: [] };  // polyline per leaf (for ball position)
+var leafEdges = { kick: [], snare: [], hihat: [] };  // edge objects per leaf (for drawing)
+var hitSet           = { kick: {},    snare: {},    hihat: {} };
+var lastStep         = { kick: -1,    snare: -1,    hihat: -1 };
 var firstStepReached = { kick: false, snare: false, hihat: false };
-// Polyline nodes that are already part of the solid trail this cycle
-// (keyed by "x,y"). The next step's ball emerges from the deepest node
-// of its path that is already in this set — i.e. the branch point it
-// shares with the previously-traversed tree.
-var traversedNodes = { kick: {}, snare: {}, hihat: {} };
-var lastCurrent    = { kick: -1, snare: -1, hihat: -1 };
-
-function startIndexFromTraversed(path, set) {
-  var last = 0;
-  for (var i = 0; i < path.length; i++) {
-    if (set[path[i].x + ',' + path[i].y]) last = i;
-    else break;
-  }
-  return last;
-}
+var lastCurrent      = { kick: -1,    snare: -1,    hihat: -1 };
 
 /* ── DEBUG SLIDERS (remove this block + matching HTML in index.html
    to revert. Defaults: depthPower=1, bend=0, leafSpread=0, open=1,
-   leafLen=1, curve=0 — per instrument). ── */
+   radius=0.45, curve=0, leafLen=1 — per instrument). ── */
 function dbgNum(id, def) {
   var el = document.getElementById(id);
   if (!el) return def;
@@ -56,7 +43,6 @@ function treeDepth(t) {
   return 1 + m;
 }
 
-// Return the angle closest to ref that is equivalent to target mod 2π.
 function nearestAngle(target, ref) {
   var d = target - ref;
   while (d >  Math.PI) d -= 2 * Math.PI;
@@ -64,10 +50,8 @@ function nearestAngle(target, ref) {
   return ref + d;
 }
 
-// Draw a branch from (px,py) via the bend vertex (vx,vy) to (ex,ey).
-// curve=0: sharp L (two straight segments). curve=1: maximally rounded
-// corner (arcTo with the largest fitting radius). When the L is degenerate
-// (bend≈0, so vx≈px,py), just draws a straight line.
+// Stroke one branch from (px,py) via the bend vertex (vx,vy) to (ex,ey).
+// curve=0: sharp L; curve=1: maximally rounded corner via arcTo.
 function drawEdge(px, py, ex, ey, vx, vy, curve) {
   var d1 = Math.hypot(vx - px, vy - py);
   var d2 = Math.hypot(ex - vx, ey - vy);
@@ -89,15 +73,17 @@ function drawEdge(px, py, ex, ey, vx, vy, curve) {
   ctx.stroke();
 }
 
-function drawBranch(key, tree, cx, cy, aStart, aEnd, parentX, parentY, pAngle, depthFromRoot, totalDepth, parentPath) {
+function edgeLen(e) {
+  return Math.hypot(e.vertex.x - e.p1.x, e.vertex.y - e.p1.y) +
+         Math.hypot(e.p2.x - e.vertex.x, e.p2.y - e.vertex.y);
+}
+
+// Walk the tree to populate leafTips / leafPaths / leafEdges. NO drawing.
+function buildBranch(key, tree, cx, cy, aStart, aEnd, parentX, parentY, pAngle, depthFromRoot, totalDepth, parentPath, parentEdges) {
   var p      = depthPower(key);
   var bend   = bendAlpha(key);
   var spread = leafSpread(key);
-  var curve  = curveAmount(key);
   var leafL  = leafLength(key);
-  // Soft opening: t=0 all closed, t=1 all open. Root-side branches rise
-  // fastest; descendants also respond (more weakly) for all t in (0,1).
-  // open_d = 1 - (1-t)^(D-d): larger exponent at shallow levels → steeper rise.
   var openT  = branchOpen(key);
   var open   = 1 - Math.pow(1 - openT, totalDepth - depthFromRoot);
   var rMax   = Math.min(vizW, vizH) * radiusFrac(key);
@@ -106,8 +92,6 @@ function drawBranch(key, tree, cx, cy, aStart, aEnd, parentX, parentY, pAngle, d
   var rChild   = rMax * Math.pow((depthFromRoot+1) / totalDepth, p);
   var isLeaf   = !Array.isArray(tree);
   var rBend    = rCurrent + bend * (rChild - rCurrent);
-  // At root, collapse children toward 12 o'clock (step 0's direction).
-  // At deeper levels, collapse toward the parent's wedge mid.
   var mid = (depthFromRoot === 0) ? -Math.PI / 2 : (aStart + aEnd) / 2;
 
   if (isLeaf) {
@@ -118,19 +102,15 @@ function drawBranch(key, tree, cx, cy, aStart, aEnd, parentX, parentY, pAngle, d
       var t = (1 - spread) * centered + spread * edge;
       var aDef = nearestAngle(aStart + t * (aEnd - aStart), mid);
       var a = mid + open * (aDef - mid);
-      // Pure length scaling: extend the parent→leaf segment by leafL in
-      // its native direction (keeps leaf-segment angle fixed as leafL varies).
       var defX = cx + Math.cos(a) * rChild;
       var defY = cy + Math.sin(a) * rChild;
       var tx = parentX + leafL * (defX - parentX);
       var ty = parentY + leafL * (defY - parentY);
-      // At root, parent has no direction — anchor the L along the child's
-      // own angle (makes the first segment invisible, as expected).
       var bendAngle = (depthFromRoot === 0) ? a : pAngle;
       var vx = cx + Math.cos(bendAngle) * rBend;
       var vy = cy + Math.sin(bendAngle) * rBend;
-      drawEdge(parentX, parentY, tx, ty, vx, vy, curve);
-      leafTips.push({ x: tx, y: ty });
+
+      leafTips[key].push({ x: tx, y: ty });
       var path = parentPath.slice();
       if (Math.hypot(vx - parentX, vy - parentY) > 0.5 &&
           Math.hypot(tx - vx, ty - vy) > 0.5) {
@@ -138,6 +118,12 @@ function drawBranch(key, tree, cx, cy, aStart, aEnd, parentX, parentY, pAngle, d
       }
       path.push({ x: tx, y: ty });
       leafPaths[key].push(path);
+
+      var edges = parentEdges.slice();
+      edges.push({ p1: { x: parentX, y: parentY },
+                   vertex: { x: vx, y: vy },
+                   p2: { x: tx, y: ty } });
+      leafEdges[key].push(edges);
     }
     return;
   }
@@ -155,15 +141,43 @@ function drawBranch(key, tree, cx, cy, aStart, aEnd, parentX, parentY, pAngle, d
     var bendAngle = (depthFromRoot === 0) ? cMid : pAngle;
     var vx  = cx + Math.cos(bendAngle) * rBend;
     var vy  = cy + Math.sin(bendAngle) * rBend;
-    drawEdge(parentX, parentY, cxC, cyC, vx, vy, curve);
+
     var childPath = parentPath.slice();
     if (Math.hypot(vx - parentX, vy - parentY) > 0.5 &&
         Math.hypot(cxC - vx, cyC - vy) > 0.5) {
       childPath.push({ x: vx, y: vy });
     }
     childPath.push({ x: cxC, y: cyC });
-    drawBranch(key, tree[i], cx, cy, cAStart, cAEnd, cxC, cyC, cMid, depthFromRoot + 1, totalDepth, childPath);
+
+    var childEdges = parentEdges.slice();
+    childEdges.push({ p1: { x: parentX, y: parentY },
+                      vertex: { x: vx, y: vy },
+                      p2: { x: cxC, y: cyC } });
+
+    buildBranch(key, tree[i], cx, cy, cAStart, cAEnd, cxC, cyC, cMid, depthFromRoot + 1, totalDepth, childPath, childEdges);
   }
+}
+
+function buildGeometry(key) {
+  leafTips[key]  = [];
+  leafPaths[key] = [];
+  leafEdges[key] = [];
+  var curPat = TR.state.patterns[TR.state.currentPattern];
+  var def = (curPat && curPat[key + 'Def']) || (TR.getInstStructure && TR.getInstStructure(key));
+  if (!def || !def.tree) return;
+  var depth = treeDepth(def.tree);
+  var cx = vizW / 2;
+  var cy = vizH / 2;
+  var aStart = -Math.PI / 2;
+  var aEnd   = Math.PI * 3 / 2;
+  buildBranch(key, def.tree, cx, cy, aStart, aEnd, cx, cy, (aStart + aEnd) / 2, 0, depth, [{ x: cx, y: cy }], []);
+}
+
+function findIp(key) {
+  for (var i = 0; i < TR.state.instPlayback.length; i++) {
+    if (TR.state.instPlayback[i].key === key) return TR.state.instPlayback[i];
+  }
+  return null;
 }
 
 function pointAlongPath(path, frac) {
@@ -190,20 +204,26 @@ function pointAlongPath(path, frac) {
   return path[path.length - 1];
 }
 
-// Re-draw, in solid ink, the portion of each path that the ball has
-// already traversed during the current cycle: full polyline for completed
-// steps, partial polyline up to the ball for the current step.
-function drawTrail(key) {
+// Stroke a wide path along the ball's hit-traversed route this cycle.
+// Used as the alpha mask for the flower (combined with destination-in /
+// source-in compositing).
+// Offscreen canvas used to accumulate the combined mask before applying.
+var maskCanvas = null, maskCtx = null;
+function ensureMaskCanvas() {
+  var w = ctx.canvas.width, h = ctx.canvas.height;
+  if (!maskCanvas || maskCanvas.width !== w || maskCanvas.height !== h) {
+    maskCanvas = document.createElement('canvas');
+    maskCanvas.width = w; maskCanvas.height = h;
+    maskCtx = maskCanvas.getContext('2d');
+  }
+}
+function drawTraversalMask(key) {
   if (!TR.state.isPlaying) {
     firstStepReached[key] = false;
-    traversedNodes[key] = {};
     lastCurrent[key] = -1;
     return;
   }
-  var ip = null;
-  for (var i = 0; i < TR.state.instPlayback.length; i++) {
-    if (TR.state.instPlayback[i].key === key) { ip = TR.state.instPlayback[i]; break; }
-  }
+  var ip = findIp(key);
   if (!ip || !ip.secPerStep || !ip.count) return;
   var stepsUntilNext = Math.max(0, (ip.nextTime - Tone.now()) / ip.secPerStep);
   var contStep = ip.step - stepsUntilNext;
@@ -214,137 +234,163 @@ function drawTrail(key) {
   var stepIdx = Math.floor(contStep);
   var fracWithinStep = contStep - stepIdx;
   var current = ((stepIdx % ip.count) + ip.count) % ip.count;
-  // Cycle wrap: reset trail accumulation
-  if (lastCurrent[key] > current) traversedNodes[key] = {};
+  // Cycle wrap is implicit — at the wrap, current resets to a small index
+  // and the per-step mask logic naturally only includes 0..current-1 again.
   lastCurrent[key] = current;
-  // Mark all nodes of completed paths as traversed
-  for (var i = 0; i < current; i++) {
-    var p = leafPaths[key][i];
-    if (!p) continue;
-    for (var j = 0; j < p.length; j++) {
-      traversedNodes[key][p[j].x + ',' + p[j].y] = true;
-    }
-  }
 
+  var flat = TR.state[key + 'Flat'];
+  var curve = curveAmount(key);
+
+  // Swap ctx to maskCtx so all drawEdge calls populate the offscreen mask.
+  var origCtx = ctx;
+  ctx = maskCtx;
   ctx.strokeStyle = '#000';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
   ctx.setLineDash([]);
 
-  function drawFull(path) {
-    if (!path || path.length < 2) return;
-    ctx.beginPath();
-    ctx.moveTo(path[0].x, path[0].y);
-    for (var i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
-    ctx.stroke();
-  }
-  function drawPartial(path, frac) {
-    if (!path || path.length < 2 || frac <= 0) return;
-    var totalLen = 0, segLens = [];
-    for (var i = 1; i < path.length; i++) {
-      var l = Math.hypot(path[i].x - path[i-1].x, path[i].y - path[i-1].y);
-      segLens.push(l);
-      totalLen += l;
+  // Full edges of completed hit steps
+  for (var i = 0; i < current; i++) {
+    if (flat && !flat[i]) continue;
+    var edges = leafEdges[key][i];
+    if (!edges) continue;
+    for (var j = 0; j < edges.length; j++) {
+      var e = edges[j];
+      drawEdge(e.p1.x, e.p1.y, e.p2.x, e.p2.y, e.vertex.x, e.vertex.y, curve);
     }
-    if (totalLen === 0) return;
-    var target = frac * totalLen;
-    ctx.beginPath();
-    ctx.moveTo(path[0].x, path[0].y);
-    var acc = 0;
-    for (var i = 0; i < segLens.length; i++) {
-      if (acc + segLens[i] <= target) {
-        ctx.lineTo(path[i+1].x, path[i+1].y);
-        acc += segLens[i];
-      } else {
-        var segFrac = segLens[i] > 0 ? (target - acc) / segLens[i] : 0;
-        ctx.lineTo(
-          path[i].x + segFrac * (path[i+1].x - path[i].x),
-          path[i].y + segFrac * (path[i+1].y - path[i].y)
-        );
-        break;
+  }
+  // Partial mask along current step's edges, only when this step is a hit
+  if (flat && flat[current]) {
+    var edges2 = leafEdges[key][current];
+    if (edges2) {
+      // Skip leading edges whose endpoints are already in any prior hit step
+      var traversed = {};
+      for (var i = 0; i < current; i++) {
+        if (flat && !flat[i]) continue;
+        var p = leafPaths[key][i];
+        if (!p) continue;
+        for (var j = 0; j < p.length; j++) {
+          traversed[p[j].x + ',' + p[j].y] = true;
+        }
+      }
+      var skip = 0;
+      for (var i = 0; i < edges2.length; i++) {
+        var p2 = edges2[i].p2;
+        if (traversed[p2.x + ',' + p2.y]) skip = i + 1;
+        else break;
+      }
+      var totalAll = 0;
+      var lensAll = [];
+      for (var i = 0; i < edges2.length; i++) {
+        var l = edgeLen(edges2[i]);
+        lensAll.push(l);
+        totalAll += l;
+      }
+      var skippedLen = 0;
+      for (var i = 0; i < skip; i++) skippedLen += lensAll[i];
+      var ballAbsLen = fracWithinStep * totalAll;
+      var ballRem = ballAbsLen - skippedLen;
+      var fracRem = (totalAll - skippedLen) > 0 ? Math.max(0, ballRem / (totalAll - skippedLen)) : 0;
+
+      // Stroke remainingEdges up to fracRem. Reverse the array AND swap
+      // p1/p2 within each edge so the trail grows from the leaf inward
+      // toward the LCA — matching the ball's leaf→center motion.
+      var fwdRem = edges2.slice(skip);
+      var remEdges = [];
+      for (var ri = fwdRem.length - 1; ri >= 0; ri--) {
+        var origE = fwdRem[ri];
+        remEdges.push({ p1: origE.p2, vertex: origE.vertex, p2: origE.p1 });
+      }
+      var remTotal = 0;
+      var remLens = [];
+      for (var i = 0; i < remEdges.length; i++) {
+        var l = edgeLen(remEdges[i]);
+        remLens.push(l);
+        remTotal += l;
+      }
+      if (remTotal > 0 && fracRem > 0) {
+        var target = fracRem * remTotal;
+        var acc = 0;
+        for (var i = 0; i < remEdges.length; i++) {
+          if (acc + remLens[i] <= target) {
+            var e = remEdges[i];
+            drawEdge(e.p1.x, e.p1.y, e.p2.x, e.p2.y, e.vertex.x, e.vertex.y, curve);
+            acc += remLens[i];
+          } else {
+            // Partial edge: straight L (mask ends mid-edge — visual snap is
+            // fine for the mask since the flower under it can stay curved)
+            var e = remEdges[i];
+            var l1 = Math.hypot(e.vertex.x - e.p1.x, e.vertex.y - e.p1.y);
+            var l2 = Math.hypot(e.p2.x - e.vertex.x, e.p2.y - e.vertex.y);
+            var remaining = target - acc;
+            ctx.beginPath();
+            ctx.moveTo(e.p1.x, e.p1.y);
+            if (remaining <= l1) {
+              var f = l1 > 0 ? remaining / l1 : 0;
+              ctx.lineTo(e.p1.x + f * (e.vertex.x - e.p1.x),
+                         e.p1.y + f * (e.vertex.y - e.p1.y));
+            } else {
+              ctx.lineTo(e.vertex.x, e.vertex.y);
+              var f2 = l2 > 0 ? (remaining - l1) / l2 : 0;
+              ctx.lineTo(e.vertex.x + f2 * (e.p2.x - e.vertex.x),
+                         e.vertex.y + f2 * (e.p2.y - e.vertex.y));
+            }
+            ctx.stroke();
+            break;
+          }
+        }
       }
     }
-    ctx.stroke();
   }
-
-  for (var i = 0; i < current; i++) drawFull(leafPaths[key][i]);
-  // Current step: start from the deepest node shared with the trail so far
-  var curPath = leafPaths[key][current];
-  if (curPath) {
-    var startIdx = startIndexFromTraversed(curPath, traversedNodes[key]);
-    drawPartial(curPath.slice(startIdx), fracWithinStep);
-  }
+  // Restore main ctx
+  ctx = origCtx;
 }
 
-function drawBall(key) {
-  if (!TR.state.isPlaying) return;
-  var ip = null;
-  for (var i = 0; i < TR.state.instPlayback.length; i++) {
-    if (TR.state.instPlayback[i].key === key) { ip = TR.state.instPlayback[i]; break; }
-  }
-  if (!ip || !ip.secPerStep || !ip.count) return;
-  var stepsUntilNext = Math.max(0, (ip.nextTime - Tone.now()) / ip.secPerStep);
-  var contStep = ip.step - stepsUntilNext;
-  if (contStep < 0 && !firstStepReached[key]) return;
-  var stepIdx = Math.floor(contStep);
-  var fracWithinStep = contStep - stepIdx;
-  stepIdx = ((stepIdx % ip.count) + ip.count) % ip.count;
-  var path = leafPaths[key][stepIdx];
-  if (!path) return;
-  var startIdx = startIndexFromTraversed(path, traversedNodes[key]);
-  var pos = pointAlongPath(path.slice(startIdx), fracWithinStep);
-  if (!pos) return;
-  ctx.fillStyle = '#ffcc00';
-  ctx.beginPath();
-  ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-function currentPlaybackStep(key) {
-  if (!TR.state.isPlaying) return -1;
-  var ip = null;
-  for (var i = 0; i < TR.state.instPlayback.length; i++) {
-    if (TR.state.instPlayback[i].key === key) { ip = TR.state.instPlayback[i]; break; }
-  }
-  if (!ip || !ip.secPerStep || !ip.count) return -1;
-  var stepsUntilNext = Math.max(0, (ip.nextTime - Tone.now()) / ip.secPerStep);
-  var contStep = ip.step - stepsUntilNext;
-  return ((Math.floor(contStep) % ip.count) + ip.count) % ip.count;
-}
-
-function drawInstrumentFlower(key) {
-  // Prefer current pattern's def so flat length always matches the tree
-  var curPat = TR.state.patterns[TR.state.currentPattern];
-  var def = (curPat && curPat[key + 'Def']) || (TR.getInstStructure && TR.getInstStructure(key));
-  if (!def || !def.tree) return;
-  var flat = TR.state[key + 'Flat'];
-  var color = TR.rgbCSS(TR.INST_COLORS[key]);
-  var playingStep = currentPlaybackStep(key);
-
-  var depth = treeDepth(def.tree);
-  var cx = vizW / 2;
-  var cy = vizH / 2;
-  var aStart = -Math.PI / 2;
-  var aEnd   = Math.PI * 3 / 2;
-
+// Stroke every edge of the flower (always full, in solid black). Combined
+// with the mask via source-in composite, only mask-region pixels survive.
+function drawAllEdges(key) {
   ctx.strokeStyle = '#000';
   ctx.lineWidth = 1;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  ctx.setLineDash([3, 3]);
-  leafTips = [];
-  leafPaths[key] = [];
-  drawBranch(key, def.tree, cx, cy, aStart, aEnd, cx, cy, (aStart + aEnd) / 2, 0, depth, [{ x: cx, y: cy }]);
   ctx.setLineDash([]);
+  var curve = curveAmount(key);
+  var seen = {};
+  for (var leafIdx = 0; leafIdx < leafEdges[key].length; leafIdx++) {
+    var edges = leafEdges[key][leafIdx];
+    for (var i = 0; i < edges.length; i++) {
+      var e = edges[i];
+      var k = e.p1.x + ',' + e.p1.y + '|' + e.p2.x + ',' + e.p2.y;
+      if (seen[k]) continue;
+      seen[k] = true;
+      drawEdge(e.p1.x, e.p1.y, e.p2.x, e.p2.y, e.vertex.x, e.vertex.y, curve);
+    }
+  }
+}
 
-  // Small black dot at the flower center
+function drawCenterDot() {
   ctx.fillStyle = '#000';
   ctx.beginPath();
-  ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+  ctx.arc(vizW / 2, vizH / 2, 4, 0, Math.PI * 2);
   ctx.fill();
+}
 
-  // Circles only on active (on) steps, in track color.
-  // Steps that have fired this cycle stay filled; others are outlines.
-  // Cycle wrap (step index decreases) or stop resets the accumulation.
+function drawMarkers(key) {
+  var color = TR.rgbCSS(TR.INST_COLORS[key]);
+  var flat = TR.state[key + 'Flat'];
+  var ip = findIp(key);
+
+  // Update hitSet: mark a step as fired the moment it plays this cycle.
+  // Note: at the audio tail of a cycle (e.g. step 15) the scheduler has
+  // already advanced ip.step to 0, so contStep goes negative — must use
+  // mod arithmetic to wrap back to count-1 instead of treating it as -1.
+  var playingStep = -1;
+  if (TR.state.isPlaying && ip && ip.secPerStep && ip.count && firstStepReached[key]) {
+    var stepsUntilNext = Math.max(0, (ip.nextTime - Tone.now()) / ip.secPerStep);
+    var contStep = ip.step - stepsUntilNext;
+    playingStep = ((Math.floor(contStep) % ip.count) + ip.count) % ip.count;
+  }
   if (playingStep < 0 || (lastStep[key] >= 0 && playingStep < lastStep[key])) {
     hitSet[key] = {};
   }
@@ -354,26 +400,58 @@ function drawInstrumentFlower(key) {
   lastStep[key] = playingStep;
 
   if (!flat) return;
-  ctx.strokeStyle = color;
   ctx.fillStyle = color;
-  ctx.lineWidth = 1.5;
   var tipR = Math.max(3, Math.min(vizW, vizH) * 0.018);
-  for (var i = 0; i < leafTips.length; i++) {
+  for (var i = 0; i < leafTips[key].length; i++) {
     if (!flat[i]) continue;
+    if (!hitSet[key][i]) continue;
     ctx.beginPath();
-    ctx.arc(leafTips[i].x, leafTips[i].y, tipR, 0, Math.PI * 2);
-    if (hitSet[key][i]) {
-      ctx.setLineDash([]);
-      ctx.fill();
-    } else {
-      ctx.setLineDash([2, 2]);
-      ctx.stroke();
-    }
+    ctx.arc(leafTips[key][i].x, leafTips[key][i].y, tipR, 0, Math.PI * 2);
+    ctx.fill();
   }
-  ctx.setLineDash([]);
 }
 
-/* ── DEBUG SLIDERS: live value readout (remove with the block above) ── */
+function drawBall(key) {
+  if (!TR.state.isPlaying) return;
+  var ip = findIp(key);
+  if (!ip || !ip.secPerStep || !ip.count) return;
+  var stepsUntilNext = Math.max(0, (ip.nextTime - Tone.now()) / ip.secPerStep);
+  var contStep = ip.step - stepsUntilNext;
+  if (contStep < 0 && !firstStepReached[key]) return;
+  var stepIdx = Math.floor(contStep);
+  var fracWithinStep = contStep - stepIdx;
+  stepIdx = ((stepIdx % ip.count) + ip.count) % ip.count;
+  var flat = TR.state[key + 'Flat'];
+  if (flat && !flat[stepIdx]) return;  // hide ball on non-hit branches
+  var path = leafPaths[key][stepIdx];
+  if (!path) return;
+  // Compute LCA: nodes already covered by previous hit steps in this cycle.
+  var traversed = {};
+  for (var i = 0; i < stepIdx; i++) {
+    if (flat && !flat[i]) continue;
+    var p = leafPaths[key][i];
+    if (!p) continue;
+    for (var j = 0; j < p.length; j++) {
+      traversed[p[j].x + ',' + p[j].y] = true;
+    }
+  }
+  var startIdx = 0;
+  for (var i = 0; i < path.length; i++) {
+    if (traversed[path[i].x + ',' + path[i].y]) startIdx = i;
+    else break;
+  }
+  // Ball travels from the leaf tip inward to the LCA (or center for step 0).
+  // Reverse the non-traversed portion so frac=0 sits at the leaf.
+  var pathSlice = path.slice(startIdx).slice().reverse();
+  var pos = pointAlongPath(pathSlice, fracWithinStep);
+  if (!pos) return;
+  ctx.fillStyle = '#ffcc00';
+  ctx.beginPath();
+  ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/* ── DEBUG SLIDERS: live value readout ── */
 function bindSlider(inputId, displayId, digits) {
   var input = document.getElementById(inputId);
   var display = document.getElementById(displayId);
@@ -408,14 +486,42 @@ return {
     ctx = _ctx;
     vizW = w;
     vizH = h;
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, w, h);
-    drawInstrumentFlower('kick');
-    drawInstrumentFlower('snare');
-    drawTrail('kick');
-    drawTrail('snare');
+
+    ctx.clearRect(0, 0, w, h);
+    ensureMaskCanvas();
+    maskCtx.clearRect(0, 0, w, h);
+
+    // 1. Geometry
+    buildGeometry('kick');
+    buildGeometry('snare');
+
+    // 2. Build the combined mask offscreen (one image with both
+    //    instruments' hit-traversed routes painted opaque)
+    drawTraversalMask('kick');
+    drawTraversalMask('snare');
+
+    // 3. Draw the FULL flower for both instruments on the main canvas
+    drawAllEdges('kick');
+    drawAllEdges('snare');
+
+    // 4. Apply the offscreen mask in one shot — keeps flower pixels only
+    //    where the mask is opaque
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.drawImage(maskCanvas, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+
+    // 5. Decorations always visible
+    drawCenterDot();
+    drawMarkers('kick');
+    drawMarkers('snare');
     drawBall('kick');
     drawBall('snare');
+
+    // 6. Fill white behind everything
+    ctx.globalCompositeOperation = 'destination-over';
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'source-over';
   },
   onHit: function(_key, _step, _level) {
     // placeholder
