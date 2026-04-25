@@ -209,12 +209,32 @@ function pointAlongPath(path, frac) {
 // source-in compositing).
 // Offscreen canvas used to accumulate the combined mask before applying.
 var maskCanvas = null, maskCtx = null;
+// Frame canvas: this cycle's masked flower + markers, before compositing onto persist.
+var frameCanvas = null, frameCtx = null;
+// Persist canvas: accumulates every cycle's render so previous cycles stay visible.
+var persistCanvas = null, persistCtx = null;
 function ensureMaskCanvas() {
   var w = ctx.canvas.width, h = ctx.canvas.height;
   if (!maskCanvas || maskCanvas.width !== w || maskCanvas.height !== h) {
     maskCanvas = document.createElement('canvas');
     maskCanvas.width = w; maskCanvas.height = h;
     maskCtx = maskCanvas.getContext('2d');
+  }
+}
+function ensureFrameCanvas() {
+  var w = ctx.canvas.width, h = ctx.canvas.height;
+  if (!frameCanvas || frameCanvas.width !== w || frameCanvas.height !== h) {
+    frameCanvas = document.createElement('canvas');
+    frameCanvas.width = w; frameCanvas.height = h;
+    frameCtx = frameCanvas.getContext('2d');
+  }
+}
+function ensurePersistCanvas() {
+  var w = ctx.canvas.width, h = ctx.canvas.height;
+  if (!persistCanvas || persistCanvas.width !== w || persistCanvas.height !== h) {
+    persistCanvas = document.createElement('canvas');
+    persistCanvas.width = w; persistCanvas.height = h;
+    persistCtx = persistCanvas.getContext('2d');
   }
 }
 function drawTraversalMask(key) {
@@ -489,35 +509,51 @@ return {
 
     ctx.clearRect(0, 0, w, h);
     ensureMaskCanvas();
+    ensureFrameCanvas();
+    ensurePersistCanvas();
+
+    // Reset accumulation when not playing — each play starts with a clean canvas.
+    if (!TR.state.isPlaying) {
+      persistCtx.clearRect(0, 0, w, h);
+    }
+
     maskCtx.clearRect(0, 0, w, h);
+    frameCtx.clearRect(0, 0, w, h);
 
     // 1. Geometry
     buildGeometry('kick');
     buildGeometry('snare');
 
-    // 2. Build the combined mask offscreen (one image with both
-    //    instruments' hit-traversed routes painted opaque)
+    // 2. Build the current cycle's traversal mask offscreen
     drawTraversalMask('kick');
     drawTraversalMask('snare');
 
-    // 3. Draw the FULL flower for both instruments on the main canvas
+    // 3. Render this cycle's masked flower + markers onto frameCanvas
+    var origCtx = ctx;
+    ctx = frameCtx;
     drawAllEdges('kick');
     drawAllEdges('snare');
-
-    // 4. Apply the offscreen mask in one shot — keeps flower pixels only
-    //    where the mask is opaque
     ctx.globalCompositeOperation = 'destination-in';
     ctx.drawImage(maskCanvas, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
-
-    // 5. Decorations always visible
-    drawCenterDot();
     drawMarkers('kick');
     drawMarkers('snare');
+    ctx = origCtx;
+
+    // 4. Accumulate this frame onto persistCanvas (additive — previous
+    //    cycles' strokes and markers remain even after the current cycle
+    //    wraps and the mask resets)
+    persistCtx.drawImage(frameCanvas, 0, 0);
+
+    // 5. Display the accumulated image
+    ctx.drawImage(persistCanvas, 0, 0);
+
+    // 6. Transient decorations on main only (not persisted)
+    drawCenterDot();
     drawBall('kick');
     drawBall('snare');
 
-    // 6. Fill white behind everything
+    // 7. Fill white behind everything
     ctx.globalCompositeOperation = 'destination-over';
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, w, h);
