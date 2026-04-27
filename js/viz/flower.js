@@ -403,7 +403,7 @@ function drawAnimation(key, anim) {
   var frac, ballColor;
   if (elapsed < anim.forwardSec) {
     frac      = elapsed / anim.forwardSec;
-    ballColor = '#ffcc00';
+    ballColor = '#000';
   } else if (elapsed < anim.forwardSec + anim.reverseSec) {
     frac      = 1 - (elapsed - anim.forwardSec) / anim.reverseSec;
     ballColor = '#fff';
@@ -423,12 +423,16 @@ function drawAnimation(key, anim) {
   ctx.arc(anim.poly[0].x, anim.poly[0].y, tipR, 0, Math.PI * 2);
   ctx.fill();
 
-  // Ball: yellow heading inward, white heading back out.
+  // Ball: yellow heading inward, white heading back out, both with a
+  // black outline so they read clearly against any background.
   var pos = pointAt(anim.poly, anim.lens, frac);
-  ctx.fillStyle = ballColor;
   ctx.beginPath();
   ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
+  ctx.fillStyle = ballColor;
   ctx.fill();
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 1;
+  ctx.stroke();
 }
 
 // Returns 0..1 progress through the current beat-level leaf step of the
