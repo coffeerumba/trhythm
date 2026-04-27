@@ -204,42 +204,65 @@ function pointAlongPath(path, frac) {
   return path[path.length - 1];
 }
 
-// Stroke a wide path along the ball's hit-traversed route this cycle.
-// Used as the alpha mask for the flower (combined with destination-in /
-// source-in compositing).
-// Offscreen canvas used to accumulate the combined mask before applying.
-var maskCanvas = null, maskCtx = null;
-// Frame canvas: this cycle's masked flower + markers, before compositing onto persist.
+// Per-instrument current/previous mask canvases. Each frame:
+//   delta[key] = mask[key] - prevMask[key]   (only newly traversed pixels)
+//   combined delta = delta.kick OR delta.snare OR delta.hihat
+// The combined delta is what we paint into persist this frame, so each
+// stroke is added once at full alpha and then decays from then on.
+var instMaskCanvas = { kick: null, snare: null, hihat: null };
+var instMaskCtx    = { kick: null, snare: null, hihat: null };
+var instPrevCanvas = { kick: null, snare: null, hihat: null };
+var instPrevCtx    = { kick: null, snare: null, hihat: null };
+// Combined delta + a scratch temp used while computing each instrument's delta.
+var deltaCanvas = null, deltaCtx = null;
+var tempCanvas  = null, tempCtx  = null;
+// Frame canvas: flower edges masked by combined delta, before compositing onto persist.
 var frameCanvas = null, frameCtx = null;
-// Persist canvas: accumulates every cycle's render. Each frame the alpha is
-// decayed so a stroke / marker fades to ~invisible over one virtual cycle.
+// Persist canvas: holds every drawn pixel. Decays each frame so strokes / markers
+// fade to ~invisible after one virtual cycle from the moment they were laid down.
 var persistCanvas = null, persistCtx = null;
 var lastFrameMs = null;
-function ensureMaskCanvas() {
+// Per-cycle marker bookkeeping: we draw each (key, step) marker exactly once
+// (when its step first becomes the playing step in a given cycle), so the
+// marker too begins fading from its own draw moment.
+var markerDrawn = { kick: {}, snare: {}, hihat: {} };
+var lastPlayingStep = { kick: -1, snare: -1, hihat: -1 };
+
+function makeOffscreen(w, h) {
+  var c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  return c;
+}
+function ensureMaskCanvases() {
   var w = ctx.canvas.width, h = ctx.canvas.height;
-  if (!maskCanvas || maskCanvas.width !== w || maskCanvas.height !== h) {
-    maskCanvas = document.createElement('canvas');
-    maskCanvas.width = w; maskCanvas.height = h;
-    maskCtx = maskCanvas.getContext('2d');
+  ['kick', 'snare', 'hihat'].forEach(function(key) {
+    if (!instMaskCanvas[key] || instMaskCanvas[key].width !== w || instMaskCanvas[key].height !== h) {
+      instMaskCanvas[key] = makeOffscreen(w, h);
+      instMaskCtx[key]    = instMaskCanvas[key].getContext('2d');
+      instPrevCanvas[key] = makeOffscreen(w, h);
+      instPrevCtx[key]    = instPrevCanvas[key].getContext('2d');
+    }
+  });
+  if (!deltaCanvas || deltaCanvas.width !== w || deltaCanvas.height !== h) {
+    deltaCanvas = makeOffscreen(w, h); deltaCtx = deltaCanvas.getContext('2d');
+    tempCanvas  = makeOffscreen(w, h); tempCtx  = tempCanvas.getContext('2d');
   }
 }
 function ensureFrameCanvas() {
   var w = ctx.canvas.width, h = ctx.canvas.height;
   if (!frameCanvas || frameCanvas.width !== w || frameCanvas.height !== h) {
-    frameCanvas = document.createElement('canvas');
-    frameCanvas.width = w; frameCanvas.height = h;
+    frameCanvas = makeOffscreen(w, h);
     frameCtx = frameCanvas.getContext('2d');
   }
 }
 function ensurePersistCanvas() {
   var w = ctx.canvas.width, h = ctx.canvas.height;
   if (!persistCanvas || persistCanvas.width !== w || persistCanvas.height !== h) {
-    persistCanvas = document.createElement('canvas');
-    persistCanvas.width = w; persistCanvas.height = h;
+    persistCanvas = makeOffscreen(w, h);
     persistCtx = persistCanvas.getContext('2d');
   }
 }
-function drawTraversalMask(key) {
+function drawTraversalMask(key, targetCtx) {
   if (!TR.state.isPlaying) {
     firstStepReached[key] = false;
     lastCurrent[key] = -1;
@@ -263,9 +286,9 @@ function drawTraversalMask(key) {
   var flat = TR.state[key + 'Flat'];
   var curve = curveAmount(key);
 
-  // Swap ctx to maskCtx so all drawEdge calls populate the offscreen mask.
+  // Swap ctx to the per-instrument mask ctx so drawEdge populates that canvas.
   var origCtx = ctx;
-  ctx = maskCtx;
+  ctx = targetCtx;
   ctx.strokeStyle = '#000';
   ctx.lineWidth = 4;
   ctx.lineCap = 'round';
@@ -398,39 +421,42 @@ function drawCenterDot() {
   ctx.fill();
 }
 
-function drawMarkers(key) {
-  var color = TR.rgbCSS(TR.INST_COLORS[key]);
-  var flat = TR.state[key + 'Flat'];
+// Draw the marker for the current playing step exactly once per cycle, the
+// first frame after that step becomes the playing step. Subsequent frames in
+// the same cycle don't redraw it, so persistCanvas's decay can fade it out
+// from the moment it was laid down.
+function drawNewMarker(key) {
+  if (!TR.state.isPlaying || !firstStepReached[key]) {
+    markerDrawn[key] = {};
+    lastPlayingStep[key] = -1;
+    return;
+  }
   var ip = findIp(key);
+  if (!ip || !ip.secPerStep || !ip.count) return;
+  var stepsUntilNext = Math.max(0, (ip.nextTime - Tone.now()) / ip.secPerStep);
+  var contStep = ip.step - stepsUntilNext;
+  var playingStep = ((Math.floor(contStep) % ip.count) + ip.count) % ip.count;
 
-  // Update hitSet: mark a step as fired the moment it plays this cycle.
-  // Note: at the audio tail of a cycle (e.g. step 15) the scheduler has
-  // already advanced ip.step to 0, so contStep goes negative — must use
-  // mod arithmetic to wrap back to count-1 instead of treating it as -1.
-  var playingStep = -1;
-  if (TR.state.isPlaying && ip && ip.secPerStep && ip.count && firstStepReached[key]) {
-    var stepsUntilNext = Math.max(0, (ip.nextTime - Tone.now()) / ip.secPerStep);
-    var contStep = ip.step - stepsUntilNext;
-    playingStep = ((Math.floor(contStep) % ip.count) + ip.count) % ip.count;
+  // Cycle-wrap detection: a big drop means the cycle wrapped — clear the
+  // per-cycle "drawn" set so this cycle's markers can fire again.
+  if (lastPlayingStep[key] >= 0 &&
+      playingStep < lastPlayingStep[key] &&
+      (lastPlayingStep[key] - playingStep) > ip.count / 2) {
+    markerDrawn[key] = {};
   }
-  if (playingStep < 0 || (lastStep[key] >= 0 && playingStep < lastStep[key])) {
-    hitSet[key] = {};
-  }
-  if (flat && playingStep >= 0 && flat[playingStep]) {
-    hitSet[key][playingStep] = true;
-  }
-  lastStep[key] = playingStep;
+  lastPlayingStep[key] = playingStep;
 
-  if (!flat) return;
-  ctx.fillStyle = color;
+  var flat = TR.state[key + 'Flat'];
+  if (!flat || !flat[playingStep] || markerDrawn[key][playingStep]) return;
+  markerDrawn[key][playingStep] = true;
+
+  var tip = leafTips[key][playingStep];
+  if (!tip) return;
+  ctx.fillStyle = TR.rgbCSS(TR.INST_COLORS[key]);
   var tipR = Math.max(3, Math.min(vizW, vizH) * 0.018);
-  for (var i = 0; i < leafTips[key].length; i++) {
-    if (!flat[i]) continue;
-    if (!hitSet[key][i]) continue;
-    ctx.beginPath();
-    ctx.arc(leafTips[key][i].x, leafTips[key][i].y, tipR, 0, Math.PI * 2);
-    ctx.fill();
-  }
+  ctx.beginPath();
+  ctx.arc(tip.x, tip.y, tipR, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function drawBall(key) {
@@ -482,7 +508,7 @@ function bindSlider(inputId, displayId, digits) {
   input.addEventListener('input', update);
   update();
 }
-['kick', 'snare'].forEach(function(k) {
+['kick', 'snare', 'hihat'].forEach(function(k) {
   bindSlider('test-' + k + '-depth-curve', 'test-' + k + '-depth-curve-val', 2);
   bindSlider('test-' + k + '-bend',        'test-' + k + '-bend-val',        2);
   bindSlider('test-' + k + '-leaf-spread', 'test-' + k + '-leaf-spread-val', 2);
@@ -510,18 +536,26 @@ return {
     vizH = h;
 
     ctx.clearRect(0, 0, w, h);
-    ensureMaskCanvas();
+    ensureMaskCanvases();
     ensureFrameCanvas();
     ensurePersistCanvas();
 
-    // Reset accumulation when not playing — each play starts with a clean canvas.
+    var keys = ['kick', 'snare', 'hihat'];
+
+    // Reset everything when not playing so each play starts clean.
     if (!TR.state.isPlaying) {
       persistCtx.clearRect(0, 0, w, h);
       lastFrameMs = null;
+      for (var k = 0; k < keys.length; k++) {
+        instPrevCtx[keys[k]].clearRect(0, 0, w, h);
+        markerDrawn[keys[k]] = {};
+        lastPlayingStep[keys[k]] = -1;
+      }
     } else {
-      // Time-based exponential alpha decay: a pixel left alone fades to ~2%
-      // after one virtual cycle, so each stroke / marker has a one-cycle
-      // visible lifetime even though new ones keep getting layered on top.
+      // Time-based exponential alpha decay on persist: a pixel left alone
+      // fades to ~2% one virtual cycle after it was last drawn. Because we
+      // only paint NEW pixels into persist each frame (see step 4 below),
+      // each stroke / marker fades independently from its own draw moment.
       var nowMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
       var cycle = TR.state.virtualCycle;
       if (lastFrameMs !== null && cycle > 0) {
@@ -537,43 +571,74 @@ return {
       lastFrameMs = nowMs;
     }
 
-    maskCtx.clearRect(0, 0, w, h);
     frameCtx.clearRect(0, 0, w, h);
+    deltaCtx.clearRect(0, 0, w, h);
 
     // 1. Geometry
-    buildGeometry('kick');
-    buildGeometry('snare');
+    for (var k = 0; k < keys.length; k++) buildGeometry(keys[k]);
 
-    // 2. Build the current cycle's traversal mask offscreen
-    drawTraversalMask('kick');
-    drawTraversalMask('snare');
+    // 2. Per-instrument: build current mask, detect cycle wrap, compute
+    //    delta = current - prev, OR delta into combined deltaCanvas, then
+    //    save current as prev for next frame.
+    for (var k = 0; k < keys.length; k++) {
+      var key = keys[k];
+      var ip = findIp(key);
+      var count = ip ? ip.count : 0;
+      var prevCurrent = lastCurrent[key];
+      instMaskCtx[key].clearRect(0, 0, w, h);
+      drawTraversalMask(key, instMaskCtx[key]);
+      var curCurrent = lastCurrent[key];
+      // Wrap = significant drop in current step (guards against jitter).
+      var wrapped = (prevCurrent >= 0 && curCurrent >= 0 &&
+                     curCurrent < prevCurrent &&
+                     count > 0 && (prevCurrent - curCurrent) > count / 2);
+      if (wrapped) {
+        instPrevCtx[key].clearRect(0, 0, w, h);
+      }
+      // Per-instrument delta into temp.
+      tempCtx.globalCompositeOperation = 'source-over';
+      tempCtx.clearRect(0, 0, w, h);
+      tempCtx.drawImage(instMaskCanvas[key], 0, 0);
+      tempCtx.globalCompositeOperation = 'destination-out';
+      tempCtx.drawImage(instPrevCanvas[key], 0, 0);
+      tempCtx.globalCompositeOperation = 'source-over';
+      // OR into combined delta.
+      deltaCtx.drawImage(tempCanvas, 0, 0);
+      // Save current → prev for next frame.
+      instPrevCtx[key].clearRect(0, 0, w, h);
+      instPrevCtx[key].drawImage(instMaskCanvas[key], 0, 0);
+    }
 
-    // 3. Render this cycle's masked flower + markers onto frameCanvas
+    // 3. Render flower edges (all instruments) onto frameCanvas, then mask
+    //    with combined delta so only newly traversed pixels remain.
     var origCtx = ctx;
     ctx = frameCtx;
-    drawAllEdges('kick');
-    drawAllEdges('snare');
+    for (var k = 0; k < keys.length; k++) drawAllEdges(keys[k]);
     ctx.globalCompositeOperation = 'destination-in';
-    ctx.drawImage(maskCanvas, 0, 0);
+    ctx.drawImage(deltaCanvas, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
-    drawMarkers('kick');
-    drawMarkers('snare');
     ctx = origCtx;
 
-    // 4. Accumulate this frame onto persistCanvas (additive — previous
-    //    cycles' strokes and markers remain even after the current cycle
-    //    wraps and the mask resets)
+    // 4. Composite frame (only the new edge pixels) onto persist. Existing
+    //    decayed pixels in persist keep their decay; new pixels go in at
+    //    full alpha and start their own one-cycle fade.
     persistCtx.drawImage(frameCanvas, 0, 0);
 
-    // 5. Display the accumulated image
+    // 5. Draw the marker for any step that just became the playing step
+    //    directly onto persist. Each marker is laid down once per cycle,
+    //    then fades naturally with the rest of persist.
+    ctx = persistCtx;
+    for (var k = 0; k < keys.length; k++) drawNewMarker(keys[k]);
+    ctx = origCtx;
+
+    // 6. Display the accumulated image.
     ctx.drawImage(persistCanvas, 0, 0);
 
-    // 6. Transient decorations on main only (not persisted)
+    // 7. Transient decorations on main only (not persisted).
     drawCenterDot();
-    drawBall('kick');
-    drawBall('snare');
+    for (var k = 0; k < keys.length; k++) drawBall(keys[k]);
 
-    // 7. Fill white behind everything
+    // 8. Fill white behind everything.
     ctx.globalCompositeOperation = 'destination-over';
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, w, h);
