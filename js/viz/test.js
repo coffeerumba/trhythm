@@ -5,9 +5,14 @@
    fires for step k we register an animation: a yellow ball heads from
    the leaf inward to the LCA over one step's duration (drawing the
    trail behind it), then turns into a white eraser ball that retreats
-   back to the leaf over half a virtual cycle (the visible trail
-   retracts along with it). The marker stays solid for the whole
+   back to the leaf over half of THIS TRACK'S own cycle (the visible
+   trail retracts along with it). The marker stays solid for the whole
    lifespan and blinks out the instant the eraser reaches the leaf.
+
+   Each track's geometry, hit lookup, and cycle length are sourced from
+   the track's own ip.currentPattern + ip.secPerStep + leaves count, not
+   from the virtual pattern, so polymeter (拍同期) tracks stay aligned
+   with their own audio.
 
    Each frame we just clearRect, rebuild geometry, then redraw every
    active animation at its current elapsed time. No persist canvas, no
@@ -161,11 +166,23 @@ function buildBranch(key, tree, cx, cy, aStart, aEnd, parentX, parentY, pAngle, 
   }
 }
 
+// While playing, each track's flower comes from THAT track's own current
+// pattern (ip.currentPattern), not the virtual pattern — so an async track
+// shows its own structure even when its pattern lags behind the virtual one.
+// When stopped, fall back to the visible virtual pattern for the static view.
+function getTrackPat(key) {
+  if (TR.state.isPlaying) {
+    var ip = findIp(key);
+    if (ip) return TR.state.patterns[ip.currentPattern];
+  }
+  return TR.state.patterns[TR.state.currentPattern];
+}
+
 function buildGeometry(key) {
   leafTips[key]  = [];
   leafPaths[key] = [];
   leafEdges[key] = [];
-  var curPat = TR.state.patterns[TR.state.currentPattern];
+  var curPat = getTrackPat(key);
   var def = (curPat && curPat[key + 'Def']) || (TR.getInstStructure && TR.getInstStructure(key));
   if (!def || !def.tree) return;
   var depth = treeDepth(def.tree);
@@ -214,7 +231,7 @@ function pointAlongPath(path, frac) {
 //     a solid trail behind it.
 //   - reverse phase (secPerStep .. secPerStep+reverseSec): white "eraser"
 //     ball travels LCA → leaf, the trail behind it is removed.
-//     reverseSec = 0.5 × virtualCycle (half-cycle reverse).
+//     reverseSec = 0.5 × this track's own cycle (= secPerStep × leaves).
 //   - past secPerStep+reverseSec: animation expires and is deleted; the
 //     marker winks out at that exact instant (no fade).
 // If the same step fires again before the prior animation's reverse finishes,
@@ -293,14 +310,22 @@ function updateAnimations(key) {
   var playingStep = ((Math.floor(contStep) % ip.count) + ip.count) % ip.count;
 
   if (playingStep !== lastPlayingStep[key]) {
-    var flat = TR.state[key + 'Flat'];
+    // Per-track hit lookup: read from this track's own current pattern.
+    // TR.state.kickFlat etc. only follow the virtual pattern, which lags for
+    // async (拍同期) tracks.
+    var trackPat = TR.state.patterns[ip.currentPattern];
+    var flat = trackPat ? trackPat[key] : null;
     if (flat && flat[playingStep]) {
       var geom = captureAnimGeom(key, playingStep, flat);
       if (geom) {
+        // Reverse runs over half of THIS track's own cycle, not the virtual
+        // cycle — so async tracks erase at their own tempo.
+        var trackLeaves = flat.length;
+        var trackCycle  = ip.secPerStep * trackLeaves;
         animations[key][playingStep] = {
           firingTime: Tone.now(),
           secPerStep: ip.secPerStep,
-          cycleSec:   0.5 * (TR.state.virtualCycle || (ip.secPerStep * ip.count)),
+          cycleSec:   0.5 * trackCycle,
           remEdges:   geom.remEdges,
           pathSlice:  geom.pathSlice,
           leafTip:    geom.leafTip,
