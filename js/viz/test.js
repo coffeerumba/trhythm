@@ -27,35 +27,26 @@ var leafEdges = { kick: [], snare: [], hihat: [] };  // edge objects per leaf (f
 var firstStepReached = { kick: false, snare: false, hihat: false };
 
 /* ── PARAMETERS (per-instrument shape values). The canonical store is
-   the in-memory `params` map below — readers like depthPower(key) get
-   their value from there. The optional debug-slider UI built by
-   buildSliderUI() is just a view/editor on top of this map: each
-   slider keeps its own entry in `params` in sync via an 'input'
-   listener. Removing the slider UI in the future leaves `params` and
-   the readers untouched, so the rest of the file keeps working. ── */
+   the in-memory `params` map. Most parameters use a fixed default
+   below; leaf-len gets a per-instrument default so the three flowers
+   read as nested layers. randomizeOnGenerate() writes fresh values
+   into `params` on every generation cycle (depth-curve, bend, curve). ── */
 var params = {};   // params[key + ':' + paramId] -> number
 
-function setParam(key, paramId, val) {
-  params[key + ':' + paramId] = val;
-  // Mirror to slider input if one exists, so the UI reflects the new value.
-  var input = document.getElementById('test-' + key + '-' + paramId);
-  if (input && parseFloat(input.value) !== val) {
-    input.value = val;
-    input.dispatchEvent(new Event('input'));
-  }
-}
+function setParam(key, paramId, val) { params[key + ':' + paramId] = val; }
 function getParam(key, paramId, def) {
   var v = params[key + ':' + paramId];
   return (v == null) ? def : v;
 }
 
+var LEAF_LEN_DEFAULTS = { kick: 0.7, snare: 0.85, hihat: 1.0 };
 function depthPower(key)  { return getParam(key, 'depth-curve', 1.0); }
 function bendAlpha(key)   { return getParam(key, 'bend',        0.0); }
 function leafSpread(key)  { return getParam(key, 'leaf-spread', 0.0); }
 function branchOpen(key)  { return getParam(key, 'open',        1.0); }
 function radiusFrac(key)  { return getParam(key, 'radius',      0.45); }
 function curveAmount(key) { return getParam(key, 'curve',       0.0); }
-function leafLength(key)  { return getParam(key, 'leaf-len',    1.0); }
+function leafLength(key)  { return getParam(key, 'leaf-len',    LEAF_LEN_DEFAULTS[key] != null ? LEAF_LEN_DEFAULTS[key] : 1.0); }
 /* ── END PARAMETERS ── */
 
 function treeDepth(t) {
@@ -466,104 +457,46 @@ function drawAnimation(key, anim) {
   }
 }
 
+// Returns the 0..1 progress through the current leaf-step of the default
+// 拍構造 — but only when that step is a beat (computeLevels >= beatLevel).
+// Outside a beat step (or playback off), returns null. Used by drawCenterDot
+// to ease the trunk dot from marker-size at the beat onset down to its
+// idle size as the beat step elapses.
+function defaultBeatStepProgress() {
+  if (!TR.state.isPlaying || !TR.state.virtualCycle || !TR.state.virtualCycleEnd) return null;
+  var pat = TR.state.patterns[TR.state.currentPattern];
+  var defaultDef = pat && pat.defaultDef;
+  if (!defaultDef || !defaultDef.tree) return null;
+  var levels = TR.computeLevels(defaultDef.tree);
+  if (!levels.length) return null;
+  var elapsed = Tone.now() - (TR.state.virtualCycleEnd - TR.state.virtualCycle);
+  var pos = ((elapsed / TR.state.virtualCycle) % 1 + 1) % 1;
+  var stepFloat = pos * levels.length;
+  var step = Math.floor(stepFloat);
+  if (step < 0 || step >= levels.length) return null;
+  if (levels[step] < (defaultDef.beatLevel || 1)) return null;
+  return stepFloat - step;
+}
+
 function drawCenterDot() {
+  var idleR = 4;
+  var beatR = Math.max(3, Math.min(vizW, vizH) * 0.018);
+  var p = defaultBeatStepProgress();
+  // Linear shrink from beatR back to idleR across the beat-step's duration.
+  var r = (p == null) ? idleR : beatR + (idleR - beatR) * p;
   ctx.fillStyle = '#000';
   ctx.beginPath();
-  ctx.arc(vizW / 2, vizH / 2, 4, 0, Math.PI * 2);
+  ctx.arc(vizW / 2, vizH / 2, r, 0, Math.PI * 2);
   ctx.fill();
 }
-
-/* ── DEBUG SLIDERS: build DOM + bind live value readout ──
-   Defines a slider per (instrument, parameter), appends them under
-   #viz-wrap, and keeps the right-aligned numeric display in sync with
-   each input. Values are read by the dbgNum helpers above via the same
-   element IDs ('test-' + key + '-' + paramId). ── */
-var SLIDER_SPECS = [
-  { id: 'depth-curve', label: '2. 深さカーブ',     min: 0.3, max: 3, step: 0.05, def: 1.0  },
-  { id: 'bend',        label: '6. 枝の屈折',       min: 0,   max: 1, step: 0.01, def: 0.0  },
-  { id: 'leaf-spread', label: '7. 葉の外広がり',   min: 0,   max: 1, step: 0.01, def: 0.0  },
-  { id: 'open',        label: '8. 枝の開き',       min: 0,   max: 1, step: 0.01, def: 1.0  },
-  { id: 'radius',      label: '9. 半径',           min: 0.1, max: 0.5, step: 0.01, def: 0.45 },
-  { id: 'curve',       label: '10. 枝のカーブ',    min: 0,   max: 1, step: 0.01, def: 0.0  },
-  { id: 'leaf-len',    label: '11. 葉の長さ',      min: 0,   max: 2, step: 0.05, def: 1.0,
-    perInst: { kick: 0.7, snare: 0.85, hihat: 1.0 } }
-];
-var INST_INFO = [
-  { key: 'kick',  label: 'キック',     color: 'rgb(208,48,80)' },
-  { key: 'snare', label: 'スネア',     color: 'rgb(34,119,204)' },
-  { key: 'hihat', label: 'ハイハット', color: 'rgb(85,153,85)' }
-];
-
-function buildSliderUI() {
-  var wrap = document.getElementById('viz-wrap');
-  if (!wrap || document.getElementById('test-mode-debug')) return;
-  var container = document.createElement('div');
-  container.id = 'test-mode-debug';
-  container.style.cssText = 'margin-top:10px; font-size:12px; display:flex; flex-direction:column; gap:6px;';
-
-  for (var i = 0; i < INST_INFO.length; i++) {
-    var inst = INST_INFO[i];
-    var head = document.createElement('div');
-    head.style.cssText = 'font-weight:bold; color:' + inst.color +
-                         '; margin-top:' + (i === 0 ? 4 : 8) + 'px;';
-    head.textContent = inst.label;
-    container.appendChild(head);
-
-    for (var j = 0; j < SLIDER_SPECS.length; j++) {
-      var spec = SLIDER_SPECS[j];
-      var def  = (spec.perInst && spec.perInst[inst.key] != null) ? spec.perInst[inst.key] : spec.def;
-      var row = document.createElement('div');
-      row.style.cssText = 'display:flex; align-items:center; gap:8px;';
-
-      var label = document.createElement('label');
-      label.style.cssText = 'flex:0 0 160px;';
-      label.appendChild(document.createTextNode(spec.label + ' '));
-      var disp = document.createElement('span');
-      disp.id = 'test-' + inst.key + '-' + spec.id + '-val';
-      disp.style.color = '#666';
-      disp.textContent = def.toFixed(2);
-      label.appendChild(disp);
-
-      var input = document.createElement('input');
-      input.type = 'range';
-      input.id = 'test-' + inst.key + '-' + spec.id;
-      input.min = spec.min;
-      input.max = spec.max;
-      input.step = spec.step;
-      input.value = def;
-      input.style.cssText = 'flex:1;';
-      // Seed params with this slider's default, and keep them in sync as the
-      // user drags. This way the rest of the file reads from `params`, not
-      // from the DOM, and randomization can write straight into `params`.
-      params[inst.key + ':' + spec.id] = def;
-      (function(displayEl, inputEl, paramKey) {
-        inputEl.addEventListener('input', function() {
-          var v = parseFloat(inputEl.value);
-          displayEl.textContent = v.toFixed(2);
-          params[paramKey] = v;
-        });
-      })(disp, input, inst.key + ':' + spec.id);
-
-      row.appendChild(label);
-      row.appendChild(input);
-      container.appendChild(row);
-    }
-  }
-  wrap.appendChild(container);
-}
-buildSliderUI();
-/* ── END DEBUG SLIDERS ── */
 
 /* ── RANDOMIZE-ON-GENERATE ──
    Every time 'btn-generate' fires (whether a real click or a synthetic
    one from struct/beats changes), pick a fresh random value per entry
    in RANDOM_PARAMS and apply it identically to every track in
-   TR.INSTRUMENTS. Writes go through setParam() so both the in-memory
-   params and any visible slider stay in sync. Survives slider removal —
-   without sliders the value still lands in `params` and the readers
-   pick it up. Add a new randomized param by appending to the list;
-   ranges intentionally mirror SLIDER_SPECS but stay hardcoded so they
-   keep working after slider removal. ── */
+   TR.INSTRUMENTS. Writes go through setParam(), which feeds the
+   in-memory `params` map that the readers (depthPower etc.) consume.
+   Add a new randomized param by appending to the list. ── */
 var RANDOM_PARAMS = [
   { id: 'depth-curve', min: 0.3, max: 3 },
   { id: 'bend',        min: 0,   max: 1 },
