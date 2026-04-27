@@ -1,61 +1,59 @@
 /* ═══════════════════════════════════════════════════════════════
    FLOWER (花) — viz mode
 
-   Rendering model: stateless redraw from per-step animations. When audio
-   fires for step k we register an animation: a yellow ball heads from
-   the leaf inward to the LCA over one step's duration (drawing the
-   trail behind it), then turns into a white eraser ball that retreats
-   back to the leaf over half of THIS TRACK'S own cycle (the visible
-   trail retracts along with it). The marker stays solid for the whole
-   lifespan and blinks out the instant the eraser reaches the leaf.
+   Three flowers (kick / snare / hihat) overlaid on one canvas. Each
+   track owns its own geometry and timing, sourced from THAT track's
+   own playback state — so async (拍同期) tracks rotate at their own
+   tempo independent of the virtual cycle.
 
-   Each track's geometry, hit lookup, and cycle length are sourced from
-   the track's own ip.currentPattern + ip.secPerStep + leaves count, not
-   from the virtual pattern, so polymeter (拍同期) tracks stay aligned
-   with their own audio.
+   When a hit fires, an animation runs on that track's leaf:
+     1. forward (one step):        yellow ball runs leaf → LCA, drawing
+                                   a black trail behind it.
+     2. reverse (½ track-cycle):   white eraser ball returns LCA → leaf,
+                                   the trail retracting along with it.
+     3. expire:                    marker winks out, animation deleted.
+   Same step refiring before reverse finishes simply replaces the entry.
 
-   Each frame we just clearRect, rebuild geometry, then redraw every
-   active animation at its current elapsed time. No persist canvas, no
-   masks. Same step refiring before reverse finishes simply replaces
-   the old entry — old branches and marker disappear that frame.
+   The trunk dot pulses to marker-size at every beat-level leaf step of
+   the default 拍構造 and eases back to its idle radius.
+
+   Each frame we just clearRect → rebuild geometry → tick animations →
+   redraw active animations. No persist canvas, no masks.
    ═══════════════════════════════════════════════════════════════ */
 TR.registerVizMode((function(TR) {
+
 var ctx, vizW, vizH;
-var leafTips  = { kick: [], snare: [], hihat: [] };
-var leafPaths = { kick: [], snare: [], hihat: [] };  // polyline per leaf (for ball position)
-var leafEdges = { kick: [], snare: [], hihat: [] };  // edge objects per leaf (for drawing)
-var firstStepReached = { kick: false, snare: false, hihat: false };
 
-/* ── PARAMETERS (per-instrument shape values). The canonical store is
-   the in-memory `params` map. Most parameters use a fixed default
-   below; leaf-len gets a per-instrument default so the three flowers
-   read as nested layers. randomizeOnGenerate() writes fresh values
-   into `params` on every generation cycle (depth-curve, bend, curve). ── */
-var params = {};   // params[key + ':' + paramId] -> number
-
-function setParam(key, paramId, val) { params[key + ':' + paramId] = val; }
-function getParam(key, paramId, def) {
-  var v = params[key + ':' + paramId];
-  return (v == null) ? def : v;
+/* ── Per-instrument shape parameters ────────────────────────────────
+   `params[key + ':' + id]` is the canonical store. randomizeOnGenerate
+   writes fresh values into it on every generation cycle. The reader
+   `param(key, id)` falls back through DEFAULTS_PER_INST and DEFAULTS
+   when no value has been set. ── */
+var params = {};
+var DEFAULTS = {
+  'depth-curve': 1.0, 'bend':   0.0, 'leaf-spread': 0.0,
+  'open':        1.0, 'radius': 0.45,'curve':       0.0,
+  'leaf-len':    1.0
+};
+var DEFAULTS_PER_INST = {
+  'leaf-len': { kick: 0.7, snare: 0.85, hihat: 1.0, crash: 0.55 }
+};
+function param(key, id) {
+  var v = params[key + ':' + id];
+  if (v != null) return v;
+  var perInst = DEFAULTS_PER_INST[id];
+  if (perInst && perInst[key] != null) return perInst[key];
+  return DEFAULTS[id];
 }
+function setParam(key, id, val) { params[key + ':' + id] = val; }
 
-var LEAF_LEN_DEFAULTS = { kick: 0.7, snare: 0.85, hihat: 1.0 };
-function depthPower(key)  { return getParam(key, 'depth-curve', 1.0); }
-function bendAlpha(key)   { return getParam(key, 'bend',        0.0); }
-function leafSpread(key)  { return getParam(key, 'leaf-spread', 0.0); }
-function branchOpen(key)  { return getParam(key, 'open',        1.0); }
-function radiusFrac(key)  { return getParam(key, 'radius',      0.45); }
-function curveAmount(key) { return getParam(key, 'curve',       0.0); }
-function leafLength(key)  { return getParam(key, 'leaf-len',    LEAF_LEN_DEFAULTS[key] != null ? LEAF_LEN_DEFAULTS[key] : 1.0); }
-/* ── END PARAMETERS ── */
-
+/* ── Geometric primitives ────────────────────────────────────────── */
 function treeDepth(t) {
   if (!Array.isArray(t)) return 1;
   var m = 0;
   for (var i = 0; i < t.length; i++) m = Math.max(m, treeDepth(t[i]));
   return 1 + m;
 }
-
 function nearestAngle(target, ref) {
   var d = target - ref;
   while (d >  Math.PI) d -= 2 * Math.PI;
@@ -63,140 +61,49 @@ function nearestAngle(target, ref) {
   return ref + d;
 }
 
-// Stroke one branch from (px,py) via the bend vertex (vx,vy) to (ex,ey).
-// curve=0: sharp L; curve=1: maximally rounded corner via arcTo.
-function drawEdge(px, py, ex, ey, vx, vy, curve) {
-  var d1 = Math.hypot(vx - px, vy - py);
-  var d2 = Math.hypot(ex - vx, ey - vy);
-  ctx.beginPath();
-  ctx.moveTo(px, py);
-  if (d1 < 0.5 || d2 < 0.5) {
-    ctx.lineTo(ex, ey);
-  } else {
-    var maxR = Math.min(d1, d2) * 0.95;
-    var r = curve * maxR;
-    if (r < 0.5) {
-      ctx.lineTo(vx, vy);
-      ctx.lineTo(ex, ey);
-    } else {
-      ctx.arcTo(vx, vy, ex, ey, r);
-      ctx.lineTo(ex, ey);
-    }
+// Tessellate a bent edge p1 → vertex → p2 into a polyline whose corner
+// approximates the same arcTo fillet the original draw code produced.
+// The fillet is approximated by a 12-segment quadratic Bézier from
+// tangent T1 to T2 with control = vertex — visually indistinguishable
+// for our curve range, and crucial for partial drawing without the
+// straight-snap we'd get from a sharp L corner.
+function tessellateCorner(p1, vertex, p2, curveAmt) {
+  var d1 = Math.hypot(vertex.x - p1.x, vertex.y - p1.y);
+  var d2 = Math.hypot(p2.x - vertex.x, p2.y - vertex.y);
+  if (d1 < 0.5 || d2 < 0.5) return [p1, p2];
+  var maxR = Math.min(d1, d2) * 0.95;
+  var r = curveAmt * maxR;
+  if (r < 0.5) return [p1, vertex, p2];
+  var T1 = { x: vertex.x + (p1.x - vertex.x) / d1 * r,
+             y: vertex.y + (p1.y - vertex.y) / d1 * r };
+  var T2 = { x: vertex.x + (p2.x - vertex.x) / d2 * r,
+             y: vertex.y + (p2.y - vertex.y) / d2 * r };
+  var poly = [p1, T1];
+  for (var k = 1; k < 12; k++) {
+    var t = k / 12, mt = 1 - t;
+    poly.push({
+      x: mt*mt*T1.x + 2*mt*t*vertex.x + t*t*T2.x,
+      y: mt*mt*T1.y + 2*mt*t*vertex.y + t*t*T2.y
+    });
   }
-  ctx.stroke();
+  poly.push(T2);
+  poly.push(p2);
+  return poly;
 }
 
-function edgeLen(e) {
-  return Math.hypot(e.vertex.x - e.p1.x, e.vertex.y - e.p1.y) +
-         Math.hypot(e.p2.x - e.vertex.x, e.p2.y - e.vertex.y);
-}
-
-// Walk the tree to populate leafTips / leafPaths / leafEdges. NO drawing.
-function buildBranch(key, tree, cx, cy, aStart, aEnd, parentX, parentY, pAngle, depthFromRoot, totalDepth, parentPath, parentEdges) {
-  var p      = depthPower(key);
-  var bend   = bendAlpha(key);
-  var spread = leafSpread(key);
-  var leafL  = leafLength(key);
-  var openT  = branchOpen(key);
-  var open   = 1 - Math.pow(1 - openT, totalDepth - depthFromRoot);
-  var rMax   = Math.min(vizW, vizH) * radiusFrac(key);
-
-  var rCurrent = rMax * Math.pow(depthFromRoot     / totalDepth, p);
-  var rChild   = rMax * Math.pow((depthFromRoot+1) / totalDepth, p);
-  var isLeaf   = !Array.isArray(tree);
-  var rBend    = rCurrent + bend * (rChild - rCurrent);
-  var mid = (depthFromRoot === 0) ? -Math.PI / 2 : (aStart + aEnd) / 2;
-
-  if (isLeaf) {
-    var n = tree;
-    for (var i = 0; i < n; i++) {
-      var centered = (i + 0.5) / n;
-      var edge     = (n > 1) ? i / (n - 1) : 0.5;
-      var t = (1 - spread) * centered + spread * edge;
-      var aDef = nearestAngle(aStart + t * (aEnd - aStart), mid);
-      var a = mid + open * (aDef - mid);
-      var defX = cx + Math.cos(a) * rChild;
-      var defY = cy + Math.sin(a) * rChild;
-      var tx = parentX + leafL * (defX - parentX);
-      var ty = parentY + leafL * (defY - parentY);
-      var bendAngle = (depthFromRoot === 0) ? a : pAngle;
-      var vx = cx + Math.cos(bendAngle) * rBend;
-      var vy = cy + Math.sin(bendAngle) * rBend;
-
-      leafTips[key].push({ x: tx, y: ty });
-      var path = parentPath.slice();
-      if (Math.hypot(vx - parentX, vy - parentY) > 0.5 &&
-          Math.hypot(tx - vx, ty - vy) > 0.5) {
-        path.push({ x: vx, y: vy });
-      }
-      path.push({ x: tx, y: ty });
-      leafPaths[key].push(path);
-
-      var edges = parentEdges.slice();
-      edges.push({ p1: { x: parentX, y: parentY },
-                   vertex: { x: vx, y: vy },
-                   p2: { x: tx, y: ty } });
-      leafEdges[key].push(edges);
-    }
-    return;
-  }
-
-  var len = tree.length;
-  var wedgeW = (aEnd - aStart) / len;
-  var scaledW = wedgeW * open;
-  for (var i = 0; i < len; i++) {
-    var defCenter = nearestAngle(aStart + (i + 0.5) * wedgeW, mid);
-    var cMid = mid + open * (defCenter - mid);
-    var cAStart = cMid - scaledW / 2;
-    var cAEnd   = cMid + scaledW / 2;
-    var cxC = cx + Math.cos(cMid) * rChild;
-    var cyC = cy + Math.sin(cMid) * rChild;
-    var bendAngle = (depthFromRoot === 0) ? cMid : pAngle;
-    var vx  = cx + Math.cos(bendAngle) * rBend;
-    var vy  = cy + Math.sin(bendAngle) * rBend;
-
-    var childPath = parentPath.slice();
-    if (Math.hypot(vx - parentX, vy - parentY) > 0.5 &&
-        Math.hypot(cxC - vx, cyC - vy) > 0.5) {
-      childPath.push({ x: vx, y: vy });
-    }
-    childPath.push({ x: cxC, y: cyC });
-
-    var childEdges = parentEdges.slice();
-    childEdges.push({ p1: { x: parentX, y: parentY },
-                      vertex: { x: vx, y: vy },
-                      p2: { x: cxC, y: cyC } });
-
-    buildBranch(key, tree[i], cx, cy, cAStart, cAEnd, cxC, cyC, cMid, depthFromRoot + 1, totalDepth, childPath, childEdges);
-  }
-}
-
-// While playing, each track's flower comes from THAT track's own current
-// pattern (ip.currentPattern), not the virtual pattern — so an async track
-// shows its own structure even when its pattern lags behind the virtual one.
-// When stopped, fall back to the visible virtual pattern for the static view.
-function getTrackPat(key) {
-  if (TR.state.isPlaying) {
-    var ip = findIp(key);
-    if (ip) return TR.state.patterns[ip.currentPattern];
-  }
-  return TR.state.patterns[TR.state.currentPattern];
-}
-
-function buildGeometry(key) {
-  leafTips[key]  = [];
-  leafPaths[key] = [];
-  leafEdges[key] = [];
-  var curPat = getTrackPat(key);
-  var def = (curPat && curPat[key + 'Def']) || (TR.getInstStructure && TR.getInstStructure(key));
-  if (!def || !def.tree) return;
-  var depth = treeDepth(def.tree);
-  var cx = vizW / 2;
-  var cy = vizH / 2;
-  var aStart = -Math.PI / 2;
-  var aEnd   = Math.PI * 3 / 2;
-  buildBranch(key, def.tree, cx, cy, aStart, aEnd, cx, cy, (aStart + aEnd) / 2, 0, depth, [{ x: cx, y: cy }], []);
-}
+/* ── Per-track flower geometry ─────────────────────────────────────
+   leaves[key][i] = {
+     nodes:     [root, depth1, ..., leaf]       — node-level path,
+                                                  used for LCA detection
+                                                  (shared root prefix).
+     tessEdges: [tess(edge0), ..., tess(edgeN)] — root→leaf direction,
+                                                  curve-aware polylines
+                                                  (one per branch edge).
+   }
+   Tessellation happens once per geometry rebuild — animations just
+   slice & reverse pre-computed polylines instead of regenerating them.
+── */
+var leaves = { kick: [], snare: [], hihat: [], crash: [] };
 
 function findIp(key) {
   for (var i = 0; i < TR.state.instPlayback.length; i++) {
@@ -205,206 +112,133 @@ function findIp(key) {
   return null;
 }
 
-function pointAlongPath(path, frac) {
-  if (!path || path.length < 2) return path && path[0];
-  var totalLen = 0, segLens = [];
-  for (var i = 1; i < path.length; i++) {
-    var l = Math.hypot(path[i].x - path[i-1].x, path[i].y - path[i-1].y);
-    segLens.push(l);
-    totalLen += l;
+// During playback, each track shows its own current pattern's tree (so
+// async tracks render their own structure even when their pattern lags
+// behind the virtual one). When stopped, fall back to the visible
+// virtual pattern so the static view still makes sense.
+function trackPat(key) {
+  if (TR.state.isPlaying) {
+    var ip = findIp(key);
+    if (ip) return TR.state.patterns[ip.currentPattern];
   }
-  if (totalLen === 0) return path[0];
-  var target = frac * totalLen;
-  var acc = 0;
-  for (var i = 0; i < segLens.length; i++) {
-    if (acc + segLens[i] >= target) {
-      var segFrac = segLens[i] > 0 ? (target - acc) / segLens[i] : 0;
-      return {
-        x: path[i].x + segFrac * (path[i+1].x - path[i].x),
-        y: path[i].y + segFrac * (path[i+1].y - path[i].y)
-      };
-    }
-    acc += segLens[i];
-  }
-  return path[path.length - 1];
+  return TR.state.patterns[TR.state.currentPattern];
 }
 
-// Active per-step animations. Each (key, step) has at most one entry. When
-// audio fires for step k, we record the firing time and snapshot enough
-// geometry to play the animation through to its end:
-//   - forward phase (0..secPerStep): yellow ball travels leaf → LCA, leaving
-//     a solid trail behind it.
-//   - reverse phase (secPerStep .. secPerStep+reverseSec): white "eraser"
-//     ball travels LCA → leaf, the trail behind it is removed.
-//     reverseSec = 0.5 × this track's own cycle (= secPerStep × leaves).
-//   - past secPerStep+reverseSec: animation expires and is deleted; the
-//     marker winks out at that exact instant (no fade).
-// If the same step fires again before the prior animation's reverse finishes,
-// the new firing replaces the entry — old branches & marker disappear, the
-// new forward starts from leaf at frac=0.
-var animations = { kick: {}, snare: {}, hihat: {} };
-var lastPlayingStep = { kick: -1, snare: -1, hihat: -1 };
+function buildGeometry(key) {
+  var pat = trackPat(key);
+  // Crash is a synthetic track keyed off the default 拍構造; the regular
+  // tracks read their own per-instrument tree (pat[key + 'Def']).
+  var def = (key === 'crash')
+    ? (pat && pat.defaultDef)
+    : ((pat && pat[key + 'Def']) || (TR.getInstStructure && TR.getInstStructure(key)));
+  if (!def || !def.tree) { leaves[key] = []; return; }
 
-// Tessellate one bent edge (p1 → vertex → p2) into a polyline that follows
-// the same arcTo-style rounded corner drawEdge() draws. We approximate the
-// circular fillet with a quadratic Bézier from tangent T1 to T2, control at
-// the vertex — visually indistinguishable for the curve range we use, and
-// the polyline form lets us draw arbitrary partial portions of the curve
-// without the arcTo→straight snap bug at the eraser tip. ──
-function tessellateEdge(p1, vertex, p2, curve) {
-  var d1 = Math.hypot(vertex.x - p1.x, vertex.y - p1.y);
-  var d2 = Math.hypot(p2.x - vertex.x, p2.y - vertex.y);
-  if (d1 < 0.5 || d2 < 0.5) {
-    return [{ x: p1.x, y: p1.y }, { x: p2.x, y: p2.y }];
-  }
-  var maxR = Math.min(d1, d2) * 0.95;
-  var r = curve * maxR;
-  if (r < 0.5) {
-    return [{ x: p1.x, y: p1.y }, { x: vertex.x, y: vertex.y }, { x: p2.x, y: p2.y }];
-  }
-  // Tangent points on each leg, distance r from the vertex.
-  var u1x = (p1.x - vertex.x) / d1, u1y = (p1.y - vertex.y) / d1;
-  var u2x = (p2.x - vertex.x) / d2, u2y = (p2.y - vertex.y) / d2;
-  var T1x = vertex.x + u1x * r, T1y = vertex.y + u1y * r;
-  var T2x = vertex.x + u2x * r, T2y = vertex.y + u2y * r;
+  var totalDepth = treeDepth(def.tree);
+  var cx = vizW / 2, cy = vizH / 2;
+  var rMax     = Math.min(vizW, vizH) * param(key, 'radius');
+  var p        = param(key, 'depth-curve');
+  var bendAmt  = param(key, 'bend');
+  var spread   = param(key, 'leaf-spread');
+  var openT    = param(key, 'open');
+  var leafL    = param(key, 'leaf-len');
+  var curveAmt = param(key, 'curve');
 
-  var poly = [];
-  poly.push({ x: p1.x, y: p1.y });
-  poly.push({ x: T1x,  y: T1y  });
-  var N = 12; // segments along the rounded corner
-  for (var k = 1; k < N; k++) {
-    var t  = k / N;
-    var mt = 1 - t;
-    poly.push({
-      x: mt * mt * T1x + 2 * mt * t * vertex.x + t * t * T2x,
-      y: mt * mt * T1y + 2 * mt * t * vertex.y + t * t * T2y
-    });
-  }
-  poly.push({ x: T2x, y: T2y });
-  poly.push({ x: p2.x, y: p2.y });
-  return poly;
-}
+  var out = [];
+  function recur(tree, aStart, aEnd, parentX, parentY, pAngle, depth, parentNodes, parentTess) {
+    var open    = 1 - Math.pow(1 - openT, totalDepth - depth);
+    var rCurr   = rMax * Math.pow(depth        / totalDepth, p);
+    var rChild  = rMax * Math.pow((depth + 1)  / totalDepth, p);
+    var rBend   = rCurr + bendAmt * (rChild - rCurr);
+    var mid     = (depth === 0) ? -Math.PI / 2 : (aStart + aEnd) / 2;
 
-// Build a single leaf→LCA polyline (curve-aware) used for both the trail
-// drawing and the ball's position. LCA is the deepest path node already
-// traversed by any earlier hit step in the current cycle.
-function captureAnimGeom(key, step, flat) {
-  var edges = leafEdges[key][step];
-  var path  = leafPaths[key][step];
-  if (!edges || !path) return null;
-
-  var traversed = {};
-  for (var i = 0; i < step; i++) {
-    if (flat && !flat[i]) continue;
-    var p = leafPaths[key][i];
-    if (!p) continue;
-    for (var j = 0; j < p.length; j++) traversed[p[j].x + ',' + p[j].y] = true;
-  }
-  var skipEdges = 0;
-  for (var i = 0; i < edges.length; i++) {
-    if (traversed[edges[i].p2.x + ',' + edges[i].p2.y]) skipEdges = i + 1;
-    else break;
-  }
-  // Reverse the LCA→leaf edges into leaf→LCA, swapping p1/p2 within each.
-  var fwd = edges.slice(skipEdges);
-  var curve = curveAmount(key);
-  var pathSlice = [];
-  for (var ri = fwd.length - 1; ri >= 0; ri--) {
-    var e = fwd[ri];
-    var sub = tessellateEdge(e.p2, e.vertex, e.p1, curve);
-    if (pathSlice.length === 0) pathSlice.push(sub[0]);
-    for (var k = 1; k < sub.length; k++) pathSlice.push(sub[k]);
-  }
-  var tip = leafTips[key][step];
-  return {
-    pathSlice: pathSlice,
-    leafTip:   tip ? { x: tip.x, y: tip.y } : null
-  };
-}
-
-// Detect new step transitions, register a fresh animation when the new step
-// is a hit, and prune animations whose reverse has finished.
-function updateAnimations(key) {
-  if (!TR.state.isPlaying) {
-    animations[key] = {};
-    lastPlayingStep[key] = -1;
-    firstStepReached[key] = false;
-    return;
-  }
-  var ip = findIp(key);
-  if (!ip || !ip.secPerStep || !ip.count) return;
-  var stepsUntilNext = Math.max(0, (ip.nextTime - Tone.now()) / ip.secPerStep);
-  var contStep = ip.step - stepsUntilNext;
-  if (!firstStepReached[key]) {
-    if (contStep < 0) {
-      // Still expire any leftovers if they exist.
-      pruneExpired(key);
+    if (!Array.isArray(tree)) {
+      // Leaf-group with `tree` siblings.
+      for (var i = 0; i < tree; i++) {
+        var centered = (i + 0.5) / tree;
+        var edged    = (tree > 1) ? i / (tree - 1) : 0.5;
+        var t        = (1 - spread) * centered + spread * edged;
+        var aDef     = nearestAngle(aStart + t * (aEnd - aStart), mid);
+        var a        = mid + open * (aDef - mid);
+        var defX     = cx + Math.cos(a) * rChild;
+        var defY     = cy + Math.sin(a) * rChild;
+        var tip      = { x: parentX + leafL * (defX - parentX),
+                         y: parentY + leafL * (defY - parentY) };
+        var bAng     = (depth === 0) ? a : pAngle;
+        var p1       = { x: parentX, y: parentY };
+        var v        = { x: cx + Math.cos(bAng) * rBend, y: cy + Math.sin(bAng) * rBend };
+        out.push({
+          nodes:     parentNodes.concat([tip]),
+          tessEdges: parentTess.concat([tessellateCorner(p1, v, tip, curveAmt)])
+        });
+      }
       return;
     }
-    firstStepReached[key] = true;
-  }
-  var playingStep = ((Math.floor(contStep) % ip.count) + ip.count) % ip.count;
 
-  if (playingStep !== lastPlayingStep[key]) {
-    // Per-track hit lookup: read from this track's own current pattern.
-    // TR.state.kickFlat etc. only follow the virtual pattern, which lags for
-    // async (拍同期) tracks.
-    var trackPat = TR.state.patterns[ip.currentPattern];
-    var flat = trackPat ? trackPat[key] : null;
-    if (flat && flat[playingStep]) {
-      var geom = captureAnimGeom(key, playingStep, flat);
-      if (geom) {
-        // Reverse runs over half of THIS track's own cycle, not the virtual
-        // cycle — so async tracks erase at their own tempo.
-        var trackLeaves = flat.length;
-        var trackCycle  = ip.secPerStep * trackLeaves;
-        animations[key][playingStep] = {
-          firingTime: Tone.now(),
-          secPerStep: ip.secPerStep,
-          cycleSec:   0.5 * trackCycle,
-          pathSlice:  geom.pathSlice,
-          leafTip:    geom.leafTip
-        };
-      }
+    var len = tree.length;
+    var wedgeW  = (aEnd - aStart) / len;
+    var scaledW = wedgeW * open;
+    for (var i = 0; i < len; i++) {
+      var defCenter = nearestAngle(aStart + (i + 0.5) * wedgeW, mid);
+      var cMid      = mid + open * (defCenter - mid);
+      var node      = { x: cx + Math.cos(cMid) * rChild,
+                        y: cy + Math.sin(cMid) * rChild };
+      var bAng      = (depth === 0) ? cMid : pAngle;
+      var p1        = { x: parentX, y: parentY };
+      var v         = { x: cx + Math.cos(bAng) * rBend, y: cy + Math.sin(bAng) * rBend };
+      recur(tree[i],
+            cMid - scaledW / 2, cMid + scaledW / 2,
+            node.x, node.y, cMid, depth + 1,
+            parentNodes.concat([node]),
+            parentTess.concat([tessellateCorner(p1, v, node, curveAmt)]));
     }
-    lastPlayingStep[key] = playingStep;
   }
-  pruneExpired(key);
+
+  var root = { x: cx, y: cy };
+  recur(def.tree, -Math.PI / 2, Math.PI * 3 / 2, cx, cy, 0, 0, [root], []);
+  leaves[key] = out;
 }
 
-function pruneExpired(key) {
-  var now = Tone.now();
-  for (var s in animations[key]) {
-    var a = animations[key][s];
-    if (now > a.firingTime + a.secPerStep + a.cycleSec) delete animations[key][s];
-  }
-}
+/* ── Polyline utilities ─────────────────────────────────────────── */
 
-// Stroke the visible portion of one animation's polyline: from the leaf
-// (poly[0]) up to fraction `frac` of the total polyline length. Forward
-// uses frac growing 0→1; reverse uses frac shrinking 1→0. Because the
-// polyline already encodes the curve via tessellation, the partial edge
-// follows the curve smoothly with no straight-snap at the eraser tip.
-function strokeAnimPath(poly, frac) {
-  if (!poly || poly.length < 2 || frac <= 0) return;
-  var lens = [], total = 0;
+// Cumulative segment lengths + total. Built once per animation, then
+// reused by both pointAt() and strokePartial() each frame.
+function precomputeLengths(poly) {
+  var segs = [], total = 0;
   for (var i = 1; i < poly.length; i++) {
     var l = Math.hypot(poly[i].x - poly[i-1].x, poly[i].y - poly[i-1].y);
-    lens.push(l);
+    segs.push(l);
     total += l;
   }
-  if (total === 0) return;
-  var target = frac * total;
-  var acc = 0;
+  return { segs: segs, total: total };
+}
+
+function pointAt(poly, lens, frac) {
+  if (lens.total === 0) return poly[0];
+  var target = frac * lens.total, acc = 0;
+  for (var i = 0; i < lens.segs.length; i++) {
+    if (acc + lens.segs[i] >= target) {
+      var f = lens.segs[i] > 0 ? (target - acc) / lens.segs[i] : 0;
+      return {
+        x: poly[i].x + f * (poly[i+1].x - poly[i].x),
+        y: poly[i].y + f * (poly[i+1].y - poly[i].y)
+      };
+    }
+    acc += lens.segs[i];
+  }
+  return poly[poly.length - 1];
+}
+
+function strokePartial(poly, lens, frac) {
+  if (lens.total === 0 || frac <= 0) return;
+  var target = frac * lens.total, acc = 0;
   ctx.beginPath();
   ctx.moveTo(poly[0].x, poly[0].y);
-  for (var i = 0; i < lens.length; i++) {
-    if (acc + lens[i] <= target) {
+  for (var i = 0; i < lens.segs.length; i++) {
+    if (acc + lens.segs[i] <= target) {
       ctx.lineTo(poly[i+1].x, poly[i+1].y);
-      acc += lens[i];
+      acc += lens.segs[i];
     } else {
-      var rem = target - acc;
-      var f = lens[i] > 0 ? rem / lens[i] : 0;
+      var f = lens.segs[i] > 0 ? (target - acc) / lens.segs[i] : 0;
       ctx.lineTo(poly[i].x + f * (poly[i+1].x - poly[i].x),
                  poly[i].y + f * (poly[i+1].y - poly[i].y));
       break;
@@ -413,68 +247,207 @@ function strokeAnimPath(poly, frac) {
   ctx.stroke();
 }
 
-function drawAnimation(key, anim) {
-  var elapsed = Tone.now() - anim.firingTime;
-  if (elapsed < 0) return;
+/* ── Animations ───────────────────────────────────────────────────
+   animations[key][step] holds at most one entry per leaf-step. New
+   firings on the same step replace the entry (so old branches and
+   marker disappear that frame). Each entry caches its own polyline
+   (leaf → LCA, curve-aware) and the cumulative segment lengths so the
+   draw path is just a couple of slice operations per frame. ── */
+var animations      = { kick: {}, snare: {}, hihat: {}, crash: {} };
+var lastPlayingStep = { kick: -1, snare: -1, hihat: -1 };
+// Latches once per playback session. Until contStep first goes ≥ 0 we
+// don't trust the mod-arithmetic playingStep (it would falsely report
+// the last step at startup). After the first reach, contStep can dip
+// negative again at every cycle wrap — that's expected and benign.
+var started = { kick: false, snare: false, hihat: false };
+// Crash is registered once per virtual cycle; track the start-time of the
+// last cycle we registered so we don't double-fire within one cycle.
+var crashLastCycleStart = -1;
 
-  var frac, ballColor;
-  if (elapsed < anim.secPerStep) {
-    // Forward: visible segment expands from leaf toward LCA.
-    frac = elapsed / anim.secPerStep;
-    ballColor = '#ffcc00';
-  } else if (elapsed < anim.secPerStep + anim.cycleSec) {
-    // Reverse: white eraser drifts back toward leaf, visible segment retracts.
-    frac = 1 - (elapsed - anim.secPerStep) / anim.cycleSec;
-    ballColor = '#fff';
-  } else {
-    return; // expired — pruneExpired() will delete on the next updateAnimations
+// Common-prefix length of two node sequences (compared by coordinates).
+// Both sequences start at the shared root, so the result is at least 1.
+function commonPrefix(a, b) {
+  var n = Math.min(a.length, b.length);
+  for (var i = 0; i < n; i++) {
+    if (a[i].x !== b[i].x || a[i].y !== b[i].y) return i;
   }
+  return n;
+}
 
-  // 1. The visible trail (leaf → ball position).
-  ctx.strokeStyle = '#000';
-  ctx.lineWidth = 1;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.setLineDash([]);
-  strokeAnimPath(anim.pathSlice, frac);
+// Build the leaf → LCA polyline for `step`. LCA = deepest tree node
+// shared with any earlier hit step in this cycle. Concatenates the kept
+// edge tessellations in reverse order (leaf-most first), reversing each
+// internally and dropping boundary duplicates.
+function buildLeafToLcaPath(key, step, flat) {
+  var leaf = leaves[key][step];
+  if (!leaf) return null;
 
-  // 2. Marker at the leaf tip, full alpha throughout the animation lifespan.
-  if (anim.leafTip) {
-    ctx.fillStyle = TR.rgbCSS(TR.INST_COLORS[key]);
-    var tipR = Math.max(3, Math.min(vizW, vizH) * 0.018);
-    ctx.beginPath();
-    ctx.arc(anim.leafTip.x, anim.leafTip.y, tipR, 0, Math.PI * 2);
-    ctx.fill();
+  var sharedNodes = 1;  // the root is always shared
+  for (var i = 0; i < step; i++) {
+    if (!flat[i]) continue;
+    var other = leaves[key][i];
+    if (!other) continue;
+    var c = commonPrefix(leaf.nodes, other.nodes);
+    if (c > sharedNodes) sharedNodes = c;
   }
+  var keep = leaf.tessEdges.slice(sharedNodes - 1);
 
-  // 3. The ball itself — yellow heading inward, white heading back out.
-  var pos = pointAlongPath(anim.pathSlice, frac);
-  if (pos) {
-    ctx.fillStyle = ballColor;
-    ctx.beginPath();
-    ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
-    ctx.fill();
+  var poly = [];
+  for (var ei = keep.length - 1; ei >= 0; ei--) {
+    var tess = keep[ei];
+    var startI = (poly.length === 0) ? tess.length - 1 : tess.length - 2;
+    for (var pi = startI; pi >= 0; pi--) poly.push(tess[pi]);
+  }
+  return poly;
+}
+
+function tick(key) {
+  if (!TR.state.isPlaying) {
+    animations[key] = {};
+    lastPlayingStep[key] = -1;
+    started[key] = false;
+    return;
+  }
+  var ip = findIp(key);
+  if (!ip || !ip.secPerStep || !ip.count) return;
+
+  var stepsUntilNext = Math.max(0, (ip.nextTime - Tone.now()) / ip.secPerStep);
+  var contStep = ip.step - stepsUntilNext;
+  if (!started[key]) {
+    if (contStep < 0) { prune(key); return; }
+    started[key] = true;
+  }
+  var playingStep = ((Math.floor(contStep) % ip.count) + ip.count) % ip.count;
+
+  if (playingStep !== lastPlayingStep[key]) {
+    var pat  = TR.state.patterns[ip.currentPattern];
+    var flat = pat && pat[key];
+    if (flat && flat[playingStep]) {
+      var poly = buildLeafToLcaPath(key, playingStep, flat);
+      if (poly && poly.length >= 1) {
+        animations[key][playingStep] = {
+          firingTime: Tone.now(),
+          forwardSec: ip.secPerStep,
+          reverseSec: 0.5 * ip.secPerStep * flat.length,  // half this track's own cycle
+          poly:       poly,
+          lens:       precomputeLengths(poly)
+        };
+      }
+    }
+    lastPlayingStep[key] = playingStep;
+  }
+  prune(key);
+}
+
+function prune(key) {
+  var now = Tone.now();
+  var anims = animations[key];
+  for (var s in anims) {
+    var a = anims[s];
+    if (now > a.firingTime + a.forwardSec + a.reverseSec) delete anims[s];
   }
 }
 
-// Returns the 0..1 progress through the current leaf-step of the default
-// 拍構造 — but only when that step is a beat (computeLevels >= beatLevel).
-// Outside a beat step (or playback off), returns null. Used by drawCenterDot
-// to ease the trunk dot from marker-size at the beat onset down to its
-// idle size as the beat step elapses.
+// Crash uses a different audio model: it fires once per virtual cycle,
+// only when the accent mode is non-'off', regardless of step pattern. We
+// detect cycle wraps by watching virtualCycleEnd advance and register
+// (or skip) the leaf-0 animation accordingly. Lifetime / shape / colors
+// otherwise mirror a regular track's animation.
+function tickCrash() {
+  if (!TR.state.isPlaying) {
+    animations.crash = {};
+    crashLastCycleStart = -1;
+    return;
+  }
+  if (!TR.state.virtualCycle || TR.state.virtualCycleEnd == null) return;
+
+  // Accent OFF: clear any in-flight crash animation; nothing visible.
+  if (TR.getAccentMode && TR.getAccentMode() === 'off') {
+    animations.crash = {};
+    crashLastCycleStart = -1;
+    return;
+  }
+
+  var cycleStart = TR.state.virtualCycleEnd - TR.state.virtualCycle;
+  if (cycleStart !== crashLastCycleStart) {
+    crashLastCycleStart = cycleStart;
+    var crashLeaves = leaves.crash;
+    if (crashLeaves.length) {
+      var poly = buildLeafToLcaPath('crash', 0, []);
+      if (poly && poly.length >= 1) {
+        animations.crash[0] = {
+          firingTime: cycleStart,
+          forwardSec: TR.state.virtualCycle / crashLeaves.length,
+          reverseSec: 0.5 * TR.state.virtualCycle,
+          poly:       poly,
+          lens:       precomputeLengths(poly)
+        };
+      }
+    }
+  }
+  prune('crash');
+}
+
+/* ── Drawing ─────────────────────────────────────────────────────── */
+
+// Crash isn't in TR.INST_COLORS (not a regular instrument). Hardcode its
+// marker color to the same purple as the global --accent-color.
+var CRASH_MARKER_COLOR = 'rgb(136,68,204)';
+function markerColor(key) {
+  return key === 'crash' ? CRASH_MARKER_COLOR : TR.rgbCSS(TR.INST_COLORS[key]);
+}
+
+function drawAnimation(key, anim) {
+  var elapsed = Tone.now() - anim.firingTime;
+  if (elapsed < 0) return;  // animation registered for a near-future audio fire
+  var frac, ballColor;
+  if (elapsed < anim.forwardSec) {
+    frac      = elapsed / anim.forwardSec;
+    ballColor = '#ffcc00';
+  } else if (elapsed < anim.forwardSec + anim.reverseSec) {
+    frac      = 1 - (elapsed - anim.forwardSec) / anim.reverseSec;
+    ballColor = '#fff';
+  } else return;  // expired — pruned on the next tick
+
+  // Trail: leaf → ball position, in solid black.
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth   = 1;
+  ctx.lineCap     = 'round';
+  ctx.lineJoin    = 'round';
+  strokePartial(anim.poly, anim.lens, frac);
+
+  // Marker at the leaf tip (poly[0]) for the full lifespan.
+  var tipR = Math.max(3, Math.min(vizW, vizH) * 0.018);
+  ctx.fillStyle = markerColor(key);
+  ctx.beginPath();
+  ctx.arc(anim.poly[0].x, anim.poly[0].y, tipR, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Ball: yellow heading inward, white heading back out.
+  var pos = pointAt(anim.poly, anim.lens, frac);
+  ctx.fillStyle = ballColor;
+  ctx.beginPath();
+  ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// Returns 0..1 progress through the current beat-level leaf step of the
+// default 拍構造, or null when not in a beat step (or playback off).
+// drawCenterDot uses this to ease the trunk dot from marker-size at the
+// beat onset down to its idle radius across the step's duration.
 function defaultBeatStepProgress() {
   if (!TR.state.isPlaying || !TR.state.virtualCycle || !TR.state.virtualCycleEnd) return null;
   var pat = TR.state.patterns[TR.state.currentPattern];
-  var defaultDef = pat && pat.defaultDef;
-  if (!defaultDef || !defaultDef.tree) return null;
-  var levels = TR.computeLevels(defaultDef.tree);
+  var def = pat && pat.defaultDef;
+  if (!def || !def.tree) return null;
+  var levels = TR.computeLevels(def.tree);
   if (!levels.length) return null;
   var elapsed = Tone.now() - (TR.state.virtualCycleEnd - TR.state.virtualCycle);
   var pos = ((elapsed / TR.state.virtualCycle) % 1 + 1) % 1;
   var stepFloat = pos * levels.length;
   var step = Math.floor(stepFloat);
   if (step < 0 || step >= levels.length) return null;
-  if (levels[step] < (defaultDef.beatLevel || 1)) return null;
+  if (levels[step] < (def.beatLevel || 1)) return null;
   return stepFloat - step;
 }
 
@@ -482,7 +455,6 @@ function drawCenterDot() {
   var idleR = 4;
   var beatR = Math.max(3, Math.min(vizW, vizH) * 0.018);
   var p = defaultBeatStepProgress();
-  // Linear shrink from beatR back to idleR across the beat-step's duration.
   var r = (p == null) ? idleR : beatR + (idleR - beatR) * p;
   ctx.fillStyle = '#000';
   ctx.beginPath();
@@ -490,41 +462,35 @@ function drawCenterDot() {
   ctx.fill();
 }
 
-/* ── RANDOMIZE-ON-GENERATE ──
-   Every time 'btn-generate' fires (whether a real click or a synthetic
-   one from struct/beats changes), pick a fresh random value per entry
-   in RANDOM_PARAMS and apply it identically to every track in
-   TR.INSTRUMENTS. Writes go through setParam(), which feeds the
-   in-memory `params` map that the readers (depthPower etc.) consume.
-   Add a new randomized param by appending to the list. ── */
+/* ── Randomize-on-generate ──────────────────────────────────────────
+   Every 'btn-generate' click (real or synthetic, fired from
+   struct/beats changes) rolls one fresh random value per entry below
+   and applies it identically to every track in TR.INSTRUMENTS. New
+   tracks are picked up automatically. ── */
 var RANDOM_PARAMS = [
   { id: 'depth-curve', min: 0.3, max: 3 },
   { id: 'bend',        min: 0,   max: 1 },
   { id: 'curve',       min: 0,   max: 1 }
 ];
+// All viz tracks: regular instruments + the synthetic Crash track.
+var VIZ_KEYS = ((TR && TR.INSTRUMENTS) || ['kick', 'snare', 'hihat']).concat(['crash']);
+
 function randomizeOnGenerate() {
-  var keys = (window.TR && TR.INSTRUMENTS) || ['kick', 'snare', 'hihat'];
   for (var p = 0; p < RANDOM_PARAMS.length; p++) {
     var spec = RANDOM_PARAMS[p];
     var v = +(spec.min + Math.random() * (spec.max - spec.min)).toFixed(2);
-    for (var i = 0; i < keys.length; i++) setParam(keys[i], spec.id, v);
+    for (var i = 0; i < VIZ_KEYS.length; i++) setParam(VIZ_KEYS[i], spec.id, v);
   }
 }
 var _genBtn = document.getElementById('btn-generate');
 if (_genBtn) _genBtn.addEventListener('click', randomizeOnGenerate);
 
+/* ── Public viz interface ──────────────────────────────────────── */
 return {
   name: '花',
-  init: function(_canvas, _ctx, w, h) {
-    ctx = _ctx;
-    vizW = w;
-    vizH = h;
-  },
-  resize: function(w, h) {
-    vizW = w;
-    vizH = h;
-  },
-  frame: function(_ctx, w, h) {
+  init:   function(_canvas, _ctx, w, h) { ctx = _ctx; vizW = w; vizH = h; },
+  resize: function(w, h) { vizW = w; vizH = h; },
+  frame:  function(_ctx, w, h) {
     ctx = _ctx;
     vizW = w;
     vizH = h;
@@ -532,26 +498,18 @@ return {
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, w, h);
 
-    var keys = ['kick', 'snare', 'hihat'];
-
-    // Geometry needs to be current for any animation that fires this frame.
-    for (var k = 0; k < keys.length; k++) buildGeometry(keys[k]);
-
-    // Pick up new firings, expire old animations.
-    for (var k = 0; k < keys.length; k++) updateAnimations(keys[k]);
-
-    // Render every active animation. Each one is fully self-contained —
-    // it carries its own captured geometry and time origin.
-    for (var k = 0; k < keys.length; k++) {
-      var key = keys[k];
-      var anims = animations[key];
-      for (var step in anims) drawAnimation(key, anims[step]);
+    for (var k = 0; k < VIZ_KEYS.length; k++) buildGeometry(VIZ_KEYS[k]);
+    // Per-track ticks: Crash uses its own cycle-boundary detector.
+    for (var k = 0; k < VIZ_KEYS.length; k++) {
+      VIZ_KEYS[k] === 'crash' ? tickCrash() : tick(VIZ_KEYS[k]);
     }
-
+    for (var k = 0; k < VIZ_KEYS.length; k++) {
+      var anims = animations[VIZ_KEYS[k]];
+      for (var s in anims) drawAnimation(VIZ_KEYS[k], anims[s]);
+    }
     drawCenterDot();
   },
-  onHit: function(_key, _step, _level) {
-    // placeholder
-  }
+  onHit: function() {}
 };
+
 })(window.TR));

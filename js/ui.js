@@ -846,9 +846,8 @@ TR.renderRepeatProbChart = function(key) {
 
     // Number blocks (0 ~ PATTERN_COUNT - 1)
     var blockRow = document.createElement('div');
-    blockRow.className = 'pattern-bank';
+    blockRow.className = 'repeat-blocks';
     blockRow.id = 'rf-blocks-' + key;
-    blockRow.style.cssText = 'grid-template-columns: repeat(' + TR.PATTERN_COUNT + ', 36px); margin-top:4px;';
     for (var n = 0; n < TR.PATTERN_COUNT; n++) {
       var cell = document.createElement('span');
       cell.textContent = n;

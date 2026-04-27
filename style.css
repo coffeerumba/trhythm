@@ -450,25 +450,40 @@ input[type="range"]::-moz-range-thumb {
   margin-top: 10px;
   height: 90px;
 }
-/* Repeat-map chart: grid-aligned with pattern-bank above */
+/* Repeat-map number blocks (0..N-1 labels above the chart). Single row,
+   columns shrink to fit container width on narrow screens. */
+.repeat-blocks {
+  display: grid;
+  grid-template-columns: repeat(var(--pattern-count, 16), minmax(0, 1fr));
+  margin-top: 4px;
+  margin-bottom: 0;
+}
+.repeat-blocks > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  font-size: 14px;
+  font-family: var(--pixel-font);
+  color: var(--text-muted);
+  overflow: hidden;
+}
+@media (max-width: 700px) {
+  .repeat-blocks > span { font-size: 12px; }
+}
+
+/* Repeat-map chart: grid-aligned with .repeat-blocks above. Single row;
+   columns share the container width so it never overflows. */
 .prob-chart-repeat {
   display: grid;
-  grid-template-columns: repeat(var(--pattern-count, 16), 36px);
-  justify-content: space-between;
+  grid-template-columns: repeat(var(--pattern-count, 16), minmax(0, 1fr));
   gap: 0;
   height: 70px;
   margin-top: 6px;
   align-items: flex-end;
 }
-@media (max-width: 700px) {
-  .prob-chart-repeat {
-    grid-template-columns: repeat(calc(var(--pattern-count, 16) / 2), 36px);
-    grid-auto-rows: 70px;
-    height: auto;
-  }
-}
 .prob-chart-repeat .prob-bar-wrap {
-  width: 36px;
+  width: 100%;
   margin-left: 0;
 }
 .prob-bar-wrap {
