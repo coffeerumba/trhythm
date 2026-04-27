@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   TEST — viz mode (flower WIP)
+   FLOWER (花) — viz mode
 
    Rendering model: stateless redraw from per-step animations. When audio
    fires for step k we register an animation: a yellow ball heads from
@@ -514,7 +514,7 @@ var _genBtn = document.getElementById('btn-generate');
 if (_genBtn) _genBtn.addEventListener('click', randomizeOnGenerate);
 
 return {
-  name: 'テスト',
+  name: '花',
   init: function(_canvas, _ctx, w, h) {
     ctx = _ctx;
     vizW = w;
