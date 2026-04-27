@@ -1,22 +1,25 @@
 /* ═══════════════════════════════════════════════════════════════
    TEST — viz mode (flower WIP)
 
-   Rendering model: every frame draws the same full flower, but only the
-   parts the ball has traversed *during a hit step in this cycle* survive,
-   thanks to a destination-in mask. So branches are not "stroked piece
-   by piece" — they fade in via mask growth, and curve / radius / etc.
-   are honored end-to-end because the underlying flower draw is one
-   complete pass with drawEdge.
+   Rendering model: stateless redraw from per-step animations. When audio
+   fires for step k we register an animation: a yellow ball heads from
+   the leaf inward to the LCA over one step's duration (drawing the
+   trail behind it), then turns into a white eraser ball that retreats
+   back to the leaf over one virtual cycle (the visible trail retracts
+   along with it). The marker stays solid for the whole lifespan and
+   blinks out the instant the eraser reaches the leaf.
+
+   Each frame we just clearRect, rebuild geometry, then redraw every
+   active animation at its current elapsed time. No persist canvas, no
+   masks. Same step refiring before reverse finishes simply replaces
+   the old entry — old branches and marker disappear that frame.
    ═══════════════════════════════════════════════════════════════ */
 TR.registerVizMode((function(TR) {
 var ctx, vizW, vizH;
 var leafTips  = { kick: [], snare: [], hihat: [] };
 var leafPaths = { kick: [], snare: [], hihat: [] };  // polyline per leaf (for ball position)
 var leafEdges = { kick: [], snare: [], hihat: [] };  // edge objects per leaf (for drawing)
-var hitSet           = { kick: {},    snare: {},    hihat: {} };
-var lastStep         = { kick: -1,    snare: -1,    hihat: -1 };
 var firstStepReached = { kick: false, snare: false, hihat: false };
-var lastCurrent      = { kick: -1,    snare: -1,    hihat: -1 };
 
 /* ── DEBUG SLIDERS (remove this block + matching HTML in index.html
    to revert. Defaults: depthPower=1, bend=0, leafSpread=0, open=1,
@@ -204,68 +207,74 @@ function pointAlongPath(path, frac) {
   return path[path.length - 1];
 }
 
-// Per-instrument current/previous mask canvases. Each frame:
-//   delta[key] = mask[key] - prevMask[key]   (only newly traversed pixels)
-//   combined delta = delta.kick OR delta.snare OR delta.hihat
-// The combined delta is what we paint into persist this frame, so each
-// stroke is added once at full alpha and then decays from then on.
-var instMaskCanvas = { kick: null, snare: null, hihat: null };
-var instMaskCtx    = { kick: null, snare: null, hihat: null };
-var instPrevCanvas = { kick: null, snare: null, hihat: null };
-var instPrevCtx    = { kick: null, snare: null, hihat: null };
-// Combined delta + a scratch temp used while computing each instrument's delta.
-var deltaCanvas = null, deltaCtx = null;
-var tempCanvas  = null, tempCtx  = null;
-// Frame canvas: flower edges masked by combined delta, before compositing onto persist.
-var frameCanvas = null, frameCtx = null;
-// Persist canvas: holds every drawn pixel. Decays each frame so strokes / markers
-// fade to ~invisible after one virtual cycle from the moment they were laid down.
-var persistCanvas = null, persistCtx = null;
-var lastFrameMs = null;
-// Per-cycle marker bookkeeping: we draw each (key, step) marker exactly once
-// (when its step first becomes the playing step in a given cycle), so the
-// marker too begins fading from its own draw moment.
-var markerDrawn = { kick: {}, snare: {}, hihat: {} };
+// Active per-step animations. Each (key, step) has at most one entry. When
+// audio fires for step k, we record the firing time and snapshot enough
+// geometry to play the animation through to its end:
+//   - forward phase (0..secPerStep): yellow ball travels leaf → LCA, leaving
+//     a solid trail behind it.
+//   - reverse phase (secPerStep .. secPerStep+cycleSec): white "eraser" ball
+//     travels LCA → leaf, the trail behind it is removed.
+//   - past secPerStep+cycleSec: animation expires and is deleted; the marker
+//     winks out at that exact instant (no fade).
+// If the same step fires again before the prior animation's reverse finishes,
+// the new firing replaces the entry — old branches & marker disappear, the
+// new forward starts from leaf at frac=0.
+var animations = { kick: {}, snare: {}, hihat: {} };
 var lastPlayingStep = { kick: -1, snare: -1, hihat: -1 };
 
-function makeOffscreen(w, h) {
-  var c = document.createElement('canvas');
-  c.width = w; c.height = h;
-  return c;
-}
-function ensureMaskCanvases() {
-  var w = ctx.canvas.width, h = ctx.canvas.height;
-  ['kick', 'snare', 'hihat'].forEach(function(key) {
-    if (!instMaskCanvas[key] || instMaskCanvas[key].width !== w || instMaskCanvas[key].height !== h) {
-      instMaskCanvas[key] = makeOffscreen(w, h);
-      instMaskCtx[key]    = instMaskCanvas[key].getContext('2d');
-      instPrevCanvas[key] = makeOffscreen(w, h);
-      instPrevCtx[key]    = instPrevCanvas[key].getContext('2d');
-    }
-  });
-  if (!deltaCanvas || deltaCanvas.width !== w || deltaCanvas.height !== h) {
-    deltaCanvas = makeOffscreen(w, h); deltaCtx = deltaCanvas.getContext('2d');
-    tempCanvas  = makeOffscreen(w, h); tempCtx  = tempCanvas.getContext('2d');
+// Build a leaf→LCA edge list (with bend vertices preserved) and a polyline
+// for the ball position. LCA is the deepest path node already traversed by
+// any earlier hit step in the current cycle, mirroring the existing rule.
+function captureAnimGeom(key, step, flat) {
+  var edges = leafEdges[key][step];
+  var path  = leafPaths[key][step];
+  if (!edges || !path) return null;
+
+  var traversed = {};
+  for (var i = 0; i < step; i++) {
+    if (flat && !flat[i]) continue;
+    var p = leafPaths[key][i];
+    if (!p) continue;
+    for (var j = 0; j < p.length; j++) traversed[p[j].x + ',' + p[j].y] = true;
   }
-}
-function ensureFrameCanvas() {
-  var w = ctx.canvas.width, h = ctx.canvas.height;
-  if (!frameCanvas || frameCanvas.width !== w || frameCanvas.height !== h) {
-    frameCanvas = makeOffscreen(w, h);
-    frameCtx = frameCanvas.getContext('2d');
+  var skipEdges = 0;
+  for (var i = 0; i < edges.length; i++) {
+    if (traversed[edges[i].p2.x + ',' + edges[i].p2.y]) skipEdges = i + 1;
+    else break;
   }
-}
-function ensurePersistCanvas() {
-  var w = ctx.canvas.width, h = ctx.canvas.height;
-  if (!persistCanvas || persistCanvas.width !== w || persistCanvas.height !== h) {
-    persistCanvas = makeOffscreen(w, h);
-    persistCtx = persistCanvas.getContext('2d');
+  // Reverse the LCA→leaf edges into leaf→LCA, swapping p1/p2 within each.
+  var fwd = edges.slice(skipEdges);
+  var remEdges = [];
+  for (var ri = fwd.length - 1; ri >= 0; ri--) {
+    var e = fwd[ri];
+    remEdges.push({ p1: e.p2, vertex: e.vertex, p2: e.p1 });
   }
+  // Polyline (leaf → vertices → LCA) for ball position via pointAlongPath.
+  var pathSlice = [];
+  for (var i = 0; i < remEdges.length; i++) {
+    var e = remEdges[i];
+    if (i === 0) pathSlice.push({ x: e.p1.x, y: e.p1.y });
+    var hasBend = Math.hypot(e.vertex.x - e.p1.x, e.vertex.y - e.p1.y) > 0.5 &&
+                  Math.hypot(e.p2.x - e.vertex.x, e.p2.y - e.vertex.y) > 0.5;
+    if (hasBend) pathSlice.push({ x: e.vertex.x, y: e.vertex.y });
+    pathSlice.push({ x: e.p2.x, y: e.p2.y });
+  }
+  var tip = leafTips[key][step];
+  return {
+    remEdges:  remEdges,
+    pathSlice: pathSlice,
+    leafTip:   tip ? { x: tip.x, y: tip.y } : null,
+    curve:     curveAmount(key)
+  };
 }
-function drawTraversalMask(key, targetCtx) {
+
+// Detect new step transitions, register a fresh animation when the new step
+// is a hit, and prune animations whose reverse has finished.
+function updateAnimations(key) {
   if (!TR.state.isPlaying) {
+    animations[key] = {};
+    lastPlayingStep[key] = -1;
     firstStepReached[key] = false;
-    lastCurrent[key] = -1;
     return;
   }
   var ip = findIp(key);
@@ -273,144 +282,128 @@ function drawTraversalMask(key, targetCtx) {
   var stepsUntilNext = Math.max(0, (ip.nextTime - Tone.now()) / ip.secPerStep);
   var contStep = ip.step - stepsUntilNext;
   if (!firstStepReached[key]) {
-    if (contStep < 0) return;
+    if (contStep < 0) {
+      // Still expire any leftovers if they exist.
+      pruneExpired(key);
+      return;
+    }
     firstStepReached[key] = true;
   }
-  var stepIdx = Math.floor(contStep);
-  var fracWithinStep = contStep - stepIdx;
-  var current = ((stepIdx % ip.count) + ip.count) % ip.count;
-  // Cycle wrap is implicit — at the wrap, current resets to a small index
-  // and the per-step mask logic naturally only includes 0..current-1 again.
-  lastCurrent[key] = current;
+  var playingStep = ((Math.floor(contStep) % ip.count) + ip.count) % ip.count;
 
-  var flat = TR.state[key + 'Flat'];
-  var curve = curveAmount(key);
-
-  // Swap ctx to the per-instrument mask ctx so drawEdge populates that canvas.
-  var origCtx = ctx;
-  ctx = targetCtx;
-  ctx.strokeStyle = '#000';
-  ctx.lineWidth = 4;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.setLineDash([]);
-
-  // Full edges of completed hit steps
-  for (var i = 0; i < current; i++) {
-    if (flat && !flat[i]) continue;
-    var edges = leafEdges[key][i];
-    if (!edges) continue;
-    for (var j = 0; j < edges.length; j++) {
-      var e = edges[j];
-      drawEdge(e.p1.x, e.p1.y, e.p2.x, e.p2.y, e.vertex.x, e.vertex.y, curve);
-    }
-  }
-  // Partial mask along current step's edges, only when this step is a hit
-  if (flat && flat[current]) {
-    var edges2 = leafEdges[key][current];
-    if (edges2) {
-      // Skip leading edges whose endpoints are already in any prior hit step
-      var traversed = {};
-      for (var i = 0; i < current; i++) {
-        if (flat && !flat[i]) continue;
-        var p = leafPaths[key][i];
-        if (!p) continue;
-        for (var j = 0; j < p.length; j++) {
-          traversed[p[j].x + ',' + p[j].y] = true;
-        }
-      }
-      var skip = 0;
-      for (var i = 0; i < edges2.length; i++) {
-        var p2 = edges2[i].p2;
-        if (traversed[p2.x + ',' + p2.y]) skip = i + 1;
-        else break;
-      }
-      var totalAll = 0;
-      var lensAll = [];
-      for (var i = 0; i < edges2.length; i++) {
-        var l = edgeLen(edges2[i]);
-        lensAll.push(l);
-        totalAll += l;
-      }
-      var skippedLen = 0;
-      for (var i = 0; i < skip; i++) skippedLen += lensAll[i];
-      var ballAbsLen = fracWithinStep * totalAll;
-      var ballRem = ballAbsLen - skippedLen;
-      var fracRem = (totalAll - skippedLen) > 0 ? Math.max(0, ballRem / (totalAll - skippedLen)) : 0;
-
-      // Stroke remainingEdges up to fracRem. Reverse the array AND swap
-      // p1/p2 within each edge so the trail grows from the leaf inward
-      // toward the LCA — matching the ball's leaf→center motion.
-      var fwdRem = edges2.slice(skip);
-      var remEdges = [];
-      for (var ri = fwdRem.length - 1; ri >= 0; ri--) {
-        var origE = fwdRem[ri];
-        remEdges.push({ p1: origE.p2, vertex: origE.vertex, p2: origE.p1 });
-      }
-      var remTotal = 0;
-      var remLens = [];
-      for (var i = 0; i < remEdges.length; i++) {
-        var l = edgeLen(remEdges[i]);
-        remLens.push(l);
-        remTotal += l;
-      }
-      if (remTotal > 0 && fracRem > 0) {
-        var target = fracRem * remTotal;
-        var acc = 0;
-        for (var i = 0; i < remEdges.length; i++) {
-          if (acc + remLens[i] <= target) {
-            var e = remEdges[i];
-            drawEdge(e.p1.x, e.p1.y, e.p2.x, e.p2.y, e.vertex.x, e.vertex.y, curve);
-            acc += remLens[i];
-          } else {
-            // Partial edge: straight L (mask ends mid-edge — visual snap is
-            // fine for the mask since the flower under it can stay curved)
-            var e = remEdges[i];
-            var l1 = Math.hypot(e.vertex.x - e.p1.x, e.vertex.y - e.p1.y);
-            var l2 = Math.hypot(e.p2.x - e.vertex.x, e.p2.y - e.vertex.y);
-            var remaining = target - acc;
-            ctx.beginPath();
-            ctx.moveTo(e.p1.x, e.p1.y);
-            if (remaining <= l1) {
-              var f = l1 > 0 ? remaining / l1 : 0;
-              ctx.lineTo(e.p1.x + f * (e.vertex.x - e.p1.x),
-                         e.p1.y + f * (e.vertex.y - e.p1.y));
-            } else {
-              ctx.lineTo(e.vertex.x, e.vertex.y);
-              var f2 = l2 > 0 ? (remaining - l1) / l2 : 0;
-              ctx.lineTo(e.vertex.x + f2 * (e.p2.x - e.vertex.x),
-                         e.vertex.y + f2 * (e.p2.y - e.vertex.y));
-            }
-            ctx.stroke();
-            break;
-          }
-        }
+  if (playingStep !== lastPlayingStep[key]) {
+    var flat = TR.state[key + 'Flat'];
+    if (flat && flat[playingStep]) {
+      var geom = captureAnimGeom(key, playingStep, flat);
+      if (geom) {
+        animations[key][playingStep] = {
+          firingTime: Tone.now(),
+          secPerStep: ip.secPerStep,
+          cycleSec:   TR.state.virtualCycle || (ip.secPerStep * ip.count),
+          remEdges:   geom.remEdges,
+          pathSlice:  geom.pathSlice,
+          leafTip:    geom.leafTip,
+          curve:      geom.curve
+        };
       }
     }
+    lastPlayingStep[key] = playingStep;
   }
-  // Restore main ctx
-  ctx = origCtx;
+  pruneExpired(key);
 }
 
-// Stroke every edge of the flower (always full, in solid black). Combined
-// with the mask via source-in composite, only mask-region pixels survive.
-function drawAllEdges(key) {
+function pruneExpired(key) {
+  var now = Tone.now();
+  for (var s in animations[key]) {
+    var a = animations[key][s];
+    if (now > a.firingTime + a.secPerStep + a.cycleSec) delete animations[key][s];
+  }
+}
+
+// Stroke the visible portion of one animation's path: from the leaf inward
+// up to fraction `frac` of the leaf→LCA route. Forward uses frac that grows
+// 0→1; reverse uses frac that shrinks 1→0, so the visible segment grows out
+// of the leaf and then retracts back into it — matching the ball's motion.
+function strokeAnimSegment(remEdges, frac, curve) {
+  if (!remEdges || remEdges.length === 0 || frac <= 0) return;
+  var lens = [], total = 0;
+  for (var i = 0; i < remEdges.length; i++) {
+    var l = edgeLen(remEdges[i]);
+    lens.push(l);
+    total += l;
+  }
+  if (total === 0) return;
+  var target = frac * total;
+  var acc = 0;
+  for (var i = 0; i < remEdges.length; i++) {
+    var e = remEdges[i];
+    if (acc + lens[i] <= target) {
+      drawEdge(e.p1.x, e.p1.y, e.p2.x, e.p2.y, e.vertex.x, e.vertex.y, curve);
+      acc += lens[i];
+    } else {
+      // Partial edge — sharp L ok, the visual snap on the leading tip is tiny.
+      var remaining = target - acc;
+      var l1 = Math.hypot(e.vertex.x - e.p1.x, e.vertex.y - e.p1.y);
+      var l2 = Math.hypot(e.p2.x - e.vertex.x, e.p2.y - e.vertex.y);
+      ctx.beginPath();
+      ctx.moveTo(e.p1.x, e.p1.y);
+      if (remaining <= l1) {
+        var f = l1 > 0 ? remaining / l1 : 0;
+        ctx.lineTo(e.p1.x + f * (e.vertex.x - e.p1.x),
+                   e.p1.y + f * (e.vertex.y - e.p1.y));
+      } else {
+        ctx.lineTo(e.vertex.x, e.vertex.y);
+        var f2 = l2 > 0 ? (remaining - l1) / l2 : 0;
+        ctx.lineTo(e.vertex.x + f2 * (e.p2.x - e.vertex.x),
+                   e.vertex.y + f2 * (e.p2.y - e.vertex.y));
+      }
+      ctx.stroke();
+      break;
+    }
+  }
+}
+
+function drawAnimation(key, anim) {
+  var elapsed = Tone.now() - anim.firingTime;
+  if (elapsed < 0) return;
+
+  var frac, ballColor;
+  if (elapsed < anim.secPerStep) {
+    // Forward: visible segment expands from leaf toward LCA.
+    frac = elapsed / anim.secPerStep;
+    ballColor = '#ffcc00';
+  } else if (elapsed < anim.secPerStep + anim.cycleSec) {
+    // Reverse: white eraser drifts back toward leaf, visible segment retracts.
+    frac = 1 - (elapsed - anim.secPerStep) / anim.cycleSec;
+    ballColor = '#fff';
+  } else {
+    return; // expired — pruneExpired() will delete on the next updateAnimations
+  }
+
+  // 1. The visible trail (leaf → ball position).
   ctx.strokeStyle = '#000';
   ctx.lineWidth = 1;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   ctx.setLineDash([]);
-  var curve = curveAmount(key);
-  var seen = {};
-  for (var leafIdx = 0; leafIdx < leafEdges[key].length; leafIdx++) {
-    var edges = leafEdges[key][leafIdx];
-    for (var i = 0; i < edges.length; i++) {
-      var e = edges[i];
-      var k = e.p1.x + ',' + e.p1.y + '|' + e.p2.x + ',' + e.p2.y;
-      if (seen[k]) continue;
-      seen[k] = true;
-      drawEdge(e.p1.x, e.p1.y, e.p2.x, e.p2.y, e.vertex.x, e.vertex.y, curve);
-    }
+  strokeAnimSegment(anim.remEdges, frac, anim.curve);
+
+  // 2. Marker at the leaf tip, full alpha throughout the animation lifespan.
+  if (anim.leafTip) {
+    ctx.fillStyle = TR.rgbCSS(TR.INST_COLORS[key]);
+    var tipR = Math.max(3, Math.min(vizW, vizH) * 0.018);
+    ctx.beginPath();
+    ctx.arc(anim.leafTip.x, anim.leafTip.y, tipR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 3. The ball itself — yellow heading inward, white heading back out.
+  var pos = pointAlongPath(anim.pathSlice, frac);
+  if (pos) {
+    ctx.fillStyle = ballColor;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
@@ -418,84 +411,6 @@ function drawCenterDot() {
   ctx.fillStyle = '#000';
   ctx.beginPath();
   ctx.arc(vizW / 2, vizH / 2, 4, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-// Draw the marker for the current playing step exactly once per cycle, the
-// first frame after that step becomes the playing step. Subsequent frames in
-// the same cycle don't redraw it, so persistCanvas's decay can fade it out
-// from the moment it was laid down.
-function drawNewMarker(key) {
-  if (!TR.state.isPlaying || !firstStepReached[key]) {
-    markerDrawn[key] = {};
-    lastPlayingStep[key] = -1;
-    return;
-  }
-  var ip = findIp(key);
-  if (!ip || !ip.secPerStep || !ip.count) return;
-  var stepsUntilNext = Math.max(0, (ip.nextTime - Tone.now()) / ip.secPerStep);
-  var contStep = ip.step - stepsUntilNext;
-  var playingStep = ((Math.floor(contStep) % ip.count) + ip.count) % ip.count;
-
-  // Cycle-wrap detection: a big drop means the cycle wrapped — clear the
-  // per-cycle "drawn" set so this cycle's markers can fire again.
-  if (lastPlayingStep[key] >= 0 &&
-      playingStep < lastPlayingStep[key] &&
-      (lastPlayingStep[key] - playingStep) > ip.count / 2) {
-    markerDrawn[key] = {};
-  }
-  lastPlayingStep[key] = playingStep;
-
-  var flat = TR.state[key + 'Flat'];
-  if (!flat || !flat[playingStep] || markerDrawn[key][playingStep]) return;
-  markerDrawn[key][playingStep] = true;
-
-  var tip = leafTips[key][playingStep];
-  if (!tip) return;
-  ctx.fillStyle = TR.rgbCSS(TR.INST_COLORS[key]);
-  var tipR = Math.max(3, Math.min(vizW, vizH) * 0.018);
-  ctx.beginPath();
-  ctx.arc(tip.x, tip.y, tipR, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-function drawBall(key) {
-  if (!TR.state.isPlaying) return;
-  var ip = findIp(key);
-  if (!ip || !ip.secPerStep || !ip.count) return;
-  var stepsUntilNext = Math.max(0, (ip.nextTime - Tone.now()) / ip.secPerStep);
-  var contStep = ip.step - stepsUntilNext;
-  if (contStep < 0 && !firstStepReached[key]) return;
-  var stepIdx = Math.floor(contStep);
-  var fracWithinStep = contStep - stepIdx;
-  stepIdx = ((stepIdx % ip.count) + ip.count) % ip.count;
-  var flat = TR.state[key + 'Flat'];
-  if (flat && !flat[stepIdx]) return;  // hide ball on non-hit branches
-  var path = leafPaths[key][stepIdx];
-  if (!path) return;
-  // Compute LCA: nodes already covered by previous hit steps in this cycle.
-  var traversed = {};
-  for (var i = 0; i < stepIdx; i++) {
-    if (flat && !flat[i]) continue;
-    var p = leafPaths[key][i];
-    if (!p) continue;
-    for (var j = 0; j < p.length; j++) {
-      traversed[p[j].x + ',' + p[j].y] = true;
-    }
-  }
-  var startIdx = 0;
-  for (var i = 0; i < path.length; i++) {
-    if (traversed[path[i].x + ',' + path[i].y]) startIdx = i;
-    else break;
-  }
-  // Ball travels from the leaf tip inward to the LCA (or center for step 0).
-  // Reverse the non-traversed portion so frac=0 sits at the leaf.
-  var pathSlice = path.slice(startIdx).slice().reverse();
-  var pos = pointAlongPath(pathSlice, fracWithinStep);
-  if (!pos) return;
-  ctx.fillStyle = '#ffcc00';
-  ctx.beginPath();
-  ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
   ctx.fill();
 }
 
@@ -535,114 +450,26 @@ return {
     vizW = w;
     vizH = h;
 
-    ctx.clearRect(0, 0, w, h);
-    ensureMaskCanvases();
-    ensureFrameCanvas();
-    ensurePersistCanvas();
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, w, h);
 
     var keys = ['kick', 'snare', 'hihat'];
 
-    // Reset everything when not playing so each play starts clean.
-    if (!TR.state.isPlaying) {
-      persistCtx.clearRect(0, 0, w, h);
-      lastFrameMs = null;
-      for (var k = 0; k < keys.length; k++) {
-        instPrevCtx[keys[k]].clearRect(0, 0, w, h);
-        markerDrawn[keys[k]] = {};
-        lastPlayingStep[keys[k]] = -1;
-      }
-    } else {
-      // Time-based exponential alpha decay on persist: a pixel left alone
-      // fades to ~2% one virtual cycle after it was last drawn. Because we
-      // only paint NEW pixels into persist each frame (see step 4 below),
-      // each stroke / marker fades independently from its own draw moment.
-      var nowMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-      var cycle = TR.state.virtualCycle;
-      if (lastFrameMs !== null && cycle > 0) {
-        var dt = (nowMs - lastFrameMs) / 1000;
-        var srcAlpha = 1 - Math.exp(-4 * dt / cycle);
-        if (srcAlpha > 0) {
-          persistCtx.globalCompositeOperation = 'destination-out';
-          persistCtx.fillStyle = 'rgba(0,0,0,' + srcAlpha + ')';
-          persistCtx.fillRect(0, 0, w, h);
-          persistCtx.globalCompositeOperation = 'source-over';
-        }
-      }
-      lastFrameMs = nowMs;
-    }
-
-    frameCtx.clearRect(0, 0, w, h);
-    deltaCtx.clearRect(0, 0, w, h);
-
-    // 1. Geometry
+    // Geometry needs to be current for any animation that fires this frame.
     for (var k = 0; k < keys.length; k++) buildGeometry(keys[k]);
 
-    // 2. Per-instrument: build current mask, detect cycle wrap, compute
-    //    delta = current - prev, OR delta into combined deltaCanvas, then
-    //    save current as prev for next frame.
+    // Pick up new firings, expire old animations.
+    for (var k = 0; k < keys.length; k++) updateAnimations(keys[k]);
+
+    // Render every active animation. Each one is fully self-contained —
+    // it carries its own captured geometry and time origin.
     for (var k = 0; k < keys.length; k++) {
       var key = keys[k];
-      var ip = findIp(key);
-      var count = ip ? ip.count : 0;
-      var prevCurrent = lastCurrent[key];
-      instMaskCtx[key].clearRect(0, 0, w, h);
-      drawTraversalMask(key, instMaskCtx[key]);
-      var curCurrent = lastCurrent[key];
-      // Wrap = significant drop in current step (guards against jitter).
-      var wrapped = (prevCurrent >= 0 && curCurrent >= 0 &&
-                     curCurrent < prevCurrent &&
-                     count > 0 && (prevCurrent - curCurrent) > count / 2);
-      if (wrapped) {
-        instPrevCtx[key].clearRect(0, 0, w, h);
-      }
-      // Per-instrument delta into temp.
-      tempCtx.globalCompositeOperation = 'source-over';
-      tempCtx.clearRect(0, 0, w, h);
-      tempCtx.drawImage(instMaskCanvas[key], 0, 0);
-      tempCtx.globalCompositeOperation = 'destination-out';
-      tempCtx.drawImage(instPrevCanvas[key], 0, 0);
-      tempCtx.globalCompositeOperation = 'source-over';
-      // OR into combined delta.
-      deltaCtx.drawImage(tempCanvas, 0, 0);
-      // Save current → prev for next frame.
-      instPrevCtx[key].clearRect(0, 0, w, h);
-      instPrevCtx[key].drawImage(instMaskCanvas[key], 0, 0);
+      var anims = animations[key];
+      for (var step in anims) drawAnimation(key, anims[step]);
     }
 
-    // 3. Render flower edges (all instruments) onto frameCanvas, then mask
-    //    with combined delta so only newly traversed pixels remain.
-    var origCtx = ctx;
-    ctx = frameCtx;
-    for (var k = 0; k < keys.length; k++) drawAllEdges(keys[k]);
-    ctx.globalCompositeOperation = 'destination-in';
-    ctx.drawImage(deltaCanvas, 0, 0);
-    ctx.globalCompositeOperation = 'source-over';
-    ctx = origCtx;
-
-    // 4. Composite frame (only the new edge pixels) onto persist. Existing
-    //    decayed pixels in persist keep their decay; new pixels go in at
-    //    full alpha and start their own one-cycle fade.
-    persistCtx.drawImage(frameCanvas, 0, 0);
-
-    // 5. Draw the marker for any step that just became the playing step
-    //    directly onto persist. Each marker is laid down once per cycle,
-    //    then fades naturally with the rest of persist.
-    ctx = persistCtx;
-    for (var k = 0; k < keys.length; k++) drawNewMarker(keys[k]);
-    ctx = origCtx;
-
-    // 6. Display the accumulated image.
-    ctx.drawImage(persistCanvas, 0, 0);
-
-    // 7. Transient decorations on main only (not persisted).
     drawCenterDot();
-    for (var k = 0; k < keys.length; k++) drawBall(keys[k]);
-
-    // 8. Fill white behind everything.
-    ctx.globalCompositeOperation = 'destination-over';
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, w, h);
-    ctx.globalCompositeOperation = 'source-over';
   },
   onHit: function(_key, _step, _level) {
     // placeholder
