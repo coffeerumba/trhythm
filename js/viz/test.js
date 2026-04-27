@@ -254,9 +254,49 @@ function pointAlongPath(path, frac) {
 var animations = { kick: {}, snare: {}, hihat: {} };
 var lastPlayingStep = { kick: -1, snare: -1, hihat: -1 };
 
-// Build a leaf→LCA edge list (with bend vertices preserved) and a polyline
-// for the ball position. LCA is the deepest path node already traversed by
-// any earlier hit step in the current cycle, mirroring the existing rule.
+// Tessellate one bent edge (p1 → vertex → p2) into a polyline that follows
+// the same arcTo-style rounded corner drawEdge() draws. We approximate the
+// circular fillet with a quadratic Bézier from tangent T1 to T2, control at
+// the vertex — visually indistinguishable for the curve range we use, and
+// the polyline form lets us draw arbitrary partial portions of the curve
+// without the arcTo→straight snap bug at the eraser tip. ──
+function tessellateEdge(p1, vertex, p2, curve) {
+  var d1 = Math.hypot(vertex.x - p1.x, vertex.y - p1.y);
+  var d2 = Math.hypot(p2.x - vertex.x, p2.y - vertex.y);
+  if (d1 < 0.5 || d2 < 0.5) {
+    return [{ x: p1.x, y: p1.y }, { x: p2.x, y: p2.y }];
+  }
+  var maxR = Math.min(d1, d2) * 0.95;
+  var r = curve * maxR;
+  if (r < 0.5) {
+    return [{ x: p1.x, y: p1.y }, { x: vertex.x, y: vertex.y }, { x: p2.x, y: p2.y }];
+  }
+  // Tangent points on each leg, distance r from the vertex.
+  var u1x = (p1.x - vertex.x) / d1, u1y = (p1.y - vertex.y) / d1;
+  var u2x = (p2.x - vertex.x) / d2, u2y = (p2.y - vertex.y) / d2;
+  var T1x = vertex.x + u1x * r, T1y = vertex.y + u1y * r;
+  var T2x = vertex.x + u2x * r, T2y = vertex.y + u2y * r;
+
+  var poly = [];
+  poly.push({ x: p1.x, y: p1.y });
+  poly.push({ x: T1x,  y: T1y  });
+  var N = 12; // segments along the rounded corner
+  for (var k = 1; k < N; k++) {
+    var t  = k / N;
+    var mt = 1 - t;
+    poly.push({
+      x: mt * mt * T1x + 2 * mt * t * vertex.x + t * t * T2x,
+      y: mt * mt * T1y + 2 * mt * t * vertex.y + t * t * T2y
+    });
+  }
+  poly.push({ x: T2x, y: T2y });
+  poly.push({ x: p2.x, y: p2.y });
+  return poly;
+}
+
+// Build a single leaf→LCA polyline (curve-aware) used for both the trail
+// drawing and the ball's position. LCA is the deepest path node already
+// traversed by any earlier hit step in the current cycle.
 function captureAnimGeom(key, step, flat) {
   var edges = leafEdges[key][step];
   var path  = leafPaths[key][step];
@@ -276,27 +316,18 @@ function captureAnimGeom(key, step, flat) {
   }
   // Reverse the LCA→leaf edges into leaf→LCA, swapping p1/p2 within each.
   var fwd = edges.slice(skipEdges);
-  var remEdges = [];
+  var curve = curveAmount(key);
+  var pathSlice = [];
   for (var ri = fwd.length - 1; ri >= 0; ri--) {
     var e = fwd[ri];
-    remEdges.push({ p1: e.p2, vertex: e.vertex, p2: e.p1 });
-  }
-  // Polyline (leaf → vertices → LCA) for ball position via pointAlongPath.
-  var pathSlice = [];
-  for (var i = 0; i < remEdges.length; i++) {
-    var e = remEdges[i];
-    if (i === 0) pathSlice.push({ x: e.p1.x, y: e.p1.y });
-    var hasBend = Math.hypot(e.vertex.x - e.p1.x, e.vertex.y - e.p1.y) > 0.5 &&
-                  Math.hypot(e.p2.x - e.vertex.x, e.p2.y - e.vertex.y) > 0.5;
-    if (hasBend) pathSlice.push({ x: e.vertex.x, y: e.vertex.y });
-    pathSlice.push({ x: e.p2.x, y: e.p2.y });
+    var sub = tessellateEdge(e.p2, e.vertex, e.p1, curve);
+    if (pathSlice.length === 0) pathSlice.push(sub[0]);
+    for (var k = 1; k < sub.length; k++) pathSlice.push(sub[k]);
   }
   var tip = leafTips[key][step];
   return {
-    remEdges:  remEdges,
     pathSlice: pathSlice,
-    leafTip:   tip ? { x: tip.x, y: tip.y } : null,
-    curve:     curveAmount(key)
+    leafTip:   tip ? { x: tip.x, y: tip.y } : null
   };
 }
 
@@ -340,10 +371,8 @@ function updateAnimations(key) {
           firingTime: Tone.now(),
           secPerStep: ip.secPerStep,
           cycleSec:   0.5 * trackCycle,
-          remEdges:   geom.remEdges,
           pathSlice:  geom.pathSlice,
-          leafTip:    geom.leafTip,
-          curve:      geom.curve
+          leafTip:    geom.leafTip
         };
       }
     }
@@ -360,47 +389,37 @@ function pruneExpired(key) {
   }
 }
 
-// Stroke the visible portion of one animation's path: from the leaf inward
-// up to fraction `frac` of the leaf→LCA route. Forward uses frac that grows
-// 0→1; reverse uses frac that shrinks 1→0, so the visible segment grows out
-// of the leaf and then retracts back into it — matching the ball's motion.
-function strokeAnimSegment(remEdges, frac, curve) {
-  if (!remEdges || remEdges.length === 0 || frac <= 0) return;
+// Stroke the visible portion of one animation's polyline: from the leaf
+// (poly[0]) up to fraction `frac` of the total polyline length. Forward
+// uses frac growing 0→1; reverse uses frac shrinking 1→0. Because the
+// polyline already encodes the curve via tessellation, the partial edge
+// follows the curve smoothly with no straight-snap at the eraser tip.
+function strokeAnimPath(poly, frac) {
+  if (!poly || poly.length < 2 || frac <= 0) return;
   var lens = [], total = 0;
-  for (var i = 0; i < remEdges.length; i++) {
-    var l = edgeLen(remEdges[i]);
+  for (var i = 1; i < poly.length; i++) {
+    var l = Math.hypot(poly[i].x - poly[i-1].x, poly[i].y - poly[i-1].y);
     lens.push(l);
     total += l;
   }
   if (total === 0) return;
   var target = frac * total;
   var acc = 0;
-  for (var i = 0; i < remEdges.length; i++) {
-    var e = remEdges[i];
+  ctx.beginPath();
+  ctx.moveTo(poly[0].x, poly[0].y);
+  for (var i = 0; i < lens.length; i++) {
     if (acc + lens[i] <= target) {
-      drawEdge(e.p1.x, e.p1.y, e.p2.x, e.p2.y, e.vertex.x, e.vertex.y, curve);
+      ctx.lineTo(poly[i+1].x, poly[i+1].y);
       acc += lens[i];
     } else {
-      // Partial edge — sharp L ok, the visual snap on the leading tip is tiny.
-      var remaining = target - acc;
-      var l1 = Math.hypot(e.vertex.x - e.p1.x, e.vertex.y - e.p1.y);
-      var l2 = Math.hypot(e.p2.x - e.vertex.x, e.p2.y - e.vertex.y);
-      ctx.beginPath();
-      ctx.moveTo(e.p1.x, e.p1.y);
-      if (remaining <= l1) {
-        var f = l1 > 0 ? remaining / l1 : 0;
-        ctx.lineTo(e.p1.x + f * (e.vertex.x - e.p1.x),
-                   e.p1.y + f * (e.vertex.y - e.p1.y));
-      } else {
-        ctx.lineTo(e.vertex.x, e.vertex.y);
-        var f2 = l2 > 0 ? (remaining - l1) / l2 : 0;
-        ctx.lineTo(e.vertex.x + f2 * (e.p2.x - e.vertex.x),
-                   e.vertex.y + f2 * (e.p2.y - e.vertex.y));
-      }
-      ctx.stroke();
+      var rem = target - acc;
+      var f = lens[i] > 0 ? rem / lens[i] : 0;
+      ctx.lineTo(poly[i].x + f * (poly[i+1].x - poly[i].x),
+                 poly[i].y + f * (poly[i+1].y - poly[i].y));
       break;
     }
   }
+  ctx.stroke();
 }
 
 function drawAnimation(key, anim) {
@@ -426,7 +445,7 @@ function drawAnimation(key, anim) {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   ctx.setLineDash([]);
-  strokeAnimSegment(anim.remEdges, frac, anim.curve);
+  strokeAnimPath(anim.pathSlice, frac);
 
   // 2. Marker at the leaf tip, full alpha throughout the animation lifespan.
   if (anim.leafTip) {
