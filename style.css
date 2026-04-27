@@ -357,6 +357,32 @@ input[type="range"]::-moz-range-thumb {
   border-color: var(--border);
   color: var(--text);
 }
+/* Progress ring shown inside the download button during video export.
+   The DOM is built once and only `stroke-dashoffset` is mutated per
+   update, so the smooth fill transition isn't restarted on each tick. */
+.btn-ring {
+  display: inline-block;
+  vertical-align: -2px;
+  margin-right: 6px;
+}
+.btn-ring-bg, .btn-ring-fg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+.btn-ring-bg { opacity: 0.25; }
+.btn-ring-fg {
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.2s ease-out;
+}
+/* While the user has clicked Cancel and we're waiting for the in-flight
+   render to actually bail out (can take up to one audio-render duration),
+   grey the button out and block further clicks. */
+.btn-cancelling {
+  opacity: 0.5;
+  pointer-events: none;
+  cursor: not-allowed;
+}
 
 /* --- Viz --- */
 .viz-wrap {

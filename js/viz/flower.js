@@ -124,18 +124,16 @@ function trackPat(key) {
   return TR.state.patterns[TR.state.currentPattern];
 }
 
-function buildGeometry(key) {
-  var pat = trackPat(key);
-  // Crash is a synthetic track keyed off the default 拍構造; the regular
-  // tracks read their own per-instrument tree (pat[key + 'Def']).
-  var def = (key === 'crash')
-    ? (pat && pat.defaultDef)
-    : ((pat && pat[key + 'Def']) || (TR.getInstStructure && TR.getInstStructure(key)));
-  if (!def || !def.tree) { leaves[key] = []; return; }
+// Pure helper: given a track key, its def, and canvas dims, build the
+// leaves array. Reads shape parameters from the global `params` map. Same
+// math as the realtime path — used by both buildGeometry() (realtime) and
+// the offline schedule builder (export).
+function buildLeavesFor(key, def, w, h) {
+  if (!def || !def.tree) return [];
 
   var totalDepth = treeDepth(def.tree);
-  var cx = vizW / 2, cy = vizH / 2;
-  var rMax     = Math.min(vizW, vizH) * param(key, 'radius');
+  var cx = w / 2, cy = h / 2;
+  var rMax     = Math.min(w, h) * param(key, 'radius');
   var p        = param(key, 'depth-curve');
   var bendAmt  = param(key, 'bend');
   var spread   = param(key, 'leaf-spread');
@@ -152,7 +150,6 @@ function buildGeometry(key) {
     var mid     = (depth === 0) ? -Math.PI / 2 : (aStart + aEnd) / 2;
 
     if (!Array.isArray(tree)) {
-      // Leaf-group with `tree` siblings.
       for (var i = 0; i < tree; i++) {
         var centered = (i + 0.5) / tree;
         var edged    = (tree > 1) ? i / (tree - 1) : 0.5;
@@ -195,7 +192,17 @@ function buildGeometry(key) {
 
   var root = { x: cx, y: cy };
   recur(def.tree, -Math.PI / 2, Math.PI * 3 / 2, cx, cy, 0, 0, [root], []);
-  leaves[key] = out;
+  return out;
+}
+
+function buildGeometry(key) {
+  var pat = trackPat(key);
+  // Crash is a synthetic track keyed off the default 拍構造; the regular
+  // tracks read their own per-instrument tree (pat[key + 'Def']).
+  var def = (key === 'crash')
+    ? (pat && pat.defaultDef)
+    : ((pat && pat[key + 'Def']) || (TR.getInstStructure && TR.getInstStructure(key)));
+  leaves[key] = buildLeavesFor(key, def, vizW, vizH);
 }
 
 /* ── Polyline utilities ─────────────────────────────────────────── */
@@ -228,23 +235,23 @@ function pointAt(poly, lens, frac) {
   return poly[poly.length - 1];
 }
 
-function strokePartial(poly, lens, frac) {
+function strokePartial(c, poly, lens, frac) {
   if (lens.total === 0 || frac <= 0) return;
   var target = frac * lens.total, acc = 0;
-  ctx.beginPath();
-  ctx.moveTo(poly[0].x, poly[0].y);
+  c.beginPath();
+  c.moveTo(poly[0].x, poly[0].y);
   for (var i = 0; i < lens.segs.length; i++) {
     if (acc + lens.segs[i] <= target) {
-      ctx.lineTo(poly[i+1].x, poly[i+1].y);
+      c.lineTo(poly[i+1].x, poly[i+1].y);
       acc += lens.segs[i];
     } else {
       var f = lens.segs[i] > 0 ? (target - acc) / lens.segs[i] : 0;
-      ctx.lineTo(poly[i].x + f * (poly[i+1].x - poly[i].x),
-                 poly[i].y + f * (poly[i+1].y - poly[i].y));
+      c.lineTo(poly[i].x + f * (poly[i+1].x - poly[i].x),
+               poly[i].y + f * (poly[i+1].y - poly[i].y));
       break;
     }
   }
-  ctx.stroke();
+  c.stroke();
 }
 
 /* ── Animations ───────────────────────────────────────────────────
@@ -274,18 +281,19 @@ function commonPrefix(a, b) {
   return n;
 }
 
-// Build the leaf → LCA polyline for `step`. LCA = deepest tree node
-// shared with any earlier hit step in this cycle. Concatenates the kept
-// edge tessellations in reverse order (leaf-most first), reversing each
-// internally and dropping boundary duplicates.
-function buildLeafToLcaPath(key, step, flat) {
-  var leaf = leaves[key][step];
+// Build the leaf → LCA polyline for `step` within a single track's leaves
+// array. LCA = deepest tree node shared with any earlier hit step in this
+// cycle. Concatenates the kept edge tessellations in reverse order
+// (leaf-most first), reversing each internally and dropping boundary
+// duplicates.
+function buildLeafToLcaPath(leavesArr, step, flat) {
+  var leaf = leavesArr[step];
   if (!leaf) return null;
 
   var sharedNodes = 1;  // the root is always shared
   for (var i = 0; i < step; i++) {
     if (!flat[i]) continue;
-    var other = leaves[key][i];
+    var other = leavesArr[i];
     if (!other) continue;
     var c = commonPrefix(leaf.nodes, other.nodes);
     if (c > sharedNodes) sharedNodes = c;
@@ -323,7 +331,7 @@ function tick(key) {
     var pat  = TR.state.patterns[ip.currentPattern];
     var flat = pat && pat[key];
     if (flat && flat[playingStep]) {
-      var poly = buildLeafToLcaPath(key, playingStep, flat);
+      var poly = buildLeafToLcaPath(leaves[key], playingStep, flat);
       if (poly && poly.length >= 1) {
         animations[key][playingStep] = {
           firingTime: Tone.now(),
@@ -373,7 +381,7 @@ function tickCrash() {
     crashLastCycleStart = cycleStart;
     var crashLeaves = leaves.crash;
     if (crashLeaves.length) {
-      var poly = buildLeafToLcaPath('crash', 0, []);
+      var poly = buildLeafToLcaPath(crashLeaves, 0, []);
       if (poly && poly.length >= 1) {
         animations.crash[0] = {
           firingTime: cycleStart,
@@ -397,9 +405,11 @@ function markerColor(key) {
   return key === 'crash' ? CRASH_MARKER_COLOR : TR.rgbCSS(TR.INST_COLORS[key]);
 }
 
-function drawAnimation(key, anim) {
-  var elapsed = Tone.now() - anim.firingTime;
-  if (elapsed < 0) return;  // animation registered for a near-future audio fire
+// Pure draw routine — uses no closure state. The realtime path
+// (drawAnimation) and the offline export both go through here.
+function drawAnimationCore(c, w, h, t, key, anim) {
+  var elapsed = t - anim.firingTime;
+  if (elapsed < 0) return;
   var frac, ballColor;
   if (elapsed < anim.forwardSec) {
     frac      = elapsed / anim.forwardSec;
@@ -407,63 +417,84 @@ function drawAnimation(key, anim) {
   } else if (elapsed < anim.forwardSec + anim.reverseSec) {
     frac      = 1 - (elapsed - anim.forwardSec) / anim.reverseSec;
     ballColor = '#fff';
-  } else return;  // expired — pruned on the next tick
+  } else return;
+
+  // All pixel-sized constants below scale with min(w, h) so the visual
+  // output is the same regardless of backing-store resolution. Tuned
+  // against the legacy ~540px-tall canvas: 4px ball / 4px idle dot /
+  // 1px line. Roughly: 0.008 for dots, 0.002 for line widths.
+  var unit = Math.min(w, h);
+  var ballR = Math.max(2, unit * 0.008);
+  var lineW = Math.max(1, unit * 0.002);
 
   // Trail: leaf → ball position, in solid black.
-  ctx.strokeStyle = '#000';
-  ctx.lineWidth   = 1;
-  ctx.lineCap     = 'round';
-  ctx.lineJoin    = 'round';
-  strokePartial(anim.poly, anim.lens, frac);
+  c.strokeStyle = '#000';
+  c.lineWidth   = lineW;
+  c.lineCap     = 'round';
+  c.lineJoin    = 'round';
+  strokePartial(c, anim.poly, anim.lens, frac);
 
   // Marker at the leaf tip (poly[0]) for the full lifespan.
-  var tipR = Math.max(3, Math.min(vizW, vizH) * 0.018);
-  ctx.fillStyle = markerColor(key);
-  ctx.beginPath();
-  ctx.arc(anim.poly[0].x, anim.poly[0].y, tipR, 0, Math.PI * 2);
-  ctx.fill();
+  var tipR = Math.max(3, unit * 0.018);
+  c.fillStyle = markerColor(key);
+  c.beginPath();
+  c.arc(anim.poly[0].x, anim.poly[0].y, tipR, 0, Math.PI * 2);
+  c.fill();
 
-  // Ball: yellow heading inward, white heading back out, both with a
+  // Ball: black heading inward, white heading back out, both with a
   // black outline so they read clearly against any background.
   var pos = pointAt(anim.poly, anim.lens, frac);
-  ctx.beginPath();
-  ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
-  ctx.fillStyle = ballColor;
-  ctx.fill();
-  ctx.strokeStyle = '#000';
-  ctx.lineWidth = 1;
-  ctx.stroke();
+  c.beginPath();
+  c.arc(pos.x, pos.y, ballR, 0, Math.PI * 2);
+  c.fillStyle = ballColor;
+  c.fill();
+  c.strokeStyle = '#000';
+  c.lineWidth = lineW;
+  c.stroke();
 }
 
-// Returns 0..1 progress through the current beat-level leaf step of the
-// default 拍構造, or null when not in a beat step (or playback off).
-// drawCenterDot uses this to ease the trunk dot from marker-size at the
-// beat onset down to its idle radius across the step's duration.
-function defaultBeatStepProgress() {
-  if (!TR.state.isPlaying || !TR.state.virtualCycle || !TR.state.virtualCycleEnd) return null;
-  var pat = TR.state.patterns[TR.state.currentPattern];
-  var def = pat && pat.defaultDef;
-  if (!def || !def.tree) return null;
-  var levels = TR.computeLevels(def.tree);
+function drawAnimation(key, anim) {
+  drawAnimationCore(ctx, vizW, vizH, Tone.now(), key, anim);
+}
+
+// Pure: returns 0..1 progress through the current beat-level leaf step of
+// the supplied default 拍構造, or null when not in a beat step. `t` is
+// time in seconds since the start of the cycle that contains it; given
+// `cycleStart` and `cycleDur`, we wrap to find the position within cycle.
+function beatStepProgressCore(t, defaultDef, cycleStart, cycleDur) {
+  if (!defaultDef || !defaultDef.tree || !cycleDur) return null;
+  var levels = TR.computeLevels(defaultDef.tree);
   if (!levels.length) return null;
-  var elapsed = Tone.now() - (TR.state.virtualCycleEnd - TR.state.virtualCycle);
-  var pos = ((elapsed / TR.state.virtualCycle) % 1 + 1) % 1;
+  var elapsed = t - cycleStart;
+  var pos = ((elapsed / cycleDur) % 1 + 1) % 1;
   var stepFloat = pos * levels.length;
   var step = Math.floor(stepFloat);
   if (step < 0 || step >= levels.length) return null;
-  if (levels[step] < (def.beatLevel || 1)) return null;
+  if (levels[step] < (defaultDef.beatLevel || 1)) return null;
   return stepFloat - step;
 }
 
+function drawCenterDotCore(c, w, h, progress) {
+  var unit = Math.min(w, h);
+  var idleR = Math.max(2, unit * 0.008);
+  var beatR = Math.max(3, unit * 0.018);
+  var r = (progress == null) ? idleR : beatR + (idleR - beatR) * progress;
+  c.fillStyle = '#000';
+  c.beginPath();
+  c.arc(w / 2, h / 2, r, 0, Math.PI * 2);
+  c.fill();
+}
+
 function drawCenterDot() {
-  var idleR = 4;
-  var beatR = Math.max(3, Math.min(vizW, vizH) * 0.018);
-  var p = defaultBeatStepProgress();
-  var r = (p == null) ? idleR : beatR + (idleR - beatR) * p;
-  ctx.fillStyle = '#000';
-  ctx.beginPath();
-  ctx.arc(vizW / 2, vizH / 2, r, 0, Math.PI * 2);
-  ctx.fill();
+  var p = TR.state.isPlaying
+    ? beatStepProgressCore(
+        Tone.now(),
+        (TR.state.patterns[TR.state.currentPattern] || {}).defaultDef,
+        (TR.state.virtualCycleEnd || 0) - (TR.state.virtualCycle || 0),
+        TR.state.virtualCycle || 0
+      )
+    : null;
+  drawCenterDotCore(ctx, vizW, vizH, p);
 }
 
 /* ── Randomize-on-generate ──────────────────────────────────────────
@@ -488,6 +519,129 @@ function randomizeOnGenerate() {
 }
 var _genBtn = document.getElementById('btn-generate');
 if (_genBtn) _genBtn.addEventListener('click', randomizeOnGenerate);
+
+/* ── Public offline-export API ──────────────────────────────────────
+   These two functions let the video exporter render the flower to any
+   canvas at any virtual time, without going through the realtime
+   playback state. They mirror what the realtime path produces, frame
+   for frame, given the same shape parameters.
+
+   buildSchedule(pats, bpm, accentMode, w, h):
+     Returns { totalDuration, slots, firings } — one cycle's worth of
+     animation events. Each `firing` has firingTime, forwardSec,
+     reverseSec, poly, lens, key. The exporter doubles this list (for
+     seamless looping) before rendering.
+
+   renderFrame(targetCtx, w, h, t, schedule):
+     Clears `targetCtx`, draws every animation in `schedule.firings`
+     that is alive at time `t`, plus the trunk dot. Pure — does not
+     read any realtime state.
+── */
+TR.flower = TR.flower || {};
+
+TR.flower.buildSchedule = function(pats, bpm, accentMode, w, h) {
+  var slots = [];
+  var firings = [];
+  var offset = 0;
+
+  for (var p = 0; p < pats.length; p++) {
+    var entry = pats[p];
+    var pat = entry.pat || entry;  // accept either { pat, bankIdx } or pat directly
+    if (!pat) continue;
+
+    // Per-track step durations + leaves count (matches existing renderOffline).
+    var trackInfo = {};
+    var maxCycle = 0;
+    var REGULAR = ['kick', 'snare', 'hihat'];
+    for (var ti = 0; ti < REGULAR.length; ti++) {
+      var key = REGULAR[ti];
+      var def = pat[key + 'Def'];
+      if (!def) continue;
+      var trackBeats  = pat[key + 'Beats'] || TR.computeBeats(def);
+      var trackLeaves = TR.computeLevels(def.tree).length;
+      var secPerStep  = 60.0 * trackBeats / bpm / trackLeaves;
+      var cycle       = secPerStep * trackLeaves;
+      trackInfo[key] = {
+        secPerStep: secPerStep, leaves: trackLeaves, cycle: cycle, def: def,
+        leavesGeom: buildLeavesFor(key, def, w, h)
+      };
+      if (cycle > maxCycle) maxCycle = cycle;
+    }
+    var slotDur = maxCycle;
+    var crashLeavesGeom = buildLeavesFor('crash', pat.defaultDef, w, h);
+
+    // One firing per hit step per regular track.
+    for (var ti2 = 0; ti2 < REGULAR.length; ti2++) {
+      var key2 = REGULAR[ti2];
+      var info = trackInfo[key2];
+      var flat = pat[key2];
+      if (!info || !flat) continue;
+      var reverseSec = 0.5 * info.cycle;
+      for (var s = 0; s < flat.length; s++) {
+        if (!flat[s]) continue;
+        var poly = buildLeafToLcaPath(info.leavesGeom, s, flat);
+        if (!poly || !poly.length) continue;
+        firings.push({
+          firingTime: offset + s * info.secPerStep,
+          forwardSec: info.secPerStep,
+          reverseSec: reverseSec,
+          poly:       poly,
+          lens:       precomputeLengths(poly),
+          key:        key2
+        });
+      }
+    }
+
+    // Crash: one firing at slot start when accent isn't 'off'.
+    if (accentMode !== 'off' && crashLeavesGeom.length && slotDur > 0) {
+      var cPoly = buildLeafToLcaPath(crashLeavesGeom, 0, []);
+      if (cPoly && cPoly.length) {
+        firings.push({
+          firingTime: offset,
+          forwardSec: slotDur / crashLeavesGeom.length,
+          reverseSec: 0.5 * slotDur,
+          poly:       cPoly,
+          lens:       precomputeLengths(cPoly),
+          key:        'crash'
+        });
+      }
+    }
+
+    slots.push({ offset: offset, duration: slotDur, defaultDef: pat.defaultDef });
+    offset += slotDur;
+  }
+
+  // Sort by firing time so renderFrame can short-circuit once it passes t.
+  firings.sort(function(a, b) { return a.firingTime - b.firingTime; });
+  return { totalDuration: offset, slots: slots, firings: firings };
+};
+
+// Find the slot covering virtual time `t`. Slots are sorted by offset
+// and contiguous, so a linear scan is fine for the frame counts we emit.
+function slotAtTime(slots, t) {
+  for (var i = 0; i < slots.length; i++) {
+    var s = slots[i];
+    if (s.offset <= t && t < s.offset + s.duration) return s;
+  }
+  return null;
+}
+
+TR.flower.renderFrame = function(c, w, h, t, schedule) {
+  c.fillStyle = '#fff';
+  c.fillRect(0, 0, w, h);
+
+  var firings = schedule.firings;
+  for (var i = 0; i < firings.length; i++) {
+    var f = firings[i];
+    if (f.firingTime > t) break;  // sorted — none after this can be active yet
+    if (f.firingTime + f.forwardSec + f.reverseSec <= t) continue;
+    drawAnimationCore(c, w, h, t, f.key, f);
+  }
+
+  var slot = slotAtTime(schedule.slots, t);
+  var p = slot ? beatStepProgressCore(t, slot.defaultDef, slot.offset, slot.duration) : null;
+  drawCenterDotCore(c, w, h, p);
+};
 
 /* ── Public viz interface ──────────────────────────────────────── */
 return {

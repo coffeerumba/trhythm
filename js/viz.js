@@ -42,9 +42,12 @@ TR.vizOnHit = function(key, step, level) {
 };
 
 TR.vizResize = function() {
-  var wrap = document.getElementById('viz-wrap');
-  w = wrap.clientWidth;
-  h = Math.floor(w * 9 / 16);
+  // Render at fixed Full HD resolution. The CSS rule on `.viz-wrap canvas`
+  // (width:100%; aspect-ratio:16/9) handles the on-screen scaling, so the
+  // visual layout doesn't change — content is just super-sampled on most
+  // displays and the exported video lands at native 1920×1080.
+  w = 1920;
+  h = 1080;
   canvas.width = w;
   canvas.height = h;
   if (TR.activeVizMode && TR.activeVizMode.resize) {

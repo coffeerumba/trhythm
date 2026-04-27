@@ -493,11 +493,61 @@ TR.renderOffline = async function() {
 };
 
 document.getElementById('btn-download').addEventListener('click', async function() {
+  var btn = this;
+
+  // If an export is already running, this click is a cancel request.
+  // We swap the button into a "cancelling" state — the in-flight
+  // handler's finally block will restore it once cancellation actually
+  // takes effect (which can lag behind audio render completion).
+  if (TR.exportInProgress && TR.exportInProgress()) {
+    if (TR.cancelExport) TR.cancelExport();
+    btn.innerHTML = '<span class="btn-pct">キャンセル中...</span>';
+    btn.classList.add('btn-cancelling');
+    return;
+  }
+
+  var originalHTML = btn.innerHTML;
+
+  // Build the progress UI once. We mutate stroke-dashoffset and the
+  // percentage text in place on each progress tick \u2014 the DOM nodes
+  // themselves are not recreated, so the CSS transition can animate
+  // smoothly between updates.
+  var R = 6;
+  var CIRC = 2 * Math.PI * R;
+  btn.innerHTML =
+    '<svg class="btn-ring" width="14" height="14" viewBox="0 0 14 14">' +
+      '<circle class="btn-ring-bg" cx="7" cy="7" r="' + R + '"></circle>' +
+      '<circle class="btn-ring-fg" cx="7" cy="7" r="' + R + '" transform="rotate(-90 7 7)"></circle>' +
+    '</svg>' +
+    '<span class="btn-pct">0%</span>';
+  var ringFg = btn.querySelector('.btn-ring-fg');
+  var pctEl = btn.querySelector('.btn-pct');
+  ringFg.style.strokeDasharray = CIRC;
+  ringFg.style.strokeDashoffset = CIRC;  // empty ring at start
+
+  function setProgress(p) {
+    p = Math.max(0, Math.min(1, p));
+    ringFg.style.strokeDashoffset = CIRC * (1 - p);
+    pctEl.textContent = Math.round(p * 100) + '%';
+  }
+  function restore() {
+    btn.innerHTML = originalHTML;
+    btn.classList.remove('btn-cancelling');
+  }
+
   try {
-    await TR.renderOffline();
+    if (TR.exportVideoAvailable && TR.exportVideoAvailable()) {
+      await TR.exportVideo(setProgress);
+    } else {
+      await TR.renderOffline();
+    }
   } catch(e) {
-    console.error('Download failed:', e);
-    alert('\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u306b\u5931\u6557\u3057\u307e\u3057\u305f: ' + e.message);
+    if (!e.cancelled) {
+      console.error('Download failed:', e);
+      alert('\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u306b\u5931\u6557\u3057\u307e\u3057\u305f: ' + e.message);
+    }
+  } finally {
+    restore();
   }
 });
 })(window.TR);
