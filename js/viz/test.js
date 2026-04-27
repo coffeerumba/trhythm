@@ -5,9 +5,9 @@
    fires for step k we register an animation: a yellow ball heads from
    the leaf inward to the LCA over one step's duration (drawing the
    trail behind it), then turns into a white eraser ball that retreats
-   back to the leaf over one virtual cycle (the visible trail retracts
-   along with it). The marker stays solid for the whole lifespan and
-   blinks out the instant the eraser reaches the leaf.
+   back to the leaf over half a virtual cycle (the visible trail
+   retracts along with it). The marker stays solid for the whole
+   lifespan and blinks out the instant the eraser reaches the leaf.
 
    Each frame we just clearRect, rebuild geometry, then redraw every
    active animation at its current elapsed time. No persist canvas, no
@@ -212,10 +212,11 @@ function pointAlongPath(path, frac) {
 // geometry to play the animation through to its end:
 //   - forward phase (0..secPerStep): yellow ball travels leaf → LCA, leaving
 //     a solid trail behind it.
-//   - reverse phase (secPerStep .. secPerStep+cycleSec): white "eraser" ball
-//     travels LCA → leaf, the trail behind it is removed.
-//   - past secPerStep+cycleSec: animation expires and is deleted; the marker
-//     winks out at that exact instant (no fade).
+//   - reverse phase (secPerStep .. secPerStep+reverseSec): white "eraser"
+//     ball travels LCA → leaf, the trail behind it is removed.
+//     reverseSec = 0.5 × virtualCycle (half-cycle reverse).
+//   - past secPerStep+reverseSec: animation expires and is deleted; the
+//     marker winks out at that exact instant (no fade).
 // If the same step fires again before the prior animation's reverse finishes,
 // the new firing replaces the entry — old branches & marker disappear, the
 // new forward starts from leaf at frac=0.
@@ -299,7 +300,7 @@ function updateAnimations(key) {
         animations[key][playingStep] = {
           firingTime: Tone.now(),
           secPerStep: ip.secPerStep,
-          cycleSec:   TR.state.virtualCycle || (ip.secPerStep * ip.count),
+          cycleSec:   0.5 * (TR.state.virtualCycle || (ip.secPerStep * ip.count)),
           remEdges:   geom.remEdges,
           pathSlice:  geom.pathSlice,
           leafTip:    geom.leafTip,
