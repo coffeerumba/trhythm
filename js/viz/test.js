@@ -26,27 +26,37 @@ var leafPaths = { kick: [], snare: [], hihat: [] };  // polyline per leaf (for b
 var leafEdges = { kick: [], snare: [], hihat: [] };  // edge objects per leaf (for drawing)
 var firstStepReached = { kick: false, snare: false, hihat: false };
 
-/* ── DEBUG SLIDERS (per-instrument shape parameters). The slider DOM
-   itself is built and appended to #viz-wrap by buildSliderUI() further
-   down — everything in this file, no HTML markup elsewhere. Remove
-   this whole feature by deleting the dbgNum helpers + buildSliderUI +
-   bindSlider block. Defaults: depthPower=1, bend=0, leafSpread=0,
-   open=1, radius=0.45, curve=0, leafLen=1 (with per-instrument leafLen
-   overrides — see SLIDER_SPECS below). ── */
-function dbgNum(id, def) {
-  var el = document.getElementById(id);
-  if (!el) return def;
-  var v = parseFloat(el.value);
-  return isNaN(v) ? def : v;
+/* ── PARAMETERS (per-instrument shape values). The canonical store is
+   the in-memory `params` map below — readers like depthPower(key) get
+   their value from there. The optional debug-slider UI built by
+   buildSliderUI() is just a view/editor on top of this map: each
+   slider keeps its own entry in `params` in sync via an 'input'
+   listener. Removing the slider UI in the future leaves `params` and
+   the readers untouched, so the rest of the file keeps working. ── */
+var params = {};   // params[key + ':' + paramId] -> number
+
+function setParam(key, paramId, val) {
+  params[key + ':' + paramId] = val;
+  // Mirror to slider input if one exists, so the UI reflects the new value.
+  var input = document.getElementById('test-' + key + '-' + paramId);
+  if (input && parseFloat(input.value) !== val) {
+    input.value = val;
+    input.dispatchEvent(new Event('input'));
+  }
 }
-function depthPower(key)  { return dbgNum('test-' + key + '-depth-curve', 1.0); }
-function bendAlpha(key)   { return dbgNum('test-' + key + '-bend',        0.0); }
-function leafSpread(key)  { return dbgNum('test-' + key + '-leaf-spread', 0.0); }
-function branchOpen(key)  { return dbgNum('test-' + key + '-open',        1.0); }
-function radiusFrac(key)  { return dbgNum('test-' + key + '-radius',      0.45); }
-function curveAmount(key) { return dbgNum('test-' + key + '-curve',       0.0); }
-function leafLength(key)  { return dbgNum('test-' + key + '-leaf-len',    1.0); }
-/* ── END DEBUG SLIDERS ── */
+function getParam(key, paramId, def) {
+  var v = params[key + ':' + paramId];
+  return (v == null) ? def : v;
+}
+
+function depthPower(key)  { return getParam(key, 'depth-curve', 1.0); }
+function bendAlpha(key)   { return getParam(key, 'bend',        0.0); }
+function leafSpread(key)  { return getParam(key, 'leaf-spread', 0.0); }
+function branchOpen(key)  { return getParam(key, 'open',        1.0); }
+function radiusFrac(key)  { return getParam(key, 'radius',      0.45); }
+function curveAmount(key) { return getParam(key, 'curve',       0.0); }
+function leafLength(key)  { return getParam(key, 'leaf-len',    1.0); }
+/* ── END PARAMETERS ── */
 
 function treeDepth(t) {
   if (!Array.isArray(t)) return 1;
@@ -503,13 +513,17 @@ function buildSliderUI() {
       input.step = spec.step;
       input.value = def;
       input.style.cssText = 'flex:1;';
-      // Live display update.
-      (function(displayEl, inputEl) {
-        var update = function() {
-          displayEl.textContent = parseFloat(inputEl.value).toFixed(2);
-        };
-        inputEl.addEventListener('input', update);
-      })(disp, input);
+      // Seed params with this slider's default, and keep them in sync as the
+      // user drags. This way the rest of the file reads from `params`, not
+      // from the DOM, and randomization can write straight into `params`.
+      params[inst.key + ':' + spec.id] = def;
+      (function(displayEl, inputEl, paramKey) {
+        inputEl.addEventListener('input', function() {
+          var v = parseFloat(inputEl.value);
+          displayEl.textContent = v.toFixed(2);
+          params[paramKey] = v;
+        });
+      })(disp, input, inst.key + ':' + spec.id);
 
       row.appendChild(label);
       row.appendChild(input);
@@ -520,6 +534,32 @@ function buildSliderUI() {
 }
 buildSliderUI();
 /* ── END DEBUG SLIDERS ── */
+
+/* ── RANDOMIZE-ON-GENERATE ──
+   Every time 'btn-generate' fires (whether a real click or a synthetic
+   one from struct/beats changes), pick a fresh random value per entry
+   in RANDOM_PARAMS and apply it identically to every track in
+   TR.INSTRUMENTS. Writes go through setParam() so both the in-memory
+   params and any visible slider stay in sync. Survives slider removal —
+   without sliders the value still lands in `params` and the readers
+   pick it up. Add a new randomized param by appending to the list;
+   ranges intentionally mirror SLIDER_SPECS but stay hardcoded so they
+   keep working after slider removal. ── */
+var RANDOM_PARAMS = [
+  { id: 'depth-curve', min: 0.3, max: 3 },
+  { id: 'bend',        min: 0,   max: 1 },
+  { id: 'curve',       min: 0,   max: 1 }
+];
+function randomizeOnGenerate() {
+  var keys = (window.TR && TR.INSTRUMENTS) || ['kick', 'snare', 'hihat'];
+  for (var p = 0; p < RANDOM_PARAMS.length; p++) {
+    var spec = RANDOM_PARAMS[p];
+    var v = +(spec.min + Math.random() * (spec.max - spec.min)).toFixed(2);
+    for (var i = 0; i < keys.length; i++) setParam(keys[i], spec.id, v);
+  }
+}
+var _genBtn = document.getElementById('btn-generate');
+if (_genBtn) _genBtn.addEventListener('click', randomizeOnGenerate);
 
 return {
   name: 'テスト',
