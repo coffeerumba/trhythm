@@ -26,9 +26,13 @@ var leafPaths = { kick: [], snare: [], hihat: [] };  // polyline per leaf (for b
 var leafEdges = { kick: [], snare: [], hihat: [] };  // edge objects per leaf (for drawing)
 var firstStepReached = { kick: false, snare: false, hihat: false };
 
-/* ── DEBUG SLIDERS (remove this block + matching HTML in index.html
-   to revert. Defaults: depthPower=1, bend=0, leafSpread=0, open=1,
-   radius=0.45, curve=0, leafLen=1 — per instrument). ── */
+/* ── DEBUG SLIDERS (per-instrument shape parameters). The slider DOM
+   itself is built and appended to #viz-wrap by buildSliderUI() further
+   down — everything in this file, no HTML markup elsewhere. Remove
+   this whole feature by deleting the dbgNum helpers + buildSliderUI +
+   bindSlider block. Defaults: depthPower=1, bend=0, leafSpread=0,
+   open=1, radius=0.45, curve=0, leafLen=1 (with per-instrument leafLen
+   overrides — see SLIDER_SPECS below). ── */
 function dbgNum(id, def) {
   var el = document.getElementById(id);
   if (!el) return def;
@@ -440,24 +444,81 @@ function drawCenterDot() {
   ctx.fill();
 }
 
-/* ── DEBUG SLIDERS: live value readout ── */
-function bindSlider(inputId, displayId, digits) {
-  var input = document.getElementById(inputId);
-  var display = document.getElementById(displayId);
-  if (!input || !display) return;
-  var update = function() { display.textContent = parseFloat(input.value).toFixed(digits); };
-  input.addEventListener('input', update);
-  update();
+/* ── DEBUG SLIDERS: build DOM + bind live value readout ──
+   Defines a slider per (instrument, parameter), appends them under
+   #viz-wrap, and keeps the right-aligned numeric display in sync with
+   each input. Values are read by the dbgNum helpers above via the same
+   element IDs ('test-' + key + '-' + paramId). ── */
+var SLIDER_SPECS = [
+  { id: 'depth-curve', label: '2. 深さカーブ',     min: 0.3, max: 3, step: 0.05, def: 1.0  },
+  { id: 'bend',        label: '6. 枝の屈折',       min: 0,   max: 1, step: 0.01, def: 0.0  },
+  { id: 'leaf-spread', label: '7. 葉の外広がり',   min: 0,   max: 1, step: 0.01, def: 0.0  },
+  { id: 'open',        label: '8. 枝の開き',       min: 0,   max: 1, step: 0.01, def: 1.0  },
+  { id: 'radius',      label: '9. 半径',           min: 0.1, max: 0.5, step: 0.01, def: 0.45 },
+  { id: 'curve',       label: '10. 枝のカーブ',    min: 0,   max: 1, step: 0.01, def: 0.0  },
+  { id: 'leaf-len',    label: '11. 葉の長さ',      min: 0,   max: 2, step: 0.05, def: 1.0,
+    perInst: { kick: 0.7, snare: 0.85, hihat: 1.0 } }
+];
+var INST_INFO = [
+  { key: 'kick',  label: 'キック',     color: 'rgb(208,48,80)' },
+  { key: 'snare', label: 'スネア',     color: 'rgb(34,119,204)' },
+  { key: 'hihat', label: 'ハイハット', color: 'rgb(85,153,85)' }
+];
+
+function buildSliderUI() {
+  var wrap = document.getElementById('viz-wrap');
+  if (!wrap || document.getElementById('test-mode-debug')) return;
+  var container = document.createElement('div');
+  container.id = 'test-mode-debug';
+  container.style.cssText = 'margin-top:10px; font-size:12px; display:flex; flex-direction:column; gap:6px;';
+
+  for (var i = 0; i < INST_INFO.length; i++) {
+    var inst = INST_INFO[i];
+    var head = document.createElement('div');
+    head.style.cssText = 'font-weight:bold; color:' + inst.color +
+                         '; margin-top:' + (i === 0 ? 4 : 8) + 'px;';
+    head.textContent = inst.label;
+    container.appendChild(head);
+
+    for (var j = 0; j < SLIDER_SPECS.length; j++) {
+      var spec = SLIDER_SPECS[j];
+      var def  = (spec.perInst && spec.perInst[inst.key] != null) ? spec.perInst[inst.key] : spec.def;
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex; align-items:center; gap:8px;';
+
+      var label = document.createElement('label');
+      label.style.cssText = 'flex:0 0 160px;';
+      label.appendChild(document.createTextNode(spec.label + ' '));
+      var disp = document.createElement('span');
+      disp.id = 'test-' + inst.key + '-' + spec.id + '-val';
+      disp.style.color = '#666';
+      disp.textContent = def.toFixed(2);
+      label.appendChild(disp);
+
+      var input = document.createElement('input');
+      input.type = 'range';
+      input.id = 'test-' + inst.key + '-' + spec.id;
+      input.min = spec.min;
+      input.max = spec.max;
+      input.step = spec.step;
+      input.value = def;
+      input.style.cssText = 'flex:1;';
+      // Live display update.
+      (function(displayEl, inputEl) {
+        var update = function() {
+          displayEl.textContent = parseFloat(inputEl.value).toFixed(2);
+        };
+        inputEl.addEventListener('input', update);
+      })(disp, input);
+
+      row.appendChild(label);
+      row.appendChild(input);
+      container.appendChild(row);
+    }
+  }
+  wrap.appendChild(container);
 }
-['kick', 'snare', 'hihat'].forEach(function(k) {
-  bindSlider('test-' + k + '-depth-curve', 'test-' + k + '-depth-curve-val', 2);
-  bindSlider('test-' + k + '-bend',        'test-' + k + '-bend-val',        2);
-  bindSlider('test-' + k + '-leaf-spread', 'test-' + k + '-leaf-spread-val', 2);
-  bindSlider('test-' + k + '-open',        'test-' + k + '-open-val',        2);
-  bindSlider('test-' + k + '-radius',      'test-' + k + '-radius-val',      2);
-  bindSlider('test-' + k + '-curve',       'test-' + k + '-curve-val',       2);
-  bindSlider('test-' + k + '-leaf-len',    'test-' + k + '-leaf-len-val',    2);
-});
+buildSliderUI();
 /* ── END DEBUG SLIDERS ── */
 
 return {
