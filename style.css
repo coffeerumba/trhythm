@@ -383,14 +383,32 @@ input[type="range"]::-moz-range-thumb {
   pointer-events: none;
   cursor: not-allowed;
 }
-/* Video / Audio choice popup that drops down beneath the .btn-row when
-   the DL button is clicked. Hidden by default, .open shows it. The two
-   nested buttons use a smaller variant of the pixel-art button look so
-   they read as a secondary choice surface, not primary actions. */
+/* DL dropdown: a small ▼ caret indicates the button opens a menu, and
+   the menu itself drops down directly below the button as an absolute
+   layer so it doesn't affect the surrounding .btn-row layout. */
+.dl-wrap {
+  position: relative;
+  display: inline-flex;  /* keep inside the flex .btn-row like a regular button */
+}
+.dl-caret {
+  font-size: 0.7em;
+  margin-left: 4px;
+  display: inline-block;
+  transform: translateY(-2px);  /* nudge to optical center */
+}
 .export-choice-row {
   display: none;
-  gap: 8px;
-  margin: -8px 0 16px 0;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  box-shadow: 3px 3px 0 var(--border);
+  z-index: 10;
+  min-width: 100%;  /* at least as wide as the DL button */
 }
 .export-choice-row.open { display: flex; }
 .btn-export-choice {
@@ -399,12 +417,13 @@ input[type="range"]::-moz-range-thumb {
   padding: 6px 14px;
   background: var(--surface);
   border: 2px solid var(--border);
-  box-shadow: 2px 2px 0 var(--border);
   cursor: pointer;
   color: var(--text);
+  text-align: left;
+  white-space: nowrap;
 }
-.btn-export-choice:hover { filter: brightness(1.2); }
-.btn-export-choice:active { box-shadow: none; transform: translate(2px, 2px); }
+.btn-export-choice:hover { filter: brightness(0.95); background: var(--bg); }
+.btn-export-choice:active { filter: brightness(0.9); }
 
 /* --- Viz --- */
 .viz-wrap {
