@@ -560,21 +560,23 @@ TR.renderOffline = async function(onProgress) {
   }
 };
 
-/* ── DL button: Video / Audio / PNG Seq choice popup ───────────────
-   Click DL → toggle a small popup with three buttons below the
-   .btn-row. Picking one swaps the DL button into a progress-ring
-   state and runs the corresponding export pipeline:
+/* ── DL button: Video / Audio / PNG Seq / MIDI choice popup ───────
+   Click DL → toggle a small popup with the four export buttons below
+   the .btn-row. Each button runs its own pipeline:
      Video   → TR.exportVideo    (WebM via WebCodecs + webm-muxer)
      Audio   → TR.renderOffline  (WAV via OfflineAudioContext)
      PNG Seq → TR.exportPngSeq   (transparent PNG sequence ZIP)
-   While an export is running, clicking DL again triggers cancel for
-   whichever pipeline is active (TR.cancelExport / TR.cancelAudio /
-   TR.cancelPng). Clicking outside the popup closes it. */
+     MIDI    → TR.exportMidi     (Standard MIDI File, instant — no progress)
+   While a long-running export (Video/Audio/PNG) is running, clicking DL
+   again triggers cancel for whichever pipeline is active. MIDI export
+   is fast enough (milliseconds) that it has no progress UI and no
+   cancel path. Clicking outside the popup closes it. */
 var dlBtn = document.getElementById('btn-download');
 var choiceRow = document.getElementById('export-choice');
 var btnExportVideo = document.getElementById('btn-export-video');
 var btnExportAudio = document.getElementById('btn-export-audio');
 var btnExportPng   = document.getElementById('btn-export-png');
+var btnExportMidi  = document.getElementById('btn-export-midi');
 
 // Shared progress-ring helper used by both Video and Audio paths.
 // Builds the SVG ring once and returns mutators — reusing the same
@@ -695,6 +697,19 @@ async function runPngExport() {
   }
 }
 
+function runMidiExport() {
+  closeChoice();
+  // MIDI encoding takes milliseconds — no progress ring, no cancel.
+  // We do still wrap in try/catch so a bad pattern bank surfaces a
+  // visible alert instead of failing silently.
+  try {
+    TR.exportMidi();
+  } catch(err) {
+    console.error('MIDI export failed:', err);
+    alert('ダウンロードに失敗しました: ' + err.message);
+  }
+}
+
 btnExportVideo.addEventListener('click', function(e) {
   e.stopPropagation();
   runVideoExport();
@@ -706,6 +721,10 @@ btnExportAudio.addEventListener('click', function(e) {
 btnExportPng.addEventListener('click', function(e) {
   e.stopPropagation();
   runPngExport();
+});
+btnExportMidi.addEventListener('click', function(e) {
+  e.stopPropagation();
+  runMidiExport();
 });
 
 // Close the popup if the user clicks anywhere else. The button + choice
