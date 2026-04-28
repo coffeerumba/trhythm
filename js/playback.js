@@ -560,19 +560,21 @@ TR.renderOffline = async function(onProgress) {
   }
 };
 
-/* ── DL button: Video / Audio choice popup ────────────────────────
-   Click DL → toggle a small popup with two buttons (Video / Audio)
-   below the .btn-row. Picking one swaps the DL button into a
-   progress-ring state and runs the corresponding export pipeline:
-     Video → TR.exportVideo (WebM via WebCodecs + webm-muxer)
-     Audio → TR.renderOffline (WAV via OfflineAudioContext)
-   While an export is running, clicking DL again triggers cancel
-   (works for both pipelines — see TR.cancelExport / TR.cancelAudio).
-   Clicking outside the popup closes it without exporting. */
+/* ── DL button: Video / Audio / PNG Seq choice popup ───────────────
+   Click DL → toggle a small popup with three buttons below the
+   .btn-row. Picking one swaps the DL button into a progress-ring
+   state and runs the corresponding export pipeline:
+     Video   → TR.exportVideo    (WebM via WebCodecs + webm-muxer)
+     Audio   → TR.renderOffline  (WAV via OfflineAudioContext)
+     PNG Seq → TR.exportPngSeq   (transparent PNG sequence ZIP)
+   While an export is running, clicking DL again triggers cancel for
+   whichever pipeline is active (TR.cancelExport / TR.cancelAudio /
+   TR.cancelPng). Clicking outside the popup closes it. */
 var dlBtn = document.getElementById('btn-download');
 var choiceRow = document.getElementById('export-choice');
 var btnExportVideo = document.getElementById('btn-export-video');
 var btnExportAudio = document.getElementById('btn-export-audio');
+var btnExportPng   = document.getElementById('btn-export-png');
 
 // Shared progress-ring helper used by both Video and Audio paths.
 // Builds the SVG ring once and returns mutators — reusing the same
@@ -630,8 +632,13 @@ dlBtn.addEventListener('click', function(e) {
     showCancelling(dlBtn);
     return;
   }
+  if (TR.pngInProgress && TR.pngInProgress()) {
+    TR.cancelPng();
+    showCancelling(dlBtn);
+    return;
+  }
 
-  // Idle: toggle the Video/Audio choice popup.
+  // Idle: toggle the choice popup.
   choiceRow.classList.toggle('open');
 });
 
@@ -669,6 +676,25 @@ async function runAudioExport() {
   }
 }
 
+async function runPngExport() {
+  closeChoice();
+  if (!(TR.exportPngSeqAvailable && TR.exportPngSeqAvailable())) {
+    alert('PNG\u30b7\u30fc\u30b1\u30f3\u30b9\u51fa\u529b\u306e\u30e9\u30a4\u30d6\u30e9\u30ea\u304c\u8aad\u307f\u8fbc\u307e\u308c\u3066\u3044\u307e\u305b\u3093\u3002');
+    return;
+  }
+  var ui = beginProgressUI(dlBtn);
+  try {
+    await TR.exportPngSeq(ui.setProgress);
+  } catch(err) {
+    if (!err.cancelled) {
+      console.error('PNG export failed:', err);
+      alert('\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u306b\u5931\u6557\u3057\u307e\u3057\u305f: ' + err.message);
+    }
+  } finally {
+    ui.restore();
+  }
+}
+
 btnExportVideo.addEventListener('click', function(e) {
   e.stopPropagation();
   runVideoExport();
@@ -676,6 +702,10 @@ btnExportVideo.addEventListener('click', function(e) {
 btnExportAudio.addEventListener('click', function(e) {
   e.stopPropagation();
   runAudioExport();
+});
+btnExportPng.addEventListener('click', function(e) {
+  e.stopPropagation();
+  runPngExport();
 });
 
 // Close the popup if the user clicks anywhere else. The button + choice

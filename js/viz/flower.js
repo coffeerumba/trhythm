@@ -626,9 +626,17 @@ function slotAtTime(slots, t) {
   return null;
 }
 
-TR.flower.renderFrame = function(c, w, h, t, schedule) {
-  c.fillStyle = '#fff';
-  c.fillRect(0, 0, w, h);
+// Optional 6th arg `bgFill`:
+//   undefined or string color → fill that color before drawing (default white)
+//   null                      → clearRect (transparent backdrop, for the
+//                               PNG-sequence export which needs alpha)
+TR.flower.renderFrame = function(c, w, h, t, schedule, bgFill) {
+  if (bgFill === null) {
+    c.clearRect(0, 0, w, h);
+  } else {
+    c.fillStyle = bgFill || '#fff';
+    c.fillRect(0, 0, w, h);
+  }
 
   var firings = schedule.firings;
   for (var i = 0; i < firings.length; i++) {
