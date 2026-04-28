@@ -383,6 +383,28 @@ input[type="range"]::-moz-range-thumb {
   pointer-events: none;
   cursor: not-allowed;
 }
+/* Video / Audio choice popup that drops down beneath the .btn-row when
+   the DL button is clicked. Hidden by default, .open shows it. The two
+   nested buttons use a smaller variant of the pixel-art button look so
+   they read as a secondary choice surface, not primary actions. */
+.export-choice-row {
+  display: none;
+  gap: 8px;
+  margin: -8px 0 16px 0;
+}
+.export-choice-row.open { display: flex; }
+.btn-export-choice {
+  font-family: var(--pixel-font);
+  font-size: 14px;
+  padding: 6px 14px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  box-shadow: 2px 2px 0 var(--border);
+  cursor: pointer;
+  color: var(--text);
+}
+.btn-export-choice:hover { filter: brightness(1.2); }
+.btn-export-choice:active { box-shadow: none; transform: translate(2px, 2px); }
 
 /* --- Viz --- */
 .viz-wrap {

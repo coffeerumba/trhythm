@@ -390,10 +390,27 @@ TR.collectPatternsForRender = function() {
   return list;
 };
 
-TR.renderOffline = async function() {
+// Audio-only export: rendered via OfflineAudioContext, encoded to WAV,
+// triggered as a download. `onProgress` is optional; we feed it an
+// asymptotic time-based estimate during startRendering() since
+// OfflineAudioContext gives no granular progress signal — same approach
+// js/exportVideo.js uses for its audio phase. Cancellation works via
+// `currentAudioToken`: clicking DL again sets aborted=true, and we throw
+// `{cancelled:true}` after rendering finishes (we can't interrupt
+// startRendering itself), which suppresses the file write.
+var currentAudioToken = null;
+TR.audioInProgress = function() { return !!currentAudioToken; };
+TR.cancelAudio = function() { if (currentAudioToken) currentAudioToken.aborted = true; };
+
+TR.renderOffline = async function(onProgress) {
   var pats = TR.collectPatternsForRender();
   if (pats.length === 0) return;
 
+  currentAudioToken = { aborted: false };
+  var token = currentAudioToken;
+  var progressTicker = null;
+
+  try {
   var bpm = parseInt(document.getElementById('bpm').value);
   var sampleRate = 44100;
   var startOffset = 0.01;
@@ -436,6 +453,23 @@ TR.renderOffline = async function() {
 
   totalDuration += tail;
 
+  // Asymptotic time-based progress estimate. OfflineAudioContext gives
+  // no granular signal, so we approximate by exponential ease-in toward
+  // a cap. The cap (and the final ease-to-100% below) make the apparent
+  // progress reach 100% at the moment the actual render completes,
+  // regardless of how accurate this estimate is on a given machine.
+  var lastP = 0;
+  if (typeof onProgress === 'function') {
+    var renderStartT = performance.now();
+    var audioTimeConst = Math.max(0.5, totalDuration * 0.05);
+    progressTicker = setInterval(function() {
+      var elapsed = (performance.now() - renderStartT) / 1000;
+      var p = 1 - Math.exp(-elapsed / audioTimeConst);
+      lastP = Math.min(0.95, p);
+      onProgress(lastP);
+    }, 200);
+  }
+
   var offCtx = new OfflineAudioContext(2, Math.ceil(sampleRate * totalDuration), sampleRate);
 
   var offMaster = offCtx.createGain();
@@ -473,6 +507,36 @@ TR.renderOffline = async function() {
   }
 
   var rendered = await offCtx.startRendering();
+  if (progressTicker) { clearInterval(progressTicker); progressTicker = null; }
+
+  // Cancellation only takes effect at this phase boundary — we can't
+  // interrupt startRendering() itself. After this point, throwing a
+  // {cancelled:true} object causes the click handler's catch to swallow
+  // it silently and skip the file write entirely.
+  if (token.aborted) throw { cancelled: true };
+
+  // Smoothly ease the displayed progress from wherever the asymptotic
+  // estimate left off (could be 30% on fast machines, 90% on slow ones)
+  // up to 100% over a short cubic ease-out. This guarantees the user
+  // visually sees the bar/text complete the journey to 100%, not just
+  // snap there. ~300ms feels like a natural finish without delaying the
+  // download perceptibly.
+  if (typeof onProgress === 'function') {
+    var fromP = lastP;
+    var easeStart = performance.now();
+    var easeDur = 300;
+    await new Promise(function(resolve) {
+      function step() {
+        var k = Math.min(1, (performance.now() - easeStart) / easeDur);
+        var eased = fromP + (1 - fromP) * (1 - Math.pow(1 - k, 3));
+        onProgress(eased);
+        if (k >= 1) resolve();
+        else requestAnimationFrame(step);
+      }
+      step();
+    });
+  }
+
   var wavData = TR.encodeWAV(rendered);
   var blob = new Blob([wavData], { type: 'audio/wav' });
   var url = URL.createObjectURL(blob);
@@ -490,28 +554,31 @@ TR.renderOffline = async function() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+  } finally {
+    if (progressTicker) clearInterval(progressTicker);
+    if (currentAudioToken === token) currentAudioToken = null;
+  }
 };
 
-document.getElementById('btn-download').addEventListener('click', async function() {
-  var btn = this;
+/* ── DL button: Video / Audio choice popup ────────────────────────
+   Click DL → toggle a small popup with two buttons (Video / Audio)
+   below the .btn-row. Picking one swaps the DL button into a
+   progress-ring state and runs the corresponding export pipeline:
+     Video → TR.exportVideo (WebM via WebCodecs + webm-muxer)
+     Audio → TR.renderOffline (WAV via OfflineAudioContext)
+   While an export is running, clicking DL again triggers cancel
+   (works for both pipelines — see TR.cancelExport / TR.cancelAudio).
+   Clicking outside the popup closes it without exporting. */
+var dlBtn = document.getElementById('btn-download');
+var choiceRow = document.getElementById('export-choice');
+var btnExportVideo = document.getElementById('btn-export-video');
+var btnExportAudio = document.getElementById('btn-export-audio');
 
-  // If an export is already running, this click is a cancel request.
-  // We swap the button into a "cancelling" state — the in-flight
-  // handler's finally block will restore it once cancellation actually
-  // takes effect (which can lag behind audio render completion).
-  if (TR.exportInProgress && TR.exportInProgress()) {
-    if (TR.cancelExport) TR.cancelExport();
-    btn.innerHTML = '<span class="btn-pct">キャンセル中...</span>';
-    btn.classList.add('btn-cancelling');
-    return;
-  }
-
+// Shared progress-ring helper used by both Video and Audio paths.
+// Builds the SVG ring once and returns mutators — reusing the same
+// DOM nodes across updates lets the CSS transition animate smoothly.
+function beginProgressUI(btn) {
   var originalHTML = btn.innerHTML;
-
-  // Build the progress UI once. We mutate stroke-dashoffset and the
-  // percentage text in place on each progress tick \u2014 the DOM nodes
-  // themselves are not recreated, so the CSS transition can animate
-  // smoothly between updates.
   var R = 6;
   var CIRC = 2 * Math.PI * R;
   btn.innerHTML =
@@ -523,31 +590,97 @@ document.getElementById('btn-download').addEventListener('click', async function
   var ringFg = btn.querySelector('.btn-ring-fg');
   var pctEl = btn.querySelector('.btn-pct');
   ringFg.style.strokeDasharray = CIRC;
-  ringFg.style.strokeDashoffset = CIRC;  // empty ring at start
-
-  function setProgress(p) {
-    p = Math.max(0, Math.min(1, p));
-    ringFg.style.strokeDashoffset = CIRC * (1 - p);
-    pctEl.textContent = Math.round(p * 100) + '%';
-  }
-  function restore() {
-    btn.innerHTML = originalHTML;
-    btn.classList.remove('btn-cancelling');
-  }
-
-  try {
-    if (TR.exportVideoAvailable && TR.exportVideoAvailable()) {
-      await TR.exportVideo(setProgress);
-    } else {
-      await TR.renderOffline();
+  ringFg.style.strokeDashoffset = CIRC;
+  return {
+    setProgress: function(p) {
+      p = Math.max(0, Math.min(1, p));
+      ringFg.style.strokeDashoffset = CIRC * (1 - p);
+      pctEl.textContent = Math.round(p * 100) + '%';
+    },
+    restore: function() {
+      btn.innerHTML = originalHTML;
+      btn.classList.remove('btn-cancelling');
     }
-  } catch(e) {
-    if (!e.cancelled) {
-      console.error('Download failed:', e);
-      alert('\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u306b\u5931\u6557\u3057\u307e\u3057\u305f: ' + e.message);
+  };
+}
+
+function showCancelling(btn) {
+  btn.innerHTML = '<span class="btn-pct">キャンセル中...</span>';
+  btn.classList.add('btn-cancelling');
+}
+
+function closeChoice() { choiceRow.classList.remove('open'); }
+
+dlBtn.addEventListener('click', function(e) {
+  // Stop the document-level "click outside closes popup" listener from
+  // immediately closing the popup we're about to open.
+  e.stopPropagation();
+
+  // Cancel-during-export: clicking DL while either pipeline is running
+  // signals the in-flight render to bail. The pipeline's finally block
+  // restores the button — meanwhile we surface "キャンセル中..." so the
+  // user gets immediate feedback even though startRendering is opaque.
+  if (TR.exportInProgress && TR.exportInProgress()) {
+    if (TR.cancelExport) TR.cancelExport();
+    showCancelling(dlBtn);
+    return;
+  }
+  if (TR.audioInProgress && TR.audioInProgress()) {
+    TR.cancelAudio();
+    showCancelling(dlBtn);
+    return;
+  }
+
+  // Idle: toggle the Video/Audio choice popup.
+  choiceRow.classList.toggle('open');
+});
+
+async function runVideoExport() {
+  closeChoice();
+  if (!(TR.exportVideoAvailable && TR.exportVideoAvailable())) {
+    alert('\u3054\u4f7f\u7528\u306e\u30d6\u30e9\u30a6\u30b6\u30fc\u3067\u306f\u52d5\u753b\u30a8\u30af\u30b9\u30dd\u30fc\u30c8\u304c\u4f7f\u3048\u307e\u305b\u3093\u3002');
+    return;
+  }
+  var ui = beginProgressUI(dlBtn);
+  try {
+    await TR.exportVideo(ui.setProgress);
+  } catch(err) {
+    if (!err.cancelled) {
+      console.error('Video export failed:', err);
+      alert('\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u306b\u5931\u6557\u3057\u307e\u3057\u305f: ' + err.message);
     }
   } finally {
-    restore();
+    ui.restore();
   }
+}
+
+async function runAudioExport() {
+  closeChoice();
+  var ui = beginProgressUI(dlBtn);
+  try {
+    await TR.renderOffline(ui.setProgress);
+  } catch(err) {
+    if (!err.cancelled) {
+      console.error('Audio export failed:', err);
+      alert('\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u306b\u5931\u6557\u3057\u307e\u3057\u305f: ' + err.message);
+    }
+  } finally {
+    ui.restore();
+  }
+}
+
+btnExportVideo.addEventListener('click', function(e) {
+  e.stopPropagation();
+  runVideoExport();
+});
+btnExportAudio.addEventListener('click', function(e) {
+  e.stopPropagation();
+  runAudioExport();
+});
+
+// Close the popup if the user clicks anywhere else. The button + choice
+// handlers above stopPropagation, so this only fires on outside clicks.
+document.addEventListener('click', function() {
+  if (choiceRow.classList.contains('open')) closeChoice();
 });
 })(window.TR);
