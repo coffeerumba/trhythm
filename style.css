@@ -508,11 +508,14 @@ input[type="range"]::-moz-range-thumb {
   display: none !important;
 }
 
-/* --- Probability chart --- */
+/* --- Probability chart ---
+   Each bar-wrap takes an equal share of the chart's width (flex: 1),
+   so the chart always fills its container regardless of bar count.
+   The inner .prob-bar grows to fill its wrap, becoming chunkier with
+   fewer bars and thinner with more bars. ── */
 .prob-chart {
   display: flex;
   align-items: flex-end;
-  justify-content: center;
   gap: 4px;
   margin-top: 10px;
   height: 90px;
@@ -540,11 +543,12 @@ input[type="range"]::-moz-range-thumb {
 }
 
 /* Repeat-map chart: grid-aligned with .repeat-blocks above. Single row;
-   columns share the container width so it never overflows. */
+   columns share the container width so it never overflows. Uses the
+   same 4px column gap as .prob-chart so bars are visually distinct. */
 .prob-chart-repeat {
   display: grid;
   grid-template-columns: repeat(var(--pattern-count, 16), minmax(0, 1fr));
-  gap: 0;
+  gap: 4px;
   height: 70px;
   margin-top: 6px;
   align-items: flex-end;
@@ -557,13 +561,16 @@ input[type="range"]::-moz-range-thumb {
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 22px;
+  flex: 1;        /* share the chart's width equally regardless of bar count */
+  min-width: 0;   /* allow shrinking below content width on narrow screens */
   justify-content: flex-end;
   height: 100%;
 }
+/* Group-boundary bars get a small left shift so structural divisions
+   (e.g. between [2,2] and [2,2] in 8ビート) read at a glance. */
 .prob-bar-wrap.bar-line { margin-left: 6px; }
 .prob-bar {
-  width: 12px;
+  width: 100%;
   min-height: 1px;
 }
 .prob-level {
@@ -826,8 +833,7 @@ input[type="range"]::-moz-range-thumb {
   .tv-leaf { width: 18px; height: 18px; font-size: 14px; }
   .tv-arm { padding-top: 14px; }
   .tv-arm::after { height: 14px; }
-  .prob-chart { gap: 2px; }
-  .prob-bar-wrap { width: auto; min-width: 8px; flex-shrink: 1; }
-  .prob-bar { width: 6px; }
+  .prob-chart, .prob-chart-repeat { gap: 2px; }
+  .prob-bar-wrap.bar-line { margin-left: 4px; }
   .prob-level { font-size: 14px; }
 }
