@@ -573,6 +573,7 @@ TR.renderOffline = async function(onProgress) {
    cancel path. Clicking outside the popup closes it. */
 var dlBtn = document.getElementById('btn-download');
 var choiceRow = document.getElementById('export-choice');
+var btnExportAll   = document.getElementById('btn-export-all');
 var btnExportVideo = document.getElementById('btn-export-video');
 var btnExportAudio = document.getElementById('btn-export-audio');
 var btnExportPng   = document.getElementById('btn-export-png');
@@ -620,10 +621,16 @@ dlBtn.addEventListener('click', function(e) {
   // immediately closing the popup we're about to open.
   e.stopPropagation();
 
-  // Cancel-during-export: clicking DL while either pipeline is running
-  // signals the in-flight render to bail. The pipeline's finally block
-  // restores the button — meanwhile we surface "キャンセル中..." so the
-  // user gets immediate feedback even though startRendering is opaque.
+  // Cancel-during-export: clicking DL while any pipeline is running
+  // signals the in-flight render to bail. ALL is checked first because
+  // when ALL is running an inner stage, both allInProgress and the
+  // matching inner-progress flag are true — we want to cancel the
+  // entire ALL operation, not just the current stage.
+  if (TR.allInProgress && TR.allInProgress()) {
+    TR.cancelAll();
+    showCancelling(dlBtn);
+    return;
+  }
   if (TR.exportInProgress && TR.exportInProgress()) {
     if (TR.cancelExport) TR.cancelExport();
     showCancelling(dlBtn);
@@ -710,6 +717,25 @@ function runMidiExport() {
   }
 }
 
+async function runAllExport() {
+  closeChoice();
+  var ui = beginProgressUI(dlBtn);
+  try {
+    await TR.exportAll(ui.setProgress);
+  } catch(err) {
+    if (!err.cancelled) {
+      console.error('All export failed:', err);
+      alert('ダウンロードに失敗しました: ' + err.message);
+    }
+  } finally {
+    ui.restore();
+  }
+}
+
+btnExportAll.addEventListener('click', function(e) {
+  e.stopPropagation();
+  runAllExport();
+});
 btnExportVideo.addEventListener('click', function(e) {
   e.stopPropagation();
   runVideoExport();
