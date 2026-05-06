@@ -313,6 +313,13 @@ TR.exportVideo = async function(onProgress) {
     if (audioEncoder && audioEncoder.state !== 'closed') { try { audioEncoder.close(); } catch(_){} }
     throw e;
   } finally {
+    // Release any per-export resources the active mode allocated
+    // (e.g. clip mode's dedicated <video> elements + their object URLs).
+    // `single` is hoisted via `var`; if buildSchedule threw or never
+    // ran, it's undefined and we just skip.
+    if (typeof single !== 'undefined' && single && single.dispose) {
+      try { single.dispose(); } catch (_) {}
+    }
     if (currentToken === token) currentToken = null;
   }
 };

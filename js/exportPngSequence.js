@@ -169,6 +169,11 @@ TR.exportPngSeq = async function(onProgress) {
 
     downloadBlob(zipBlob, folderName + '.zip');
   } finally {
+    // Release any per-export resources the active mode allocated
+    // (e.g. clip mode's dedicated <video> elements + their object URLs).
+    if (typeof single !== 'undefined' && single && single.dispose) {
+      try { single.dispose(); } catch (_) {}
+    }
     if (currentToken === token) currentToken = null;
   }
 };
