@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>リズムジェネレーター</title>
 <link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
 <div id="app">
@@ -20,6 +20,20 @@
     <div class="inst-header">ビジュアライザー</div>
     <div class="param-row" style="margin-bottom:8px;">
       <select id="viz-mode-select" class="struct-select"></select>
+    </div>
+    <div class="clip-controls" id="clip-controls" style="display:none;">
+      <label class="clip-file-row kick">
+        <span class="clip-file-label">K</span>
+        <input type="file" accept="video/*" id="clip-file-kick">
+      </label>
+      <label class="clip-file-row snare">
+        <span class="clip-file-label">S</span>
+        <input type="file" accept="video/*" id="clip-file-snare">
+      </label>
+      <label class="clip-file-row hihat">
+        <span class="clip-file-label">H</span>
+        <input type="file" accept="video/*" id="clip-file-hihat">
+      </label>
     </div>
     <canvas id="viz-canvas"></canvas>
   </div>
@@ -124,6 +138,7 @@
 <script src="js/audition.js"></script>
 <script src="js/viz.js?v=2"></script>
 <script src="js/viz/flower.js?v=12"></script>
+<script src="js/viz/clip.js?v=3"></script>
 <script src="js/playback.js?v=13"></script>
 <script src="https://cdn.jsdelivr.net/npm/webm-muxer@5.0.3/build/webm-muxer.min.js"></script>
 <script src="js/exportVideo.js?v=7"></script>

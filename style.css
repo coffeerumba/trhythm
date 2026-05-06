@@ -440,6 +440,48 @@ input[type="range"]::-moz-range-thumb {
   aspect-ratio: 16 / 9;
 }
 
+/* --- Clip mode controls --- */
+.clip-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.clip-file-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  background: var(--bg);
+  border: 2px solid var(--border);
+  font-size: 14px;
+}
+.clip-file-row.kick  { border-color: var(--kick-color); }
+.clip-file-row.snare { border-color: var(--snare-color); }
+.clip-file-row.hihat { border-color: var(--hihat-color); }
+.clip-file-label {
+  font-weight: bold;
+  flex-shrink: 0;
+  min-width: 16px;
+  text-align: center;
+}
+.clip-file-row.kick  .clip-file-label { color: var(--kick-color); }
+.clip-file-row.snare .clip-file-label { color: var(--snare-color); }
+.clip-file-row.hihat .clip-file-label { color: var(--hihat-color); }
+.clip-file-row input[type="file"] {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--pixel-font);
+  font-size: 12px;
+  color: var(--text);
+}
+@media (max-width: 600px) {
+  .clip-controls { flex-direction: column; }
+  .clip-file-row { flex: none; }
+}
+
 /* --- Pattern Grid --- */
 .grid-section {
   background: var(--surface);
