@@ -40,11 +40,22 @@ var needsBlackFill = false;
 
 var KEYS = ['kick', 'snare', 'hihat'];
 
-// Per-track state. videos[key] is an HTMLVideoElement or null. active[key]
-// holds whether the track is in the current "moment" snapshot — the set
-// of tracks that fired on the most recent audio step.
+// Per-track state. videos[key] is the HTMLVideoElement that drives the
+// realtime visible canvas. active[key] holds whether the track is in the
+// current "moment" snapshot. clipFiles[key] caches the original File so
+// the exporter can spin up its own dedicated video elements off the same
+// source — keeping export seeks isolated from realtime preview.
 var videos = { kick: null, snare: null, hihat: null };
 var active = { kick: false, snare: false, hihat: false };
+var clipFiles = { kick: null, snare: null, hihat: null };
+
+// Per-track "last good frame" cache. drawImage on a video that's mid-seek
+// can briefly return an empty / black frame (browser-dependent), which
+// shows as a flicker at every clip switch — especially noticeable at high
+// BPMs where seeks happen many times per second. Each frame() pass copies
+// the video's stable frame into its cache; when the video is seeking we
+// drawImage from the cache instead, so the strip stays smooth.
+var frameCache = { kick: null, snare: null, hihat: null };
 
 // Hits scheduled at the same audio time still arrive in separate JS
 // callbacks (each track has its own setTimeout). We batch hits whose
@@ -62,6 +73,9 @@ function setVideo(key, file) {
     if (prev.src) URL.revokeObjectURL(prev.src);
     videos[key] = null;
   }
+  // Toss the per-track frame cache: it's pixels of the OLD source.
+  frameCache[key] = null;
+  clipFiles[key] = file || null;
   if (!file) return;
   var v = document.createElement('video');
   // Silence the audio track every way a browser might respect:
@@ -80,16 +94,30 @@ function setVideo(key, file) {
   // metadata + first-frame decode so drawImage works on first paint.
   v.load();
   videos[key] = v;
+
+  // Snapshot the first frame into the cache as soon as the video is
+  // decode-ready. This way the very first onHit (which puts the video
+  // into a seeking state via currentTime=0) has a stable frame to fall
+  // back to instead of a track-color flash.
+  var captureFirstFrame = function() {
+    v.removeEventListener('loadeddata', captureFirstFrame);
+    if (videos[key] !== v) return;  // user replaced the video meanwhile
+    if (!v.videoWidth || !v.videoHeight) return;
+    var cache = ensureFrameCache(key, v.videoWidth, v.videoHeight);
+    try {
+      cache.getContext('2d').drawImage(v, 0, 0, v.videoWidth, v.videoHeight);
+    } catch (e) { /* swallow — we'll repopulate from frame() later */ }
+  };
+  v.addEventListener('loadeddata', captureFirstFrame);
 }
 
 function onHit(key) {
   if (!isMounted) return;
   if (KEYS.indexOf(key) < 0) return;
-  // Export is driving the same video elements via per-frame seeks. Letting
-  // realtime onHit fight it (currentTime=0; play()) would clobber the
-  // export's current seek target. Suppress while any export is in flight.
-  if ((TR.exportInProgress && TR.exportInProgress()) ||
-      (TR.pngInProgress    && TR.pngInProgress())) return;
+  // The export pipeline uses its own dedicated video elements
+  // (schedule.exportVideos), so realtime hits no longer fight export
+  // seeks for the same currentTime cursor — let realtime preview run
+  // freely while a download is in flight.
   // If this hit lands outside the last moment's window, it starts a new
   // moment — clear the snapshot before populating it. Hits inside the
   // window simply append to the current snapshot.
@@ -130,11 +158,13 @@ function reset() {
   }
 }
 
-// Cover-fit drawImage: fills (sx,sy)→(dx,dy,dw,dh) with the source
-// cropped to match the destination's aspect ratio. Mirrors object-fit:
-// cover for HTMLVideoElement.
-function drawCover(c, vid, dx, dy, dw, dh) {
-  var sw0 = vid.videoWidth, sh0 = vid.videoHeight;
+// Cover-fit drawImage: fills (dx,dy,dw,dh) with the source cropped to
+// match the destination's aspect ratio. Mirrors object-fit: cover.
+// Source can be any drawable: HTMLVideoElement (uses videoWidth/Height)
+// or any canvas (uses width/height) — frame caching uses the latter.
+function drawCover(c, src, dx, dy, dw, dh) {
+  var sw0 = src.videoWidth || src.width || 0;
+  var sh0 = src.videoHeight || src.height || 0;
   if (!sw0 || !sh0) return;
   var srcRatio = sw0 / sh0;
   var dstRatio = dw / dh;
@@ -152,7 +182,24 @@ function drawCover(c, vid, dx, dy, dw, dh) {
     sx = 0;
     sy = (sh0 - sh) / 2;
   }
-  c.drawImage(vid, sx, sy, sw, sh, dx, dy, dw, dh);
+  c.drawImage(src, sx, sy, sw, sh, dx, dy, dw, dh);
+}
+
+// Lazily allocate / resize the per-track frame cache canvas to match the
+// video's native dimensions. Resizing in place avoids GC churn from
+// re-allocating every time.
+function ensureFrameCache(key, w, h) {
+  var c = frameCache[key];
+  if (c && c.width === w && c.height === h) return c;
+  if (typeof OffscreenCanvas !== 'undefined') {
+    c = new OffscreenCanvas(w, h);
+  } else {
+    c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+  }
+  frameCache[key] = c;
+  return c;
 }
 
 function frame(c, w, h) {
@@ -177,11 +224,20 @@ function frame(c, w, h) {
     var key = list[j];
     var x = j * stripW;
     var vid = videos[key];
-    if (vid && vid.readyState >= 2 && vid.videoWidth > 0) {
+    var stable = vid && vid.readyState >= 2 && vid.videoWidth > 0 && !vid.seeking;
+    if (stable) {
       drawCover(c, vid, x, 0, stripW, h);
+      // Snapshot this frame so a subsequent seek doesn't briefly reveal
+      // the canvas backdrop. drawImage at native size into the cache
+      // canvas — small overhead vs. the visible benefit at clip switches.
+      var cache = ensureFrameCache(key, vid.videoWidth, vid.videoHeight);
+      cache.getContext('2d').drawImage(vid, 0, 0, vid.videoWidth, vid.videoHeight);
+    } else if (frameCache[key]) {
+      // Mid-seek (or otherwise unstable): paint the last stable frame.
+      drawCover(c, frameCache[key], x, 0, stripW, h);
     } else {
-      // No video assigned (or not yet decoded a frame) — fill with the
-      // track color so the layout is still readable.
+      // No video assigned (or first hit before any cache is populated) —
+      // fill with the track color so the layout is still readable.
       c.fillStyle = TR.rgbCSS(TR.INST_COLORS[key]);
       c.fillRect(x, 0, stripW, h);
     }
@@ -241,6 +297,25 @@ function waitReady(vid) {
   });
 }
 
+// Spin up a dedicated, decode-ready HTMLVideoElement off the supplied
+// File. Used by the exporter so seeks don't disturb the realtime
+// preview's video elements. Returns null when no file is set.
+async function createExportVideo(file) {
+  if (!file) return null;
+  var v = document.createElement('video');
+  v.defaultMuted = true;
+  v.muted = true;
+  v.volume = 0;
+  v.setAttribute('muted', '');
+  v.playsInline = true;
+  v.preload = 'auto';
+  v.crossOrigin = 'anonymous';
+  v.src = URL.createObjectURL(file);
+  v.load();
+  await waitReady(v);
+  return v;
+}
+
 async function buildScheduleAsync(pats, bpm, accentMode, w, h) {
   var allHits = [];  // { time, key }
   var offset = 0;
@@ -294,25 +369,54 @@ async function buildScheduleAsync(pats, bpm, accentMode, w, h) {
     }
   }
 
-  // Make sure every loaded video is decode-ready before we start
-  // hammering currentTime; otherwise the first batch of seeks can race
-  // against the initial decode.
-  var readyPromises = [];
+  // Spin up dedicated video elements for the export. Sharing the
+  // realtime ones would race against the export's per-frame seeks and
+  // cause the visible canvas to flicker as the cursor jumps around. The
+  // dispose() method below releases their object URLs at end-of-export
+  // (called by the exporter from its finally block).
+  var exportVideos = {};
+  var createPromises = [];
   for (var ki = 0; ki < KEYS.length; ki++) {
-    var v = videos[KEYS[ki]];
-    if (v) readyPromises.push(waitReady(v));
+    (function(key) {
+      createPromises.push(createExportVideo(clipFiles[key]).then(function(v) {
+        exportVideos[key] = v;
+      }));
+    })(KEYS[ki]);
   }
-  await Promise.all(readyPromises);
+  await Promise.all(createPromises);
 
-  return { totalDuration: offset, moments: moments };
+  function dispose() {
+    for (var k in exportVideos) {
+      var v = exportVideos[k];
+      if (!v) continue;
+      try { v.pause(); } catch (e) {}
+      if (v.src) URL.revokeObjectURL(v.src);
+      exportVideos[k] = null;
+    }
+  }
+
+  return {
+    totalDuration: offset,
+    moments: moments,
+    exportVideos: exportVideos,
+    dispose: dispose
+  };
 }
 
+// Double passes the export-video map and dispose hook through by
+// reference so the cleanup-on-finally pattern works whether the
+// exporter holds the single or the doubled schedule.
 function doubleScheduleSync(single) {
   var loopDur = single.totalDuration;
   var doubled = single.moments.concat(single.moments.map(function(m) {
     return { firingTime: m.firingTime + loopDur, activeKeys: m.activeKeys.slice() };
   }));
-  return { totalDuration: 2 * loopDur, moments: doubled };
+  return {
+    totalDuration: 2 * loopDur,
+    moments: doubled,
+    exportVideos: single.exportVideos,
+    dispose: single.dispose
+  };
 }
 
 // Find the most recent moment with firingTime ≤ t. moments[] is sorted.
@@ -326,38 +430,44 @@ function momentAt(moments, t) {
 }
 
 async function renderFrameAsync(c, w, h, t, schedule, bgFill) {
-  // Background. Default to black to match the realtime "fill black on
-  // empty" behavior; null → transparent (PNG-sequence path).
-  if (bgFill === null) {
-    c.clearRect(0, 0, w, h);
-  } else {
-    c.fillStyle = bgFill || '#000';
-    c.fillRect(0, 0, w, h);
-  }
-
   var moments = schedule.moments;
-  if (!moments || moments.length === 0) return;
-  var current = momentAt(moments, t);
-  if (!current) return;  // before the first moment — backdrop is the result
-
+  var current = (moments && moments.length) ? momentAt(moments, t) : null;
   // Order activeKeys by KEYS index so the strip layout is stable.
-  var keys = current.activeKeys.slice().sort(function(a, b) {
-    return KEYS.indexOf(a) - KEYS.indexOf(b);
-  });
+  var keys = current
+    ? current.activeKeys.slice().sort(function(a, b) {
+        return KEYS.indexOf(a) - KEYS.indexOf(b);
+      })
+    : [];
   var n = keys.length;
-  if (n === 0) return;
+
+  // Background only when no strips will cover the canvas. Otherwise the
+  // strips fully tile [0,w]×[0,h] and the bg fill is both redundant and
+  // a flash hazard (any one strip's drawImage hiccup would briefly
+  // reveal black at the next encoder capture).
+  if (n === 0) {
+    if (bgFill === null) {
+      c.clearRect(0, 0, w, h);
+    } else {
+      c.fillStyle = bgFill || '#000';
+      c.fillRect(0, 0, w, h);
+    }
+    return;
+  }
   var stripW = w / n;
 
   // Seek+draw each strip. Run in parallel so the seek latencies overlap
   // (each video has its own decoder); strips don't overlap on the canvas
-  // so concurrent drawImage calls are safe.
+  // so concurrent drawImage calls are safe. Use the schedule's dedicated
+  // export videos — the realtime `videos` map is reserved for the
+  // visible-canvas preview and must not be touched here.
+  var exVideos = schedule.exportVideos || {};
   var tasks = [];
   for (var j = 0; j < n; j++) {
     tasks.push((function(idx) {
       return (async function() {
         var key = keys[idx];
         var x = idx * stripW;
-        var vid = videos[key];
+        var vid = exVideos[key];
         if (!vid) {
           c.fillStyle = TR.rgbCSS(TR.INST_COLORS[key]);
           c.fillRect(x, 0, stripW, h);
