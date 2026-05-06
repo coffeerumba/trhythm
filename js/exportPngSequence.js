@@ -110,26 +110,16 @@ TR.exportPngSeq = async function(onProgress) {
     // Build a single-loop schedule, then double it so frames at t in
     // [loopDur, 2*loopDur) carry residuals (eraser-ball trails, marker
     // fades) from the previous iteration — same trick exportVideo uses
-    // to make the loop seamless.
-    var single = TR.flower.buildSchedule(pats, bpm, accentMode, w, h);
+    // to make the loop seamless. Both calls dispatch through the active
+    // mode so non-flower modes can supply their own schedule shape.
+    var mode = TR.activeVizMode;
+    if (!mode || !mode.buildSchedule || !mode.renderFrame || !mode.doubleSchedule) {
+      throw new Error('Active viz mode does not support export');
+    }
+    var single = await mode.buildSchedule(pats, bpm, accentMode, w, h);
     var loopDur = single.totalDuration;
     if (!(loopDur > 0)) throw new Error('Empty schedule');
-    var doubleSlots = single.slots.concat(single.slots.map(function(s) {
-      return { offset: s.offset + loopDur, duration: s.duration, defaultDef: s.defaultDef };
-    }));
-    var doubleFirings = single.firings.concat(single.firings.map(function(f) {
-      return {
-        firingTime: f.firingTime + loopDur,
-        forwardSec: f.forwardSec, reverseSec: f.reverseSec,
-        poly: f.poly, lens: f.lens, key: f.key
-      };
-    }));
-    doubleFirings.sort(function(a, b) { return a.firingTime - b.firingTime; });
-    var doubleSchedule = {
-      totalDuration: 2 * loopDur,
-      slots:   doubleSlots,
-      firings: doubleFirings
-    };
+    var doubleSchedule = mode.doubleSchedule(single);
 
     // Off-screen canvas for rendering. OffscreenCanvas keeps the work
     // off the visible canvas (no flicker in the realtime preview).
@@ -149,8 +139,8 @@ TR.exportPngSeq = async function(onProgress) {
       var t = loopDur + i / fps;
       // bgFill=null → transparent backdrop; the canvas pixels carry
       // alpha=0 outside drawn elements, which is exactly what PNG
-      // captures.
-      TR.flower.renderFrame(offCtx, w, h, t, doubleSchedule, null);
+      // captures. renderFrame may be sync or async depending on mode.
+      await mode.renderFrame(offCtx, w, h, t, doubleSchedule, null);
 
       var blob = await canvasToPng(offCanvas);
       checkCancel(token);

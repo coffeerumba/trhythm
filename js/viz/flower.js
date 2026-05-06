@@ -626,6 +626,31 @@ function slotAtTime(slots, t) {
   return null;
 }
 
+// Concatenate the schedule with a copy offset by loopDur so the
+// resulting schedule covers two full iterations. Exporters use the
+// second iteration as the actual output, with the first iteration
+// providing the "previous loop" residuals (animation tails) at frame 0
+// for a seamless loop. Pure — does not mutate the input.
+TR.flower.doubleSchedule = function(single) {
+  var loopDur = single.totalDuration;
+  var doubleSlots = single.slots.concat(single.slots.map(function(s) {
+    return { offset: s.offset + loopDur, duration: s.duration, defaultDef: s.defaultDef };
+  }));
+  var doubleFirings = single.firings.concat(single.firings.map(function(f) {
+    return {
+      firingTime: f.firingTime + loopDur,
+      forwardSec: f.forwardSec, reverseSec: f.reverseSec,
+      poly: f.poly, lens: f.lens, key: f.key
+    };
+  }));
+  doubleFirings.sort(function(a, b) { return a.firingTime - b.firingTime; });
+  return {
+    totalDuration: 2 * loopDur,
+    slots:   doubleSlots,
+    firings: doubleFirings
+  };
+};
+
 // Optional 6th arg `bgFill`:
 //   undefined or string color → fill that color before drawing (default white)
 //   null                      → clearRect (transparent backdrop, for the
@@ -675,7 +700,12 @@ return {
     }
     drawCenterDot();
   },
-  onHit: function() {}
+  onHit: function() {},
+  // Export-side methods. Exporters route through TR.activeVizMode so
+  // the same call shape works for any mode that opts in.
+  buildSchedule:  function(pats, bpm, accentMode, w, h) { return TR.flower.buildSchedule(pats, bpm, accentMode, w, h); },
+  doubleSchedule: function(single) { return TR.flower.doubleSchedule(single); },
+  renderFrame:    function(c, w, h, t, schedule, bgFill) { return TR.flower.renderFrame(c, w, h, t, schedule, bgFill); }
 };
 
 })(window.TR));

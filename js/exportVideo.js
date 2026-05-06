@@ -118,7 +118,7 @@ async function renderAudioForLoop(pats, bpm, accentMode, sampleRate) {
 }
 
 /* ── Video: render the second iteration's frames into VideoEncoder. ── */
-async function renderVideoFrames(videoEncoder, doubleSchedule, loopDur, w, h, fps, onProgress, token) {
+async function renderVideoFrames(videoEncoder, doubleSchedule, loopDur, w, h, fps, onProgress, token, mode) {
   var offCanvas = (typeof OffscreenCanvas !== 'undefined')
     ? new OffscreenCanvas(w, h)
     : (function() { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; })();
@@ -129,7 +129,8 @@ async function renderVideoFrames(videoEncoder, doubleSchedule, loopDur, w, h, fp
   for (var i = 0; i < totalFrames; i++) {
     checkCancel(token);
     var t = loopDur + i / fps;
-    TR.flower.renderFrame(offCtx, w, h, t, doubleSchedule);
+    // renderFrame may be sync (flower) or async (clip); await handles both.
+    await mode.renderFrame(offCtx, w, h, t, doubleSchedule);
 
     // Backpressure: don't let the encoder queue grow unbounded.
     while (videoEncoder.encodeQueueSize > 8) {
@@ -233,25 +234,16 @@ TR.exportVideo = async function(onProgress) {
     var accentMode = TR.getAccentMode();
 
     // Build a single-loop viz schedule, then double it for seamless looping.
-    var single = TR.flower.buildSchedule(pats, bpm, accentMode, w, h);
+    // Both build/double dispatch through the active mode so other viz modes
+    // (clip, etc) can supply their own schedule shape.
+    var mode = TR.activeVizMode;
+    if (!mode || !mode.buildSchedule || !mode.renderFrame || !mode.doubleSchedule) {
+      throw new Error('Active viz mode does not support export');
+    }
+    var single = await mode.buildSchedule(pats, bpm, accentMode, w, h);
     var loopDur = single.totalDuration;
     if (!(loopDur > 0)) throw new Error('Empty schedule');
-    var doubleSlots = single.slots.concat(single.slots.map(function(s) {
-      return { offset: s.offset + loopDur, duration: s.duration, defaultDef: s.defaultDef };
-    }));
-    var doubleFirings = single.firings.concat(single.firings.map(function(f) {
-      return {
-        firingTime: f.firingTime + loopDur,
-        forwardSec: f.forwardSec, reverseSec: f.reverseSec,
-        poly: f.poly, lens: f.lens, key: f.key
-      };
-    }));
-    doubleFirings.sort(function(a, b) { return a.firingTime - b.firingTime; });
-    var doubleSchedule = {
-      totalDuration: 2 * loopDur,
-      slots:   doubleSlots,
-      firings: doubleFirings
-    };
+    var doubleSchedule = mode.doubleSchedule(single);
 
     emit('audio', 0);
     // OfflineAudioContext doesn't expose progress; estimate it asymptotically
@@ -305,7 +297,7 @@ TR.exportVideo = async function(onProgress) {
     });
 
     await renderVideoFrames(videoEncoder, doubleSchedule, loopDur, w, h, fps,
-      function(p) { emit('video', p); }, token);
+      function(p) { emit('video', p); }, token, mode);
     await encodeAudio(audioEncoder, audioInfo.buffer, loopDur,
       function(p) { emit('encodeAudio', p); }, token);
     emit('mux', 0);

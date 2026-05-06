@@ -85,6 +85,11 @@ function setVideo(key, file) {
 function onHit(key) {
   if (!isMounted) return;
   if (KEYS.indexOf(key) < 0) return;
+  // Export is driving the same video elements via per-frame seeks. Letting
+  // realtime onHit fight it (currentTime=0; play()) would clobber the
+  // export's current seek target. Suppress while any export is in flight.
+  if ((TR.exportInProgress && TR.exportInProgress()) ||
+      (TR.pngInProgress    && TR.pngInProgress())) return;
   // If this hit lands outside the last moment's window, it starts a new
   // moment — clear the snapshot before populating it. Hits inside the
   // window simply append to the current snapshot.
@@ -183,6 +188,200 @@ function frame(c, w, h) {
   }
 }
 
+/* ── Export-side: deterministic schedule + per-frame async render ──
+   Mirrors flower's export contract: build → double → renderFrame(t).
+   The schedule is "one cycle of moments"; each moment is the snapshot
+   of which tracks fire (essentially) simultaneously. doubleSchedule
+   concatenates a copy at +loopDur so frames near loop boundaries can
+   straddle iterations cleanly. renderFrame finds the most-recent moment
+   ≤ t and seeks each active video to (t − moment.firingTime), then
+   draws its strip. ── */
+
+// Wait for an HTMLVideoElement to seek to `target`. Resolves when the
+// `seeked` event fires, or via a 1s safety timeout if the browser never
+// emits it (some codecs fail to fire on edge-case targets). Resolves
+// immediately when the cursor is already there.
+function waitSeek(vid, target) {
+  return new Promise(function(resolve) {
+    var current = vid.currentTime || 0;
+    if (Math.abs(current - target) < 1e-6) { resolve(); return; }
+    var done = false;
+    var fin = function() {
+      if (done) return;
+      done = true;
+      vid.removeEventListener('seeked', fin);
+      vid.removeEventListener('error', fin);
+      resolve();
+    };
+    vid.addEventListener('seeked', fin);
+    vid.addEventListener('error', fin);
+    try { vid.currentTime = target; }
+    catch (e) { fin(); return; }
+    setTimeout(fin, 1000);
+  });
+}
+
+// Wait until the video has decoded enough to be drawImage-safe (HAVE_CURRENT_DATA).
+function waitReady(vid) {
+  if (vid.readyState >= 2) return Promise.resolve();
+  return new Promise(function(resolve) {
+    var done = false;
+    var fin = function() {
+      if (done) return;
+      done = true;
+      vid.removeEventListener('loadeddata', fin);
+      vid.removeEventListener('canplay',    fin);
+      vid.removeEventListener('error',      fin);
+      resolve();
+    };
+    vid.addEventListener('loadeddata', fin);
+    vid.addEventListener('canplay',    fin);
+    vid.addEventListener('error',      fin);
+    setTimeout(fin, 5000);
+  });
+}
+
+async function buildScheduleAsync(pats, bpm, accentMode, w, h) {
+  var allHits = [];  // { time, key }
+  var offset = 0;
+  for (var p = 0; p < pats.length; p++) {
+    var entry = pats[p];
+    var pat = (entry && entry.pat) ? entry.pat : entry;
+    if (!pat) continue;
+
+    // Per-track step duration; slot length = longest cycle, like the
+    // existing audio renderer in exportVideo.js.
+    var maxCycle = 0;
+    var perTrack = {};
+    for (var ti = 0; ti < KEYS.length; ti++) {
+      var key = KEYS[ti];
+      var def = pat[key + 'Def'];
+      if (!def) continue;
+      var leaves = TR.computeLevels(def.tree).length;
+      var trackBeats = pat[key + 'Beats'] || TR.computeBeats(def);
+      var spS = 60 * trackBeats / bpm / leaves;
+      var cycle = spS * leaves;
+      perTrack[key] = { spS: spS, leaves: leaves };
+      if (cycle > maxCycle) maxCycle = cycle;
+    }
+
+    for (var ti2 = 0; ti2 < KEYS.length; ti2++) {
+      var key2 = KEYS[ti2];
+      var info = perTrack[key2];
+      if (!info) continue;
+      var flat = pat[key2];
+      if (!flat) continue;
+      for (var s = 0; s < flat.length; s++) {
+        if (flat[s]) allHits.push({ time: offset + s * info.spS, key: key2 });
+      }
+    }
+
+    offset += maxCycle;
+  }
+
+  // Group hits within MOMENT_WINDOW into single moments (matches realtime
+  // batching so live preview and export look the same on edge cases).
+  allHits.sort(function(a, b) { return a.time - b.time; });
+  var moments = [];
+  var current = null;
+  for (var i = 0; i < allHits.length; i++) {
+    var hit = allHits[i];
+    if (!current || hit.time - current.firingTime > MOMENT_WINDOW) {
+      current = { firingTime: hit.time, activeKeys: [hit.key] };
+      moments.push(current);
+    } else if (current.activeKeys.indexOf(hit.key) < 0) {
+      current.activeKeys.push(hit.key);
+    }
+  }
+
+  // Make sure every loaded video is decode-ready before we start
+  // hammering currentTime; otherwise the first batch of seeks can race
+  // against the initial decode.
+  var readyPromises = [];
+  for (var ki = 0; ki < KEYS.length; ki++) {
+    var v = videos[KEYS[ki]];
+    if (v) readyPromises.push(waitReady(v));
+  }
+  await Promise.all(readyPromises);
+
+  return { totalDuration: offset, moments: moments };
+}
+
+function doubleScheduleSync(single) {
+  var loopDur = single.totalDuration;
+  var doubled = single.moments.concat(single.moments.map(function(m) {
+    return { firingTime: m.firingTime + loopDur, activeKeys: m.activeKeys.slice() };
+  }));
+  return { totalDuration: 2 * loopDur, moments: doubled };
+}
+
+// Find the most recent moment with firingTime ≤ t. moments[] is sorted.
+function momentAt(moments, t) {
+  var current = null;
+  for (var i = 0; i < moments.length; i++) {
+    if (moments[i].firingTime > t) break;
+    current = moments[i];
+  }
+  return current;
+}
+
+async function renderFrameAsync(c, w, h, t, schedule, bgFill) {
+  // Background. Default to black to match the realtime "fill black on
+  // empty" behavior; null → transparent (PNG-sequence path).
+  if (bgFill === null) {
+    c.clearRect(0, 0, w, h);
+  } else {
+    c.fillStyle = bgFill || '#000';
+    c.fillRect(0, 0, w, h);
+  }
+
+  var moments = schedule.moments;
+  if (!moments || moments.length === 0) return;
+  var current = momentAt(moments, t);
+  if (!current) return;  // before the first moment — backdrop is the result
+
+  // Order activeKeys by KEYS index so the strip layout is stable.
+  var keys = current.activeKeys.slice().sort(function(a, b) {
+    return KEYS.indexOf(a) - KEYS.indexOf(b);
+  });
+  var n = keys.length;
+  if (n === 0) return;
+  var stripW = w / n;
+
+  // Seek+draw each strip. Run in parallel so the seek latencies overlap
+  // (each video has its own decoder); strips don't overlap on the canvas
+  // so concurrent drawImage calls are safe.
+  var tasks = [];
+  for (var j = 0; j < n; j++) {
+    tasks.push((function(idx) {
+      return (async function() {
+        var key = keys[idx];
+        var x = idx * stripW;
+        var vid = videos[key];
+        if (!vid) {
+          c.fillStyle = TR.rgbCSS(TR.INST_COLORS[key]);
+          c.fillRect(x, 0, stripW, h);
+          return;
+        }
+        var target = t - current.firingTime;
+        if (vid.duration && isFinite(vid.duration)) {
+          target = Math.max(0, Math.min(vid.duration, target));
+        } else {
+          target = Math.max(0, target);
+        }
+        await waitSeek(vid, target);
+        if (vid.videoWidth > 0 && vid.readyState >= 2) {
+          drawCover(c, vid, x, 0, stripW, h);
+        } else {
+          c.fillStyle = TR.rgbCSS(TR.INST_COLORS[key]);
+          c.fillRect(x, 0, stripW, h);
+        }
+      })();
+    })(j));
+  }
+  await Promise.all(tasks);
+}
+
 // ── Controls visibility ──────────────────────────────────────────
 function showControls(show) {
   var el = document.getElementById('clip-controls');
@@ -234,7 +433,14 @@ return {
     isMounted = false;
     showControls(false);
     reset();
-  }
+  },
+  // Export-side methods, dispatched through TR.activeVizMode by the
+  // Video / PNG-sequence exporters. buildSchedule is async (it waits for
+  // any pending video loads to settle); doubleSchedule is sync;
+  // renderFrame is async because each strip needs a per-frame seek.
+  buildSchedule:  buildScheduleAsync,
+  doubleSchedule: doubleScheduleSync,
+  renderFrame:    renderFrameAsync
 };
 
 })(window.TR));
