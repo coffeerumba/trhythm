@@ -49,8 +49,15 @@ TR.cancelAll = function() {
 
 /* Stage progress weights — rough share of total wall time on a
    typical run. PNG sequence dominates because PNG encoding at 1080p
-   is single-threaded in Chrome's image encoder. */
-var WEIGHTS = { video: 0.30, audio: 0.04, png: 0.62, midi: 0.04 };
+   is single-threaded in Chrome's image encoder.
+
+   Modes that produce only opaque frames (clip) skip the PNG stage:
+   their PNGs would total multiple GB with no compression headroom, and
+   the parent ZIP's ArrayBuffer allocation would OOM. The fallback
+   weights below redistribute that mass mostly onto video, which is
+   itself slower for opaque modes (per-frame video seeks). */
+var WEIGHTS_WITH_PNG    = { video: 0.30, audio: 0.04, png: 0.62, midi: 0.04 };
+var WEIGHTS_WITHOUT_PNG = { video: 0.92, audio: 0.04, midi: 0.04 };
 
 /* Run an export function while suppressing the actual file download,
    capturing the blob + filename it would have written instead.
@@ -114,6 +121,14 @@ TR.exportAll = async function(onProgress) {
   if (currentToken) throw new Error('All export already in progress');
   var token = currentToken = { aborted: false };
 
+  // Decide upfront which stages to run. Modes that don't expose
+  // supportsAlpha (or set it true) get the full bundle; modes that
+  // explicitly opt out (clip) skip PNG entirely so the parent ZIP
+  // doesn't try to allocate a multi-GB ArrayBuffer.
+  var mode = TR.activeVizMode;
+  var includePng = !mode || mode.supportsAlpha !== false;
+  var WEIGHTS = includePng ? WEIGHTS_WITH_PNG : WEIGHTS_WITHOUT_PNG;
+
   // Combined progress: each stage contributes its own [0,1] curve
   // weighted by WEIGHTS. doneWeight tracks how much weight is finished.
   var doneWeight = 0;
@@ -147,11 +162,14 @@ TR.exportAll = async function(onProgress) {
     completeStage('audio');
     checkCancel(token);
 
-    var png = await captureExport(function() {
-      return TR.exportPngSeq(makeStageProgress('png'));
-    });
-    completeStage('png');
-    checkCancel(token);
+    var png = null;
+    if (includePng) {
+      png = await captureExport(function() {
+        return TR.exportPngSeq(makeStageProgress('png'));
+      });
+      completeStage('png');
+      checkCancel(token);
+    }
 
     var midi = await captureExport(function() {
       return TR.exportMidi();  // sync; await on undefined is a no-op
@@ -160,9 +178,9 @@ TR.exportAll = async function(onProgress) {
     checkCancel(token);
 
     // Build the parent ZIP. Top-level files for video / audio / midi.
-    // For PNG, unwrap the inner ZIP so its frames sit at the top level
-    // of the parent ZIP (or in their own subfolder) — saves the user a
-    // second unzip.
+    // For PNG (when present), unwrap the inner ZIP so its frames sit at
+    // the top level of the parent ZIP (or in their own subfolder) —
+    // saves the user a second unzip.
     var zip = new JSZip();
     if (video && video.blob) zip.file(video.name, video.blob);
     if (audio && audio.blob) zip.file(audio.name, audio.blob);

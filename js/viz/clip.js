@@ -550,7 +550,12 @@ return {
   // renderFrame is async because each strip needs a per-frame seek.
   buildSchedule:  buildScheduleAsync,
   doubleSchedule: doubleScheduleSync,
-  renderFrame:    renderFrameAsync
+  renderFrame:    renderFrameAsync,
+  // Every frame is fully covered by opaque video pixels. PNG sequence
+  // would balloon to GBs (no transparent regions to compress), and the
+  // ALL ZIP would OOM allocating its final ArrayBuffer. Exporters use
+  // this flag to skip the PNG path for this mode.
+  supportsAlpha: false
 };
 
 })(window.TR));

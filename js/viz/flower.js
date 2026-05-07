@@ -705,7 +705,10 @@ return {
   // the same call shape works for any mode that opts in.
   buildSchedule:  function(pats, bpm, accentMode, w, h) { return TR.flower.buildSchedule(pats, bpm, accentMode, w, h); },
   doubleSchedule: function(single) { return TR.flower.doubleSchedule(single); },
-  renderFrame:    function(c, w, h, t, schedule, bgFill) { return TR.flower.renderFrame(c, w, h, t, schedule, bgFill); }
+  renderFrame:    function(c, w, h, t, schedule, bgFill) { return TR.flower.renderFrame(c, w, h, t, schedule, bgFill); },
+  // Frames carry alpha — most of the canvas is transparent except for
+  // the drawn lines/dots, so PNG sequence compresses fine.
+  supportsAlpha: true
 };
 
 })(window.TR));

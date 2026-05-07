@@ -33,6 +33,14 @@ TR.switchVizMode = function(index) {
     TR.activeVizMode.init(canvas, ctx, w, h);
   }
   document.getElementById('viz-mode-select').value = index;
+  // PNG sequence is meaningful only for modes whose frames carry alpha
+  // (so the transparent regions compress). For opaque modes (clip) the
+  // ZIP would be multi-GB and OOM the final ArrayBuffer allocation, so
+  // hide the standalone button. ALL still works — exportAll skips PNG
+  // for the same reason.
+  var supportsAlpha = !TR.activeVizMode || TR.activeVizMode.supportsAlpha !== false;
+  var pngBtn = document.getElementById('btn-export-png');
+  if (pngBtn) pngBtn.style.display = supportsAlpha ? '' : 'none';
 };
 
 TR.vizOnHit = function(key, step, level) {
