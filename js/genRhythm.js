@@ -21,14 +21,13 @@
  * @param {number} fidelity - Structure fidelity 0-1. 1=deterministic (weight order), 0=random.
  * @returns {Array} Same tree structure as input, with leaf groups expanded to 0/1 arrays.
  */
-function generateRhythm(structure, beatLevel, rate, center, fidelity) {
-  if (beatLevel === undefined) beatLevel = 1;
-  if (rate === undefined) rate = 0.5;
-  if (center === undefined) center = 0;
-
-  // Step 1: Analyze tree — compute leaf count and levels
+/**
+ * Compute metrical levels for every leaf position in a tree.
+ * Single source of truth — TR.computeLevels in constants.js delegates here.
+ */
+function computeLevels(structure) {
   var levels = [];
-  function analyzeLevels(node) {
+  function walk(node) {
     if (!Array.isArray(node)) {
       // Leaf group: node is a number representing leaf count
       var firstIdx = levels.length;
@@ -38,14 +37,22 @@ function generateRhythm(structure, beatLevel, rate, center, fidelity) {
     }
     for (var i = 0; i < node.length; i++) {
       var firstIdx = levels.length;
-      analyzeLevels(node[i]);
-      if (i === 0) {
-        // First child: increment its first leaf's level
-        levels[firstIdx] += 1;
-      }
+      walk(node[i]);
+      // First child of each internal node: increment its first leaf's level
+      if (i === 0) levels[firstIdx] += 1;
     }
   }
-  analyzeLevels(structure);
+  walk(structure);
+  return levels;
+}
+
+function generateRhythm(structure, beatLevel, rate, center, fidelity) {
+  if (beatLevel === undefined) beatLevel = 1;
+  if (rate === undefined) rate = 0.5;
+  if (center === undefined) center = 0;
+
+  // Step 1: Analyze tree — compute leaf count and levels
+  var levels = computeLevels(structure);
   var N = levels.length;
 
   // Step 2: Compute maxLevel and beatsCount from beatLevel
@@ -120,8 +127,4 @@ function generateRhythm(structure, beatLevel, rate, center, fidelity) {
   }
 
   return reconstruct(structure);
-}
-
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = generateRhythm;
 }

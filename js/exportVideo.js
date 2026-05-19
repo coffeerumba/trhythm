@@ -306,40 +306,24 @@ TR.exportVideo = async function(onProgress) {
     emit('mux', 1);
     var buffer = muxer.target.buffer;
     var blob = new Blob([buffer], { type: 'video/webm' });
-    downloadBlob(blob, 'webm');
+    return { blob: blob, filename: TR.timestamp() + '_trhythm.webm' };
   } catch (e) {
     // On cancel or error, release the encoder GPU/CPU resources.
-    if (videoEncoder && videoEncoder.state !== 'closed') { try { videoEncoder.close(); } catch(_){} }
-    if (audioEncoder && audioEncoder.state !== 'closed') { try { audioEncoder.close(); } catch(_){} }
+    // The state guard prevents the InvalidStateError that close() throws
+    // when called on an already-closed encoder.
+    if (videoEncoder && videoEncoder.state !== 'closed') videoEncoder.close();
+    if (audioEncoder && audioEncoder.state !== 'closed') audioEncoder.close();
     throw e;
   } finally {
     // Release any per-export resources the active mode allocated
     // (e.g. clip mode's dedicated <video> elements + their object URLs).
-    // `single` is hoisted via `var`; if buildSchedule threw or never
-    // ran, it's undefined and we just skip.
-    if (typeof single !== 'undefined' && single && single.dispose) {
+    // `single` is `var`-hoisted, so it's `undefined` if buildSchedule
+    // threw or never ran — the truthy check below handles that.
+    if (single && single.dispose) {
       try { single.dispose(); } catch (_) {}
     }
     if (currentToken === token) currentToken = null;
   }
 };
-
-function downloadBlob(blob, ext) {
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
-  a.href = url;
-  var now = new Date();
-  var ts = now.getFullYear()
-    + String(now.getMonth() + 1).padStart(2, '0')
-    + String(now.getDate()).padStart(2, '0')
-    + '_' + String(now.getHours()).padStart(2, '0')
-    + String(now.getMinutes()).padStart(2, '0')
-    + String(now.getSeconds()).padStart(2, '0');
-  a.download = ts + '_trhythm.' + ext;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
 
 })(window.TR);

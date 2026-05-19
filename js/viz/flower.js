@@ -7,7 +7,7 @@
    tempo independent of the virtual cycle.
 
    When a hit fires, an animation runs on that track's leaf:
-     1. forward (one step):        yellow ball runs leaf → LCA, drawing
+     1. forward (one step):        black ball runs leaf → LCA, drawing
                                    a black trail behind it.
      2. reverse (½ track-cycle):   white eraser ball returns LCA → leaf,
                                    the trail retracting along with it.
@@ -25,10 +25,12 @@ TR.registerVizMode((function(TR) {
 var ctx, vizW, vizH;
 
 /* ── Per-instrument shape parameters ────────────────────────────────
-   `params[key + ':' + id]` is the canonical store. randomizeOnGenerate
-   writes fresh values into it on every generation cycle. The reader
-   `param(key, id)` falls back through DEFAULTS_PER_INST and DEFAULTS
-   when no value has been set. ── */
+   `params[inst + ':' + id]` is the canonical store, keyed by instrument
+   ('kick' / 'snare' / 'hihat' / 'crash') and parameter id ('radius',
+   'leaf-len', ...). randomizeOnGenerate writes fresh values into it
+   on every generation cycle. The reader `param(inst, id)` falls back
+   through DEFAULTS_PER_INST (per-instrument override per id) and
+   DEFAULTS (global per id) when no value has been set. ── */
 var params = {};
 var DEFAULTS = {
   'depth-curve': 1.0, 'bend':   0.0, 'leaf-spread': 0.0,
@@ -38,14 +40,14 @@ var DEFAULTS = {
 var DEFAULTS_PER_INST = {
   'leaf-len': { kick: 0.7, snare: 0.85, hihat: 1.0, crash: 0.55 }
 };
-function param(key, id) {
-  var v = params[key + ':' + id];
+function param(inst, id) {
+  var v = params[inst + ':' + id];
   if (v != null) return v;
   var perInst = DEFAULTS_PER_INST[id];
-  if (perInst && perInst[key] != null) return perInst[key];
+  if (perInst && perInst[inst] != null) return perInst[inst];
   return DEFAULTS[id];
 }
-function setParam(key, id, val) { params[key + ':' + id] = val; }
+function setParam(inst, id, val) { params[inst + ':' + id] = val; }
 
 /* ── Geometric primitives ────────────────────────────────────────── */
 function treeDepth(t) {
@@ -651,17 +653,9 @@ TR.flower.doubleSchedule = function(single) {
   };
 };
 
-// Optional 6th arg `bgFill`:
-//   undefined or string color → fill that color before drawing (default white)
-//   null                      → clearRect (transparent backdrop, for the
-//                               PNG-sequence export which needs alpha)
-TR.flower.renderFrame = function(c, w, h, t, schedule, bgFill) {
-  if (bgFill === null) {
-    c.clearRect(0, 0, w, h);
-  } else {
-    c.fillStyle = bgFill || '#fff';
-    c.fillRect(0, 0, w, h);
-  }
+TR.flower.renderFrame = function(c, w, h, t, schedule) {
+  c.fillStyle = '#fff';
+  c.fillRect(0, 0, w, h);
 
   var firings = schedule.firings;
   for (var i = 0; i < firings.length; i++) {
@@ -679,7 +673,7 @@ TR.flower.renderFrame = function(c, w, h, t, schedule, bgFill) {
 /* ── Public viz interface ──────────────────────────────────────── */
 return {
   name: '花',
-  init:   function(_canvas, _ctx, w, h) { ctx = _ctx; vizW = w; vizH = h; },
+  init:   function(_ctx, w, h) { ctx = _ctx; vizW = w; vizH = h; },
   resize: function(w, h) { vizW = w; vizH = h; },
   frame:  function(_ctx, w, h) {
     ctx = _ctx;
@@ -700,15 +694,15 @@ return {
     }
     drawCenterDot();
   },
-  onHit: function() {},
+  // onHit deliberately omitted — flower is tick-driven (geometry rebuilt
+  // every frame), so it has no per-hit state to update. viz.js gates
+  // the dispatch with `if (mode.onHit)`.
+
   // Export-side methods. Exporters route through TR.activeVizMode so
   // the same call shape works for any mode that opts in.
   buildSchedule:  function(pats, bpm, accentMode, w, h) { return TR.flower.buildSchedule(pats, bpm, accentMode, w, h); },
   doubleSchedule: function(single) { return TR.flower.doubleSchedule(single); },
-  renderFrame:    function(c, w, h, t, schedule, bgFill) { return TR.flower.renderFrame(c, w, h, t, schedule, bgFill); },
-  // Frames carry alpha — most of the canvas is transparent except for
-  // the drawn lines/dots, so PNG sequence compresses fine.
-  supportsAlpha: true
+  renderFrame:    function(c, w, h, t, schedule) { return TR.flower.renderFrame(c, w, h, t, schedule); }
 };
 
 })(window.TR));

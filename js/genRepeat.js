@@ -56,8 +56,3 @@ function genRepeatProbabilities(seqSize, chunkSize, bias = 0) {
   }
   return { probs: probs, starts: starts, chunkSize: chunkSize };
 }
-
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = genRepeat;
-  module.exports.genRepeatProbabilities = genRepeatProbabilities;
-}

@@ -192,25 +192,6 @@ function buildSmf(opts) {
   return new Uint8Array(bytes);
 }
 
-/* ── Download helpers ──────────────────────────────────────────── */
-function downloadBlob(blob, name) {
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-function timestamp() {
-  var now = new Date();
-  function pad(n) { return ('0' + n).slice(-2); }
-  return now.getFullYear()
-    + pad(now.getMonth() + 1) + pad(now.getDate())
-    + '_' + pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
-}
-
 /* ── Public API ───────────────────────────────────────────────── */
 TR.exportMidi = function() {
   var pats = TR.collectPatternsForRender();
@@ -278,7 +259,7 @@ TR.exportMidi = function() {
     tracks: [conductor, kick, snare, hihat, crash]
   });
   var blob = new Blob([smf], { type: 'audio/midi' });
-  downloadBlob(blob, timestamp() + '_trhythm.mid');
+  return { blob: blob, filename: TR.timestamp() + '_trhythm.mid' };
 };
 
 })(window.TR);

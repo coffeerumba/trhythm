@@ -148,24 +148,8 @@ TR.flattenTree = function(node) {
   return result;
 };
 
-TR.computeLevels = function(structure) {
-  var levels = [];
-  function walk(node) {
-    if (!Array.isArray(node)) {
-      var firstIdx = levels.length;
-      for (var j = 0; j < node; j++) levels.push(0);
-      if (node > 1) levels[firstIdx] += 1;
-      return;
-    }
-    for (var i = 0; i < node.length; i++) {
-      var firstIdx = levels.length;
-      walk(node[i]);
-      if (i === 0) levels[firstIdx] += 1;
-    }
-  }
-  walk(structure);
-  return levels;
-};
+// Defined in genRhythm.js (loaded before this file) — single source of truth.
+TR.computeLevels = computeLevels;
 
 TR.countLeaves = function(node) {
   if (!Array.isArray(node)) return node;
@@ -191,5 +175,24 @@ TR.computeBeats = function(def) {
     if (levels[i] >= def.beatLevel) beats++;
   }
   return beats;
+};
+
+/* ═══ Download helpers (shared by all exporters) ═══ */
+TR.timestamp = function() {
+  var d = new Date();
+  function pad(n) { return ('0' + n).slice(-2); }
+  return d.getFullYear()
+    + pad(d.getMonth() + 1) + pad(d.getDate())
+    + '_' + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
+};
+TR.downloadBlob = function(blob, filename) {
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 };
 })();

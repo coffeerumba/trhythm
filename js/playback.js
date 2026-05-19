@@ -539,35 +539,20 @@ TR.renderOffline = async function(onProgress) {
 
   var wavData = TR.encodeWAV(rendered);
   var blob = new Blob([wavData], { type: 'audio/wav' });
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
-  a.href = url;
-  var now = new Date();
-  var ts = now.getFullYear()
-    + String(now.getMonth() + 1).padStart(2, '0')
-    + String(now.getDate()).padStart(2, '0')
-    + '_' + String(now.getHours()).padStart(2, '0')
-    + String(now.getMinutes()).padStart(2, '0')
-    + String(now.getSeconds()).padStart(2, '0');
-  a.download = ts + '_trhythm.wav';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  return { blob: blob, filename: TR.timestamp() + '_trhythm.wav' };
   } finally {
     if (progressTicker) clearInterval(progressTicker);
     if (currentAudioToken === token) currentAudioToken = null;
   }
 };
 
-/* ── DL button: Video / Audio / PNG Seq / MIDI choice popup ───────
-   Click DL → toggle a small popup with the four export buttons below
+/* ── DL button: Video / Audio / MIDI choice popup ─────────────────
+   Click DL → toggle a small popup with the export buttons below
    the .btn-row. Each button runs its own pipeline:
-     Video   → TR.exportVideo    (WebM via WebCodecs + webm-muxer)
-     Audio   → TR.renderOffline  (WAV via OfflineAudioContext)
-     PNG Seq → TR.exportPngSeq   (transparent PNG sequence ZIP)
-     MIDI    → TR.exportMidi     (Standard MIDI File, instant — no progress)
-   While a long-running export (Video/Audio/PNG) is running, clicking DL
+     Video → TR.exportVideo    (WebM via WebCodecs + webm-muxer)
+     Audio → TR.renderOffline  (WAV via OfflineAudioContext)
+     MIDI  → TR.exportMidi     (Standard MIDI File, instant — no progress)
+   While a long-running export (Video/Audio) is running, clicking DL
    again triggers cancel for whichever pipeline is active. MIDI export
    is fast enough (milliseconds) that it has no progress UI and no
    cancel path. Clicking outside the popup closes it. */
@@ -576,7 +561,6 @@ var choiceRow = document.getElementById('export-choice');
 var btnExportAll   = document.getElementById('btn-export-all');
 var btnExportVideo = document.getElementById('btn-export-video');
 var btnExportAudio = document.getElementById('btn-export-audio');
-var btnExportPng   = document.getElementById('btn-export-png');
 var btnExportMidi  = document.getElementById('btn-export-midi');
 
 // Shared progress-ring helper used by both Video and Audio paths.
@@ -641,11 +625,6 @@ dlBtn.addEventListener('click', function(e) {
     showCancelling(dlBtn);
     return;
   }
-  if (TR.pngInProgress && TR.pngInProgress()) {
-    TR.cancelPng();
-    showCancelling(dlBtn);
-    return;
-  }
 
   // Idle: toggle the choice popup.
   choiceRow.classList.toggle('open');
@@ -659,7 +638,8 @@ async function runVideoExport() {
   }
   var ui = beginProgressUI(dlBtn);
   try {
-    await TR.exportVideo(ui.setProgress);
+    var r = await TR.exportVideo(ui.setProgress);
+    if (r) TR.downloadBlob(r.blob, r.filename);
   } catch(err) {
     if (!err.cancelled) {
       console.error('Video export failed:', err);
@@ -674,29 +654,11 @@ async function runAudioExport() {
   closeChoice();
   var ui = beginProgressUI(dlBtn);
   try {
-    await TR.renderOffline(ui.setProgress);
+    var r = await TR.renderOffline(ui.setProgress);
+    if (r) TR.downloadBlob(r.blob, r.filename);
   } catch(err) {
     if (!err.cancelled) {
       console.error('Audio export failed:', err);
-      alert('\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u306b\u5931\u6557\u3057\u307e\u3057\u305f: ' + err.message);
-    }
-  } finally {
-    ui.restore();
-  }
-}
-
-async function runPngExport() {
-  closeChoice();
-  if (!(TR.exportPngSeqAvailable && TR.exportPngSeqAvailable())) {
-    alert('PNG\u30b7\u30fc\u30b1\u30f3\u30b9\u51fa\u529b\u306e\u30e9\u30a4\u30d6\u30e9\u30ea\u304c\u8aad\u307f\u8fbc\u307e\u308c\u3066\u3044\u307e\u305b\u3093\u3002');
-    return;
-  }
-  var ui = beginProgressUI(dlBtn);
-  try {
-    await TR.exportPngSeq(ui.setProgress);
-  } catch(err) {
-    if (!err.cancelled) {
-      console.error('PNG export failed:', err);
       alert('\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u306b\u5931\u6557\u3057\u307e\u3057\u305f: ' + err.message);
     }
   } finally {
@@ -710,7 +672,8 @@ function runMidiExport() {
   // We do still wrap in try/catch so a bad pattern bank surfaces a
   // visible alert instead of failing silently.
   try {
-    TR.exportMidi();
+    var r = TR.exportMidi();
+    if (r) TR.downloadBlob(r.blob, r.filename);
   } catch(err) {
     console.error('MIDI export failed:', err);
     alert('ダウンロードに失敗しました: ' + err.message);
@@ -743,10 +706,6 @@ btnExportVideo.addEventListener('click', function(e) {
 btnExportAudio.addEventListener('click', function(e) {
   e.stopPropagation();
   runAudioExport();
-});
-btnExportPng.addEventListener('click', function(e) {
-  e.stopPropagation();
-  runPngExport();
 });
 btnExportMidi.addEventListener('click', function(e) {
   e.stopPropagation();

@@ -429,7 +429,7 @@ function momentAt(moments, t) {
   return current;
 }
 
-async function renderFrameAsync(c, w, h, t, schedule, bgFill) {
+async function renderFrameAsync(c, w, h, t, schedule) {
   var moments = schedule.moments;
   var current = (moments && moments.length) ? momentAt(moments, t) : null;
   // Order activeKeys by KEYS index so the strip layout is stable.
@@ -445,12 +445,8 @@ async function renderFrameAsync(c, w, h, t, schedule, bgFill) {
   // a flash hazard (any one strip's drawImage hiccup would briefly
   // reveal black at the next encoder capture).
   if (n === 0) {
-    if (bgFill === null) {
-      c.clearRect(0, 0, w, h);
-    } else {
-      c.fillStyle = bgFill || '#000';
-      c.fillRect(0, 0, w, h);
-    }
+    c.fillStyle = '#000';
+    c.fillRect(0, 0, w, h);
     return;
   }
   var stripW = w / n;
@@ -517,7 +513,7 @@ function wireInputs() {
 // ── Public viz interface ────────────────────────────────────────
 return {
   name: 'クリップ',
-  init: function(_canvas, _ctx, w, h) {
+  init: function(_ctx, w, h) {
     ctx = _ctx; vizW = w; vizH = h;
     isMounted = true;
     wireInputs();
@@ -538,24 +534,19 @@ return {
     ctx = c; vizW = w; vizH = h;
     frame(c, w, h);
   },
-  onHit: function(key, step, level) { onHit(key); },
+  onHit: function(key) { onHit(key); },
   destroy: function() {
     isMounted = false;
     showControls(false);
     reset();
   },
   // Export-side methods, dispatched through TR.activeVizMode by the
-  // Video / PNG-sequence exporters. buildSchedule is async (it waits for
-  // any pending video loads to settle); doubleSchedule is sync;
-  // renderFrame is async because each strip needs a per-frame seek.
+  // video exporter. buildSchedule is async (it waits for any pending
+  // video loads to settle); doubleSchedule is sync; renderFrame is
+  // async because each strip needs a per-frame seek.
   buildSchedule:  buildScheduleAsync,
   doubleSchedule: doubleScheduleSync,
-  renderFrame:    renderFrameAsync,
-  // Every frame is fully covered by opaque video pixels. PNG sequence
-  // would balloon to GBs (no transparent regions to compress), and the
-  // ALL ZIP would OOM allocating its final ArrayBuffer. Exporters use
-  // this flag to skip the PNG path for this mode.
-  supportsAlpha: false
+  renderFrame:    renderFrameAsync
 };
 
 })(window.TR));
