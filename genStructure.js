@@ -5,7 +5,10 @@
  * generateStructure.js — Beat structure catalog generator
  *
  * Usage: node generateStructure.js
- * Output: structures.tsv (same directory)
+ * Output: js/structures.js (window.STRUCTURE_DATA assignment, loaded
+ *         directly by index.html via <script>. JS rather than an
+ *         external data file because the page often runs from file://
+ *         where fetch of a sibling resource is blocked by CORS.)
  *
  * ═══════════════════════════════════════════════════════════════
  * Structure definition
@@ -425,27 +428,11 @@ function main() {
     return a.structure < b.structure ? -1 : a.structure > b.structure ? 1 : 0;
   });
 
-  // Output TSV
-  var header = 'structure\tdiv\tsimpson\tleaves\tminCycle\tmaxCycle\tbeatLevel';
-  var lines = [header];
-  for (var i = 0; i < rows.length; i++) {
-    var r = rows[i];
-    lines.push([
-      r.structure,
-      r.div.toFixed(6),
-      r.simpson.toFixed(6),
-      r.leaves,
-      r.minCycle.toFixed(4),
-      r.maxCycle.toFixed(4),
-      r.beatLevel
-    ].join('\t'));
-  }
-
-  var outPath = path.join(__dirname, 'structures.tsv');
-  fs.writeFileSync(outPath, lines.join('\n') + '\n', 'utf8');
-  console.error('Wrote ' + rows.length + ' rows to ' + outPath);
-
-  // Output full data as JS (avoids CORS issues with file:// protocol)
+  // Write js/structures.js — a one-line `window.STRUCTURE_DATA = [...]`
+  // assignment that index.html pulls in via <script>. JS rather than TSV
+  // because the page often runs from file:// where fetch of a sibling
+  // file is blocked by CORS.
+  // Columns: [structure, div, simpson, leaves, minCycle, maxCycle, beatLevel]
   var chartData = rows.map(function(r) {
     return [r.structure, +r.div.toFixed(6), +r.simpson.toFixed(6), r.leaves, +r.minCycle.toFixed(4), +r.maxCycle.toFixed(4), r.beatLevel];
   });
