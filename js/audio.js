@@ -133,22 +133,15 @@ TR.audio.playCymbal = function(time, stage, _ctx, _master, _noiseBuf) {
   src.connect(filt); filt.connect(g); g.connect(master);
 };
 
-/* Pattern-driven accent. When mode is 'on', the cymbal stage is chosen from
- * the 2-adic valuation of patternIdx (0 is treated as TR.PATTERN_COUNT so it
- * gets the strongest cue). Stage is clamped to the highest index available
- * in the cymbal voice, so a future expansion of PATTERN_COUNT or of the CY
- * array doesn't require any code change here:
- *
- *   odd     → stage 0 (weakest)
- *   v₂ = 1  → stage 1
- *   v₂ = 2  → stage 2
- *   v₂ = 3  → stage 3
- *   v₂ = 4  → stage 4
- *   v₂ ≥ 5  → stage 5 if it exists, else clamped to the top.
- */
+/* Pattern-driven accent. When mode is 'on', the cymbal stage comes from
+ * TR.cymbalStage (2-adic valuation of patternIdx, clamped): odd indexes
+ * get the weakest stage, higher powers of two get progressively stronger
+ * ones, index 0 the strongest. NUM_CY_STAGES must match the
+ * cutoffs/gains/decays array length in playCymbal above.
+ * ('random' mode is handled by the audition.js wrapper around this.) */
 TR.audio.playAccent = function(mode, time, patternIdx, _ctx, _master, _noiseBuf) {
   if (mode !== 'on') return;  // 'off' or unknown → silent
-  var NUM_CY_STAGES = 5;  // matches cutoffs/gains/decays length in playCymbal
+  var NUM_CY_STAGES = 5;
   TR.audio.playCymbal(time, TR.cymbalStage(patternIdx, NUM_CY_STAGES - 1), _ctx, _master, _noiseBuf);
 };
 
@@ -183,11 +176,9 @@ TR.audio.renderPatterns = async function(pats, opts) {
   var slots = [];
   var loopDur = 0;
   for (var p = 0; p < pats.length; p++) {
-    var entry = pats[p];
-    var pat = entry.pat || entry;
-    var bankIdx = (entry.bankIdx != null) ? entry.bankIdx : p;
-    var st = TR.slotTiming(pat, bpm);
-    slots.push({ pat: pat, bankIdx: bankIdx, offset: loopDur, timing: st.tracks });
+    var entry = pats[p];  // { pat, bankIdx } from collectPatternsForRender
+    var st = TR.slotTiming(entry.pat, bpm);
+    slots.push({ pat: entry.pat, bankIdx: entry.bankIdx, offset: loopDur, timing: st.tracks });
     loopDur += st.slotDur;
   }
 

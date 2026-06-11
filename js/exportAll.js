@@ -55,7 +55,7 @@ TR.exportAll = async function(onProgress) {
     // Video — skip if WebCodecs isn't available; the ZIP still
     // contains audio/midi in that case.
     var video = null;
-    if (TR.exportVideoAvailable && TR.exportVideoAvailable()) {
+    if (TR.exportVideoAvailable()) {
       video = await TR.exportVideo(makeStageProgress('video'));
     }
     completeStage('video');

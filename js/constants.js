@@ -65,6 +65,7 @@ TR.STRUCTURES = {
 
 TR.PATTERN_COUNT = 16;
 TR.INSTRUMENTS = ['kick', 'snare', 'hihat'];
+TR.INST_LABELS = { kick: 'Kick', snare: 'Snare', hihat: 'HiHat' };
 TR.SCHEDULER_LOOKAHEAD = 0.1;
 TR.SCHEDULER_INTERVAL = 25;
 

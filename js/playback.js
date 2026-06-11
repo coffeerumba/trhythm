@@ -87,8 +87,9 @@ TR.findNextPatternIndex = function(fromIndex) {
 };
 
 /* Accent is a mode toggle (not a per-step pattern). Returns the currently
- * selected voice: 'off' (silent), 'ohh' (open hihat), 'cc' (crash), 'sc'
- * (splash). The audio dispatcher TR.audio.playAccent reads this. */
+ * selected mode: 'off' (silent), 'on' (staged cymbal), or 'random'
+ * (audition voices — the button is injected by js/audition.js). The
+ * audio dispatcher TR.audio.playAccent reads this. */
 TR.getAccentMode = function() {
   var active = document.querySelector('.btn-accent.active');
   return active ? active.dataset.value : 'off';
@@ -398,7 +399,7 @@ TR.cancelAudio = function() { if (currentAudioToken) currentAudioToken.aborted =
 
 TR.renderOffline = async function(onProgress) {
   var pats = TR.collectPatternsForRender();
-  if (pats.length === 0) return;
+  if (pats.length === 0) throw new Error('No patterns to render');
   if (currentAudioToken) throw new Error('Audio export already in progress');
 
   var token = currentAudioToken = { aborted: false };
@@ -531,17 +532,17 @@ dlBtn.addEventListener('click', function(e) {
   // when ALL is running an inner stage, both allInProgress and the
   // matching inner-progress flag are true — we want to cancel the
   // entire ALL operation, not just the current stage.
-  if (TR.allInProgress && TR.allInProgress()) {
+  if (TR.allInProgress()) {
     TR.cancelAll();
     showCancelling(dlBtn);
     return;
   }
-  if (TR.exportInProgress && TR.exportInProgress()) {
-    if (TR.cancelExport) TR.cancelExport();
+  if (TR.exportInProgress()) {
+    TR.cancelExport();
     showCancelling(dlBtn);
     return;
   }
-  if (TR.audioInProgress && TR.audioInProgress()) {
+  if (TR.audioInProgress()) {
     TR.cancelAudio();
     showCancelling(dlBtn);
     return;
@@ -553,7 +554,7 @@ dlBtn.addEventListener('click', function(e) {
 
 async function runVideoExport() {
   closeChoice();
-  if (!(TR.exportVideoAvailable && TR.exportVideoAvailable())) {
+  if (!TR.exportVideoAvailable()) {
     alert('\u3054\u4f7f\u7528\u306e\u30d6\u30e9\u30a6\u30b6\u30fc\u3067\u306f\u52d5\u753b\u30a8\u30af\u30b9\u30dd\u30fc\u30c8\u304c\u4f7f\u3048\u307e\u305b\u3093\u3002');
     return;
   }

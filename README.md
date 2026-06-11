@@ -432,10 +432,9 @@ score:     5.2  1.1  3.8  0.5 6.0 -0.2  3.1 2.1
 
 ```
                    2              start
-threshold = ─ ─────── × start2 + ────── × 4 + bias
-              seqSize            seqSize
-                
-p = clamp(threshold, 0, 1)
+structural = min(1, (4 × start − 2 × start2) / seqSize)
+
+p = clamp(structural + bias, 0, 1)
 ```
 
 ここで：
@@ -542,7 +541,7 @@ indexes:   0 0 0 2 0 4 4 6 0 8  0 10  4 12  4 14  ← 例：bias 高め
 
 - パターンバンクの active が次のパターンへ進む
 - 全楽器のグリッドが新しいパターンのデータに更新される
-- Open hihat の合図音が鳴る（新サイクルのダウンビート）
+- アクセント音が鳴る（新サイクルのダウンビート。シンバル／ランダム音色、OFF なら無音）
 
 各楽器は：
 
@@ -557,7 +556,7 @@ indexes:   0 0 0 2 0 4 4 6 0 8  0 10  4 12  4 14  ← 例：bias 高め
 
 ### スケジューラー
 
-Tone.js の `Transport` ループ上で、一定間隔（25 ms）ごとに `SCHEDULER_LOOKAHEAD = 0.1 s` 先までの発音をキューに入れる**ルックアヘッドスケジューラー**方式。これにより：
+`setTimeout` チェーン（25 ms 間隔、Tone.js のクロックで時刻参照）で `SCHEDULER_LOOKAHEAD = 0.1 s` 先までの発音をキューに入れる**ルックアヘッドスケジューラー**方式。これにより：
 
 - UI スレッドが重くても音のタイミングは安定
 - パラメーター変更を次のサイクルから反映できる

@@ -55,7 +55,6 @@ TR.switchPattern = function(idx) {
   if (TR.state.isPlaying) {
     TR.stopPlayback();
     if (TR.state.kickFlat) TR.startPlayback();
-    else TR.state.isPlaying = false;
   }
 };
 

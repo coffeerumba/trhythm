@@ -262,28 +262,35 @@ function strokePartial(c, poly, lens, frac) {
    marker disappear that frame). Each entry caches its own polyline
    (leaf → LCA, curve-aware) and the cumulative segment lengths so the
    draw path is just a couple of slice operations per frame. ── */
-var animations      = { kick: {}, snare: {}, hihat: {}, crash: {} };
-var lastPlayingStep = { kick: -1, snare: -1, hihat: -1 };
-// Latches once per playback session. Until contStep first goes ≥ 0 we
-// don't trust the mod-arithmetic playingStep (it would falsely report
-// the last step at startup). After the first reach, contStep can dip
-// negative again at every cycle wrap — that's expected and benign.
-var started = { kick: false, snare: false, hihat: false };
-// Crash is registered once per virtual cycle; track the start-time of the
-// last cycle we registered so we don't double-fire within one cycle.
-var crashLastCycleStart = -1;
+// animations[key][step]: at most one entry per leaf-step (see above).
+// lastPlayingStep / started: per regular track. `started` latches once
+// per playback session — until contStep first goes ≥ 0 we don't trust
+// the mod-arithmetic playingStep (it would falsely report the last step
+// at startup). After the first reach, contStep can dip negative again
+// at every cycle wrap — that's expected and benign.
+// crashLastCycleStart: crash registers once per virtual cycle; remember
+// the last cycle start so we don't double-fire within one cycle.
+var animations, lastPlayingStep, started, crashLastCycleStart;
 
-// Reset all realtime animation state. Called on unmount (destroy) and at
-// every new playback session. The session check matters because a
-// regenerate-while-playing does stopPlayback()+startPlayback()
-// synchronously inside one event handler — tick() never observes
-// isPlaying === false, so without this its stale `started` latch and
-// lastPlayingStep would misfire a phantom animation on the new session's
-// first frame.
+// Reset all realtime animation state — also the initializer (called once
+// below). Runs on unmount (destroy) and at every new playback session.
+// The session check matters because a regenerate-while-playing does
+// stopPlayback()+startPlayback() synchronously inside one event handler —
+// tick() never observes isPlaying === false, so without this its stale
+// `started` latch and lastPlayingStep would misfire a phantom animation
+// on the new session's first frame. Maps are built from TRACKS so new
+// tracks are picked up automatically.
 function resetRealtimeState() {
-  animations      = { kick: {}, snare: {}, hihat: {}, crash: {} };
-  lastPlayingStep = { kick: -1, snare: -1, hihat: -1 };
-  started         = { kick: false, snare: false, hihat: false };
+  animations = {};
+  lastPlayingStep = {};
+  started = {};
+  for (var i = 0; i < TRACKS.length; i++) {
+    animations[TRACKS[i]] = {};
+    if (TRACKS[i] !== 'crash') {
+      lastPlayingStep[TRACKS[i]] = -1;
+      started[TRACKS[i]] = false;
+    }
+  }
   crashLastCycleStart = -1;
 }
 var lastSession = 0;
@@ -526,6 +533,7 @@ var RANDOM_PARAMS = [
 ];
 // All viz tracks: regular instruments + the synthetic Crash track.
 var TRACKS = TR.INSTRUMENTS.concat(['crash']);
+resetRealtimeState();  // initialize the per-track animation state maps
 
 function randomizeOnGenerate() {
   for (var p = 0; p < RANDOM_PARAMS.length; p++) {
@@ -562,8 +570,7 @@ function buildSchedule(pats, bpm, accentMode, w, h) {
   var offset = 0;
 
   for (var p = 0; p < pats.length; p++) {
-    var entry = pats[p];
-    var pat = entry.pat || entry;  // accept either { pat, bankIdx } or pat directly
+    var pat = pats[p].pat;  // entries are { pat, bankIdx } from collectPatternsForRender
     if (!pat) continue;
 
     // Per-track timing through the shared helper (same numbers as the

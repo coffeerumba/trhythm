@@ -24,8 +24,6 @@
    ═══════════════════════════════════════════════════════════════ */
 (function(TR) {
 
-TR.exportMidiAvailable = function() { return true; };
-
 /* ── GM drum mapping (channel 10) ──────────────────────────────── */
 var KICK_NOTE  = 36;  // Bass Drum 1
 var SNARE_NOTE = 38;  // Acoustic Snare

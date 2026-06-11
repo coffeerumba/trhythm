@@ -162,11 +162,6 @@ TR.renderAllGrids = function(pat, snaps) {
 (function() {
 /* ─── Dynamically generate instrument sections (unified) ─── */
 var container = document.getElementById('instruments-container');
-var instruments = [
-  { key: 'kick',  label: 'Kick' },
-  { key: 'snare', label: 'Snare' },
-  { key: 'hihat', label: 'HiHat' }
-];
 
 var helpTexts = {
   struct: '楽器ごとに拍構造を変えられます。「既定」を選ぶと既定拍構造を使います。異なる拍構造を選ぶと拍数が変わり、「拍同期」でポリメーター再生ができます。',
@@ -179,9 +174,9 @@ var section = document.createElement('div');
 section.className = 'inst-section collapsible';
 var html = '<div class="inst-header">\u697d\u5668\u30d1\u30e9\u30e1\u30fc\u30bf\u30fc</div>';
 
-for (var i = 0; i < instruments.length; i++) {
-  var inst = instruments[i];
-  if (i > 0) html += '<hr style="border:none; border-top:2px dashed var(--border); margin:10px 0;">';
+for (var i = 0; i < TR.INSTRUMENTS.length; i++) {
+  var inst = { key: TR.INSTRUMENTS[i], label: TR.INST_LABELS[TR.INSTRUMENTS[i]] };
+  if (i > 0) html += '<hr class="dashed-rule">';
   html +=
     '<div class="inst-header ' + inst.key + '" style="font-size:16px;">' + inst.label + '</div>' +
     '<div class="param-group">' +
@@ -227,7 +222,7 @@ for (var i = 0; i < instruments.length; i++) {
 
 // Accent track — toggles the pattern-boundary cymbal cue. The cymbal
 // stage is picked per pattern from the 2-adic valuation (see playAccent).
-html += '<hr style="border:none; border-top:2px dashed var(--border); margin:10px 0;">' +
+html += '<hr class="dashed-rule">' +
   '<div class="inst-header accent" style="font-size:16px;">Crash</div>' +
   '<div class="param-group">' +
   '<div class="param-row">' +
@@ -235,14 +230,14 @@ html += '<hr style="border:none; border-top:2px dashed var(--border); margin:10p
     '<button type="button" class="btn-accent active" data-value="on">シンバル</button>' +
   '</div>' +
   '</div>';
-// js/audition.js injects a second row of audition buttons below the accent
-// radio. It's self-contained and safe to remove.
+// js/audition.js injects a third ランダム button into the accent radio row.
+// It's self-contained and safe to remove.
 
 section.innerHTML = html;
 container.appendChild(section);
 
-for (var i = 0; i < instruments.length; i++) {
-  var key = instruments[i].key;
+for (var i = 0; i < TR.INSTRUMENTS.length; i++) {
+  var key = TR.INSTRUMENTS[i];
   TR.setupSlider(key + '-rate');
   TR.setupSlider(key + '-fidelity');
   TR.setupSlider(key + '-center');
@@ -367,36 +362,19 @@ for (var ii = 0; ii < TR.INSTRUMENTS.length; ii++) {
  * Returns an HTML string using .tv-fork/.tv-arms/.tv-arm/.tv-leaves/.tv-leaf classes.
  */
 TR.buildTreeHTML = function(tree, beatLevel) {
-  var maxDepth = 0;
-  function getMaxDepth(node, d) {
-    if (!Array.isArray(node)) { if (d > maxDepth) maxDepth = d; return; }
-    for (var i = 0; i < node.length; i++) getMaxDepth(node[i], d + 1);
-  }
-  getMaxDepth(tree, 0);
-
-  var beatColorDepth = maxDepth - beatLevel + 1;
-  var lineColor = '#888';
   var levels = TR.computeLevels(tree);
   var leafIdx = 0;
-
-  function leafCount(node) {
-    if (!Array.isArray(node)) return node;
-    var s = 0;
-    for (var i = 0; i < node.length; i++) s += leafCount(node[i]);
-    return s;
-  }
 
   // Recursively compute stem position as fraction [0,1] of node's total width.
   // For leaf: 0.5 (center). For fork: position of leftmost leaf's center.
   function stemFraction(node) {
     if (!Array.isArray(node)) return 0.5;
-    var total = leafCount(node);
-    var firstTotal = leafCount(node[0]);
+    var total = TR.countLeaves(node);
+    var firstTotal = TR.countLeaves(node[0]);
     return (stemFraction(node[0]) * firstTotal) / total;
   }
 
-  function build(node, depth) {
-    var color = lineColor;
+  function build(node) {
     if (!Array.isArray(node)) {
       var cells = '';
       for (var j = 0; j < node; j++) {
@@ -410,14 +388,13 @@ TR.buildTreeHTML = function(tree, beatLevel) {
     var arms = '';
     for (var i = 0; i < node.length; i++) {
       var sl = stemFraction(node[i]) * 100;
-      arms += '<div class="tv-arm" style="--sl:calc(' + sl.toFixed(1) + '% - 1px)">' + build(node[i], depth + 1) + '</div>';
+      arms += '<div class="tv-arm" style="--sl:calc(' + sl.toFixed(1) + '% - 1px)">' + build(node[i]) + '</div>';
     }
-    return '<div class="tv-fork" style="--fc:' + color + '">' +
-           '<div class="tv-arms">' + arms + '</div></div>';
+    return '<div class="tv-fork"><div class="tv-arms">' + arms + '</div></div>';
   }
 
   var rootSl = stemFraction(tree) * 100;
-  return '<div class="tv-root" style="--sl:calc(' + rootSl.toFixed(1) + '% - 1px)">' + build(tree, 0) + '</div>';
+  return '<div class="tv-root" style="--sl:calc(' + rootSl.toFixed(1) + '% - 1px)">' + build(tree) + '</div>';
 };
 
 
@@ -780,15 +757,13 @@ TR.renderRepeatProbChart = function(key) {
 (function() {
   var body = document.getElementById('repeat-map-body');
 
-  var instruments = ['kick', 'snare', 'hihat'];
-  var labels = { kick: 'Kick', snare: 'Snare', hihat: 'HiHat' };
-  for (var i = 0; i < instruments.length; i++) {
-    var key = instruments[i];
+  for (var i = 0; i < TR.INSTRUMENTS.length; i++) {
+    var key = TR.INSTRUMENTS[i];
 
     // Separator between instruments
     if (i > 0) {
       var hr = document.createElement('hr');
-      hr.style.cssText = 'border:none; border-top:2px dashed var(--border); margin:10px 0;';
+      hr.className = 'dashed-rule';
       body.appendChild(hr);
     }
 
@@ -796,7 +771,7 @@ TR.renderRepeatProbChart = function(key) {
     var header = document.createElement('div');
     header.className = 'grid-label ' + key;
     header.style.cssText = 'margin-top:10px; margin-bottom:6px;';
-    header.textContent = labels[key];
+    header.textContent = TR.INST_LABELS[key];
     body.appendChild(header);
 
     // chunkSize slider (integer, 1..PATTERN_COUNT)

@@ -167,15 +167,6 @@ input[type="range"]::-moz-range-thumb {
   font-weight: bold;
   box-shadow: 2px 2px 0 var(--border);
 }
-.pattern-bank > span {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 36px;
-  font-size: 14px;
-  font-family: var(--pixel-font);
-  color: var(--text-muted);
-}
 .pattern-bank button.has-data {
   border-color: var(--text-muted);
   color: var(--text);
@@ -304,18 +295,12 @@ input[type="range"]::-moz-range-thumb {
   font-weight: bold;
 }
 
-.btn-audition {
-  background: var(--bg);
-  border: 2px solid var(--border);
-  box-shadow: 2px 2px 0 var(--border);
-  color: var(--text-muted);
-  font-family: var(--pixel-font);
-  font-size: 14px;
-  padding: 4px 10px;
-  cursor: pointer;
+/* Dashed section separator (shared by index.html and ui.js) */
+hr.dashed-rule {
+  border: none;
+  border-top: 2px dashed var(--border);
+  margin: 10px 0;
 }
-.btn-audition:hover { background: var(--border); color: #fff; }
-.btn-audition:active { box-shadow: none; transform: translate(2px, 2px); }
 
 /* --- Buttons --- */
 .btn-row {
@@ -762,7 +747,7 @@ input[type="range"]::-moz-range-thumb {
   top: 0;
   left: 0;
   right: 0;
-  border-top: 2px solid var(--fc, #999);
+  border-top: 2px solid #888;
 }
 .tv-arm:first-child::before { left: var(--sl, calc(50% - 1px)); }
 .tv-arm:last-child::before { right: calc(100% - var(--sl, calc(50% - 1px)) - 2px); }
@@ -774,7 +759,7 @@ input[type="range"]::-moz-range-thumb {
   top: 0;
   left: var(--sl, calc(50% - 1px));
   height: 18px;
-  border-left: 2px solid var(--fc, #999);
+  border-left: 2px solid #888;
 }
 .tv-arm:only-child::after { display: none; }
 /* Leaf group */

@@ -30,7 +30,6 @@
    ═══════════════════════════════════════════════════════════════ */
 TR.registerVizMode((function(TR) {
 
-var ctx, vizW, vizH;
 var isMounted = false;
 // Setting canvas.width clears the backing store, so any fill we do at
 // init() time gets wiped by the immediate vizResize() that follows. We
@@ -320,8 +319,7 @@ async function buildScheduleAsync(pats, bpm, accentMode, w, h) {
   var allHits = [];  // { time, key }
   var offset = 0;
   for (var p = 0; p < pats.length; p++) {
-    var entry = pats[p];
-    var pat = (entry && entry.pat) ? entry.pat : entry;
+    var pat = pats[p].pat;  // entries are { pat, bankIdx } from collectPatternsForRender
     if (!pat) continue;
 
     // Per-track timing through the shared helper — same numbers as the
@@ -508,7 +506,6 @@ function unwireInputs() {
 return {
   name: 'クリップ',
   init: function(_ctx, w, h) {
-    ctx = _ctx; vizW = w; vizH = h;
     isMounted = true;
     wireInputs();
     showControls(true);
@@ -519,13 +516,11 @@ return {
     needsBlackFill = true;
   },
   resize: function(w, h) {
-    vizW = w; vizH = h;
     // Backing-store reset just blanked the canvas — re-arm the black
     // fill so the empty-active state stays well-defined after a resize.
     needsBlackFill = true;
   },
   frame: function(c, w, h) {
-    ctx = c; vizW = w; vizH = h;
     frame(c, w, h);
   },
   onHit: function(key) { onHit(key); },

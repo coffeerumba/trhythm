@@ -1,20 +1,25 @@
 /* ═══════════════════════════════════════════════════════════════════
- * Audition module — exploratory accent voices for A/B listening.
+ * Audition module — the accent ランダム mode's voice pool.
+ *
+ * Injects a third button into the Accent row and wraps
+ * TR.audio.playAccent: in 'random' mode, 5 voices are drawn from
+ * VOICES on every generate and assigned to the 2-adic accent stages
+ * (TR.cymbalStage), so each pattern slot fires its stage's voice.
  *
  * Self-contained: can be dropped entirely by removing the <script> tag
  * in index.html and deleting this file. The production accent voice
  * (TR.audio.playCymbal, wired into playback) does not depend on any of
- * this.
+ * this — without this file the Accent row simply offers OFF/シンバル.
  *
- * Adding / removing a voice: edit the VOICES array only.
+ * Adding / removing a voice: edit the VOICES array only. Voices always
+ * receive a resolved (ctx, master) from the wrapper; _noiseBuf is only
+ * passed on offline renders and falls back to the realtime buffer.
  * ═══════════════════════════════════════════════════════════════════ */
 (function(TR) {
 
 var VOICES = [
   /* ─── 易 (simple syntheses) ──────────────────────────────────── */
-  { id: 'bongo', label: 'ボンゴ', play: function(time, _ctx, _master, _noiseBuf) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'bongo', label: 'ボンゴ', play: function(time, ctx, master, _noiseBuf) {
     var nb = _noiseBuf || TR.state.noiseBuffer;
     var osc = ctx.createOscillator();
     osc.type = 'sine';
@@ -36,9 +41,7 @@ var VOICES = [
     src.connect(filt); filt.connect(ng); ng.connect(master);
   }},
 
-  { id: 'shaker', label: 'シェーカー', play: function(time, _ctx, _master, _noiseBuf) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'shaker', label: 'シェーカー', play: function(time, ctx, master, _noiseBuf) {
     var nb = _noiseBuf || TR.state.noiseBuffer;
     var src = ctx.createBufferSource();
     src.buffer = nb;
@@ -52,9 +55,7 @@ var VOICES = [
     src.connect(filt); filt.connect(g); g.connect(master);
   }},
 
-  { id: 'guiro', label: 'ギロ', play: function(time, _ctx, _master, _noiseBuf) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'guiro', label: 'ギロ', play: function(time, ctx, master, _noiseBuf) {
     var nb = _noiseBuf || TR.state.noiseBuffer;
     var src = ctx.createBufferSource();
     src.buffer = nb;
@@ -72,9 +73,7 @@ var VOICES = [
     src.connect(filt); filt.connect(g); g.connect(master);
   }},
 
-  { id: 'blip', label: 'ブリップ', play: function(time, _ctx, _master) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'blip', label: 'ブリップ', play: function(time, ctx, master) {
     var osc = ctx.createOscillator();
     osc.type = 'square'; osc.frequency.value = 880;
     var g = ctx.createGain();
@@ -84,9 +83,7 @@ var VOICES = [
     osc.start(time); osc.stop(time + 0.08);
   }},
 
-  { id: 'zip', label: 'ジップ', play: function(time, _ctx, _master) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'zip', label: 'ジップ', play: function(time, ctx, master) {
     var osc = ctx.createOscillator();
     osc.type = 'sawtooth';
     osc.frequency.setValueAtTime(200, time);
@@ -98,9 +95,7 @@ var VOICES = [
     osc.start(time); osc.stop(time + 0.15);
   }},
 
-  { id: 'triad', label: '3和音', play: function(time, _ctx, _master) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'triad', label: '3和音', play: function(time, ctx, master) {
     var freqs = [440, 554.37, 659.26];
     for (var i = 0; i < freqs.length; i++) {
       var osc = ctx.createOscillator();
@@ -113,9 +108,7 @@ var VOICES = [
     }
   }},
 
-  { id: 'whip', label: '鞭', play: function(time, _ctx, _master, _noiseBuf) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'whip', label: '鞭', play: function(time, ctx, master, _noiseBuf) {
     var nb = _noiseBuf || TR.state.noiseBuffer;
     var src = ctx.createBufferSource();
     src.buffer = nb;
@@ -130,9 +123,7 @@ var VOICES = [
     src.connect(filt); filt.connect(g); g.connect(master);
   }},
 
-  { id: 'typewriter', label: 'タイプ', play: function(time, _ctx, _master, _noiseBuf) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'typewriter', label: 'タイプ', play: function(time, ctx, master, _noiseBuf) {
     var nb = _noiseBuf || TR.state.noiseBuffer;
     var src = ctx.createBufferSource();
     src.buffer = nb;
@@ -153,9 +144,7 @@ var VOICES = [
   }},
 
   /* ─── 中 (multi-layered / filter-based) ──────────────────────── */
-  { id: 'timpani', label: 'ティンパニ', play: function(time, _ctx, _master, _noiseBuf) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'timpani', label: 'ティンパニ', play: function(time, ctx, master, _noiseBuf) {
     var nb = _noiseBuf || TR.state.noiseBuffer;
     var osc = ctx.createOscillator();
     osc.type = 'sine';
@@ -184,9 +173,7 @@ var VOICES = [
     src.connect(filt); filt.connect(ng); ng.connect(master);
   }},
 
-  { id: 'clapper', label: '拍子木', play: function(time, _ctx, _master) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'clapper', label: '拍子木', play: function(time, ctx, master) {
     var osc = ctx.createOscillator();
     osc.type = 'triangle';
     osc.frequency.setValueAtTime(2200, time);
@@ -205,9 +192,7 @@ var VOICES = [
     osc2.start(time); osc2.stop(time + 0.025);
   }},
 
-  { id: 'tubular', label: 'チューブラー', play: function(time, _ctx, _master) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'tubular', label: 'チューブラー', play: function(time, ctx, master) {
     var freqs  = [440, 880, 1100, 1320];
     var gains  = [0.50, 0.35, 0.20, 0.15];
     var decays = [2.50, 2.00, 1.50, 1.20];
@@ -222,9 +207,7 @@ var VOICES = [
     }
   }},
 
-  { id: 'sleigh', label: 'スレイ', play: function(time, _ctx, _master, _noiseBuf) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'sleigh', label: 'スレイ', play: function(time, ctx, master, _noiseBuf) {
     var nb = _noiseBuf || TR.state.noiseBuffer;
     var offsets = [0, 0.010, 0.025, 0.045, 0.070];
     var gs      = [0.50, 0.42, 0.36, 0.30, 0.24];
@@ -243,9 +226,7 @@ var VOICES = [
     }
   }},
 
-  { id: 'handbell', label: 'ハンドベル', play: function(time, _ctx, _master) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'handbell', label: 'ハンドベル', play: function(time, ctx, master) {
     var osc = ctx.createOscillator();
     osc.type = 'sine'; osc.frequency.value = 880;
     var g = ctx.createGain();
@@ -262,9 +243,7 @@ var VOICES = [
     osc2.start(time); osc2.stop(time + 0.55);
   }},
 
-  { id: 'furin', label: '風鈴', play: function(time, _ctx, _master) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'furin', label: '風鈴', play: function(time, ctx, master) {
     var osc = ctx.createOscillator();
     osc.type = 'sine'; osc.frequency.value = 2400;
     var g = ctx.createGain();
@@ -288,9 +267,7 @@ var VOICES = [
     osc3.start(time); osc3.stop(time + 0.75);
   }},
 
-  { id: 'laser', label: 'レーザー', play: function(time, _ctx, _master, _noiseBuf) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'laser', label: 'レーザー', play: function(time, ctx, master, _noiseBuf) {
     var nb = _noiseBuf || TR.state.noiseBuffer;
     var osc = ctx.createOscillator();
     osc.type = 'sawtooth';
@@ -315,9 +292,7 @@ var VOICES = [
     src.connect(filt); filt.connect(ng); ng.connect(master);
   }},
 
-  { id: 'piano', label: 'ピアノ', play: function(time, _ctx, _master, _noiseBuf) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'piano', label: 'ピアノ', play: function(time, ctx, master, _noiseBuf) {
     var nb = _noiseBuf || TR.state.noiseBuffer;
     var fund = 440;
     var ratios = [1, 2, 3];
@@ -342,9 +317,7 @@ var VOICES = [
     src.connect(filt); filt.connect(ng); ng.connect(master);
   }},
 
-  { id: 'pizz', label: 'ピチカート', play: function(time, _ctx, _master) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'pizz', label: 'ピチカート', play: function(time, ctx, master) {
     var osc = ctx.createOscillator();
     osc.type = 'triangle'; osc.frequency.value = 330;
     var filt = ctx.createBiquadFilter();
@@ -359,9 +332,7 @@ var VOICES = [
     osc.start(time); osc.stop(time + 0.42);
   }},
 
-  { id: 'horn', label: 'ホーン', play: function(time, _ctx, _master) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'horn', label: 'ホーン', play: function(time, ctx, master) {
     var osc = ctx.createOscillator();
     osc.type = 'sawtooth'; osc.frequency.value = 220;
     var osc2 = ctx.createOscillator();
@@ -379,12 +350,13 @@ var VOICES = [
     osc2.start(time); osc2.stop(time + 0.4);
   }},
 
-  { id: 'thunder', label: '雷鳴', play: function(time, _ctx, _master, _noiseBuf) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'thunder', label: '雷鳴', play: function(time, ctx, master, _noiseBuf) {
     var nb = _noiseBuf || TR.state.noiseBuffer;
     var src = ctx.createBufferSource();
     src.buffer = nb;
+    // Loop: the noise buffer is 2s and we start at a random offset, so
+    // without looping the source would run dry before the 2s envelope ends.
+    src.loop = true;
     src.start(time, Math.random()); src.stop(time + 2.0);
     var filt = ctx.createBiquadFilter();
     filt.type = 'lowpass'; filt.frequency.value = 400; filt.Q.value = 0.5;
@@ -396,9 +368,7 @@ var VOICES = [
     src.connect(filt); filt.connect(g); g.connect(master);
   }},
 
-  { id: 'drop', label: '水滴', play: function(time, _ctx, _master, _noiseBuf) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'drop', label: '水滴', play: function(time, ctx, master, _noiseBuf) {
     var nb = _noiseBuf || TR.state.noiseBuffer;
     var osc = ctx.createOscillator();
     osc.type = 'sine';
@@ -422,9 +392,7 @@ var VOICES = [
   }},
 
   /* ─── 難 (FM / inharmonic / reverse / multi-layered) ─────────── */
-  { id: 'djembe', label: 'ジェンベ', play: function(time, _ctx, _master, _noiseBuf) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'djembe', label: 'ジェンベ', play: function(time, ctx, master, _noiseBuf) {
     var nb = _noiseBuf || TR.state.noiseBuffer;
     // Hand drum slap — pitched body + sharp noise transient
     var osc = ctx.createOscillator();
@@ -447,9 +415,7 @@ var VOICES = [
     src.connect(filt); filt.connect(ng); ng.connect(master);
   }},
 
-  { id: 'conga', label: 'コンガ', play: function(time, _ctx, _master, _noiseBuf) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'conga', label: 'コンガ', play: function(time, ctx, master, _noiseBuf) {
     var nb = _noiseBuf || TR.state.noiseBuffer;
     // Medium pitched hand drum — warmer than bongo, sharper than djembe
     var osc = ctx.createOscillator();
@@ -472,9 +438,7 @@ var VOICES = [
     src.connect(filt); filt.connect(ng); ng.connect(master);
   }},
 
-  { id: 'tabla', label: 'タブラ', play: function(time, _ctx, _master) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'tabla', label: 'タブラ', play: function(time, ctx, master) {
     // Indian hand drum — characteristic pitch bend (down then up)
     var osc = ctx.createOscillator();
     osc.type = 'sine';
@@ -495,9 +459,7 @@ var VOICES = [
     osc2.start(time); osc2.stop(time + 0.025);
   }},
 
-  { id: 'singingbowl', label: '歌鈴', play: function(time, _ctx, _master) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'singingbowl', label: '歌鈴', play: function(time, ctx, master) {
     // Tibetan singing bowl — slow attack, close-detuned sines produce beating
     var f0 = 250;
     var partials = [
@@ -519,9 +481,7 @@ var VOICES = [
     }
   }},
 
-  { id: 'templebell', label: '寺の鐘', play: function(time, _ctx, _master) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'templebell', label: '寺の鐘', play: function(time, ctx, master) {
     // Very long decay with complex inharmonic partials
     var partials = [
       { freq: 150,  gain: 0.50, decay: 6.0 },
@@ -542,9 +502,7 @@ var VOICES = [
     }
   }},
 
-  { id: 'fmchirp', label: 'FMチャープ', play: function(time, _ctx, _master) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'fmchirp', label: 'FMチャープ', play: function(time, ctx, master) {
     // FM: modulator → carrier.frequency via a gain node acting as modulation depth
     var carrier = ctx.createOscillator();
     carrier.type = 'sine'; carrier.frequency.value = 800;
@@ -563,9 +521,7 @@ var VOICES = [
     carrier.start(time); carrier.stop(time + 0.25);
   }},
 
-  { id: 'bitcrush', label: 'ビットクラッシュ', play: function(time, _ctx, _master) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'bitcrush', label: 'ビットクラッシュ', play: function(time, ctx, master) {
     // WaveShaper quantizes amplitude to 4-bit (16 steps) for digital-sounding distortion
     var osc = ctx.createOscillator();
     osc.type = 'sine'; osc.frequency.value = 660;
@@ -585,9 +541,7 @@ var VOICES = [
     osc.start(time); osc.stop(time + 0.28);
   }},
 
-  { id: 'trumpet', label: 'トランペット', play: function(time, _ctx, _master) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'trumpet', label: 'トランペット', play: function(time, ctx, master) {
     // Bright brass — sawtooth through a resonant lowpass that opens on attack
     var osc = ctx.createOscillator();
     osc.type = 'sawtooth'; osc.frequency.value = 440;
@@ -604,9 +558,7 @@ var VOICES = [
     osc.start(time); osc.stop(time + 0.28);
   }},
 
-  { id: 'reverse', label: 'リバース', play: function(time, _ctx, _master, _noiseBuf) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'reverse', label: 'リバース', play: function(time, ctx, master, _noiseBuf) {
     var nb = _noiseBuf || TR.state.noiseBuffer;
     // Reverse cymbal — swell in then cut at peak (gain ramp UP instead of down)
     var dur = 0.6;
@@ -622,9 +574,7 @@ var VOICES = [
     src.connect(filt); filt.connect(g); g.connect(master);
   }},
 
-  { id: 'inharmbell', label: '非調和ベル', play: function(time, _ctx, _master) {
-    var ctx = _ctx || Tone.getContext().rawContext;
-    var master = _master || TR.state.masterGain;
+  { id: 'inharmbell', label: '非調和ベル', play: function(time, ctx, master) {
     // Bell-like but with deliberately inharmonic partial ratios (not integers)
     var partials = [
       { freq: 180,  gain: 0.40, decay: 3.0 },
