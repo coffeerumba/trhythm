@@ -510,23 +510,25 @@ var RANDOM_PARAMS = [
   { id: 'curve',       min: 0,   max: 1 }
 ];
 // All viz tracks: regular instruments + the synthetic Crash track.
-var VIZ_KEYS = ((TR && TR.INSTRUMENTS) || ['kick', 'snare', 'hihat']).concat(['crash']);
+var TRACKS = TR.INSTRUMENTS.concat(['crash']);
 
 function randomizeOnGenerate() {
   for (var p = 0; p < RANDOM_PARAMS.length; p++) {
     var spec = RANDOM_PARAMS[p];
     var v = +(spec.min + Math.random() * (spec.max - spec.min)).toFixed(2);
-    for (var i = 0; i < VIZ_KEYS.length; i++) setParam(VIZ_KEYS[i], spec.id, v);
+    for (var i = 0; i < TRACKS.length; i++) setParam(TRACKS[i], spec.id, v);
   }
 }
+// The btn-generate listener is attached in init() and removed in destroy()
+// so the randomization only fires while flower is the active mode.
 var _genBtn = document.getElementById('btn-generate');
-if (_genBtn) _genBtn.addEventListener('click', randomizeOnGenerate);
+var _genBtnAttached = false;
 
-/* ── Public offline-export API ──────────────────────────────────────
-   These two functions let the video exporter render the flower to any
-   canvas at any virtual time, without going through the realtime
-   playback state. They mirror what the realtime path produces, frame
-   for frame, given the same shape parameters.
+/* ── Offline-export helpers ─────────────────────────────────────────
+   These let the video exporter render the flower to any canvas at any
+   virtual time, without going through the realtime playback state.
+   They mirror what the realtime path produces, frame for frame, given
+   the same shape parameters.
 
    buildSchedule(pats, bpm, accentMode, w, h):
      Returns { totalDuration, slots, firings } — one cycle's worth of
@@ -539,9 +541,7 @@ if (_genBtn) _genBtn.addEventListener('click', randomizeOnGenerate);
      that is alive at time `t`, plus the trunk dot. Pure — does not
      read any realtime state.
 ── */
-TR.flower = TR.flower || {};
-
-TR.flower.buildSchedule = function(pats, bpm, accentMode, w, h) {
+function buildSchedule(pats, bpm, accentMode, w, h) {
   var slots = [];
   var firings = [];
   var offset = 0;
@@ -554,9 +554,8 @@ TR.flower.buildSchedule = function(pats, bpm, accentMode, w, h) {
     // Per-track step durations + leaves count (matches existing renderOffline).
     var trackInfo = {};
     var maxCycle = 0;
-    var REGULAR = ['kick', 'snare', 'hihat'];
-    for (var ti = 0; ti < REGULAR.length; ti++) {
-      var key = REGULAR[ti];
+    for (var ti = 0; ti < TR.INSTRUMENTS.length; ti++) {
+      var key = TR.INSTRUMENTS[ti];
       var def = pat[key + 'Def'];
       if (!def) continue;
       var trackBeats  = pat[key + 'Beats'] || TR.computeBeats(def);
@@ -573,8 +572,8 @@ TR.flower.buildSchedule = function(pats, bpm, accentMode, w, h) {
     var crashLeavesGeom = buildLeavesFor('crash', pat.defaultDef, w, h);
 
     // One firing per hit step per regular track.
-    for (var ti2 = 0; ti2 < REGULAR.length; ti2++) {
-      var key2 = REGULAR[ti2];
+    for (var ti2 = 0; ti2 < TR.INSTRUMENTS.length; ti2++) {
+      var key2 = TR.INSTRUMENTS[ti2];
       var info = trackInfo[key2];
       var flat = pat[key2];
       if (!info || !flat) continue;
@@ -616,7 +615,7 @@ TR.flower.buildSchedule = function(pats, bpm, accentMode, w, h) {
   // Sort by firing time so renderFrame can short-circuit once it passes t.
   firings.sort(function(a, b) { return a.firingTime - b.firingTime; });
   return { totalDuration: offset, slots: slots, firings: firings };
-};
+}
 
 // Find the slot covering virtual time `t`. Slots are sorted by offset
 // and contiguous, so a linear scan is fine for the frame counts we emit.
@@ -633,7 +632,7 @@ function slotAtTime(slots, t) {
 // second iteration as the actual output, with the first iteration
 // providing the "previous loop" residuals (animation tails) at frame 0
 // for a seamless loop. Pure — does not mutate the input.
-TR.flower.doubleSchedule = function(single) {
+function doubleSchedule(single) {
   var loopDur = single.totalDuration;
   var doubleSlots = single.slots.concat(single.slots.map(function(s) {
     return { offset: s.offset + loopDur, duration: s.duration, defaultDef: s.defaultDef };
@@ -651,9 +650,9 @@ TR.flower.doubleSchedule = function(single) {
     slots:   doubleSlots,
     firings: doubleFirings
   };
-};
+}
 
-TR.flower.renderFrame = function(c, w, h, t, schedule) {
+function renderFrame(c, w, h, t, schedule) {
   c.fillStyle = '#fff';
   c.fillRect(0, 0, w, h);
 
@@ -668,14 +667,20 @@ TR.flower.renderFrame = function(c, w, h, t, schedule) {
   var slot = slotAtTime(schedule.slots, t);
   var p = slot ? beatStepProgressCore(t, slot.defaultDef, slot.offset, slot.duration) : null;
   drawCenterDotCore(c, w, h, p);
-};
+}
 
 /* ── Public viz interface ──────────────────────────────────────── */
 return {
   name: '花',
-  init:   function(_ctx, w, h) { ctx = _ctx; vizW = w; vizH = h; },
+  init: function(_ctx, w, h) {
+    ctx = _ctx; vizW = w; vizH = h;
+    if (!_genBtnAttached && _genBtn) {
+      _genBtn.addEventListener('click', randomizeOnGenerate);
+      _genBtnAttached = true;
+    }
+  },
   resize: function(w, h) { vizW = w; vizH = h; },
-  frame:  function(_ctx, w, h) {
+  frame: function(_ctx, w, h) {
     ctx = _ctx;
     vizW = w;
     vizH = h;
@@ -683,26 +688,35 @@ return {
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, w, h);
 
-    for (var k = 0; k < VIZ_KEYS.length; k++) buildGeometry(VIZ_KEYS[k]);
+    for (var k = 0; k < TRACKS.length; k++) buildGeometry(TRACKS[k]);
     // Per-track ticks: Crash uses its own cycle-boundary detector.
-    for (var k = 0; k < VIZ_KEYS.length; k++) {
-      VIZ_KEYS[k] === 'crash' ? tickCrash() : tick(VIZ_KEYS[k]);
+    for (var k = 0; k < TRACKS.length; k++) {
+      TRACKS[k] === 'crash' ? tickCrash() : tick(TRACKS[k]);
     }
-    for (var k = 0; k < VIZ_KEYS.length; k++) {
-      var anims = animations[VIZ_KEYS[k]];
-      for (var s in anims) drawAnimation(VIZ_KEYS[k], anims[s]);
+    for (var k = 0; k < TRACKS.length; k++) {
+      var anims = animations[TRACKS[k]];
+      for (var s in anims) drawAnimation(TRACKS[k], anims[s]);
     }
     drawCenterDot();
   },
   // onHit deliberately omitted — flower is tick-driven (geometry rebuilt
   // every frame), so it has no per-hit state to update. viz.js gates
   // the dispatch with `if (mode.onHit)`.
-
-  // Export-side methods. Exporters route through TR.activeVizMode so
-  // the same call shape works for any mode that opts in.
-  buildSchedule:  function(pats, bpm, accentMode, w, h) { return TR.flower.buildSchedule(pats, bpm, accentMode, w, h); },
-  doubleSchedule: function(single) { return TR.flower.doubleSchedule(single); },
-  renderFrame:    function(c, w, h, t, schedule) { return TR.flower.renderFrame(c, w, h, t, schedule); }
+  destroy: function() {
+    if (_genBtnAttached && _genBtn) {
+      _genBtn.removeEventListener('click', randomizeOnGenerate);
+      _genBtnAttached = false;
+    }
+    // Clear realtime animation state so a future re-init starts fresh.
+    animations = { kick: {}, snare: {}, hihat: {}, crash: {} };
+    lastPlayingStep = { kick: -1, snare: -1, hihat: -1 };
+    started = { kick: false, snare: false, hihat: false };
+    crashLastCycleStart = -1;
+  },
+  // Export-side methods routed through TR.activeVizMode by the exporter.
+  buildSchedule:  buildSchedule,
+  doubleSchedule: doubleSchedule,
+  renderFrame:    renderFrame
 };
 
 })(window.TR));

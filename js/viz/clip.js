@@ -38,7 +38,7 @@ var isMounted = false;
 // frame contract is well-defined whenever we enter the empty state.
 var needsBlackFill = false;
 
-var KEYS = ['kick', 'snare', 'hihat'];
+var TRACKS = TR.INSTRUMENTS.slice();
 
 // Per-track state. videos[key] is the HTMLVideoElement that drives the
 // realtime visible canvas. active[key] holds whether the track is in the
@@ -113,7 +113,7 @@ function setVideo(key, file) {
 
 function onHit(key) {
   if (!isMounted) return;
-  if (KEYS.indexOf(key) < 0) return;
+  if (TRACKS.indexOf(key) < 0) return;
   // The export pipeline uses its own dedicated video elements
   // (schedule.exportVideos), so realtime hits no longer fight export
   // seeks for the same currentTime cursor — let realtime preview run
@@ -148,8 +148,8 @@ function onHit(key) {
 function reset() {
   active = { kick: false, snare: false, hihat: false };
   lastHitTime = -Infinity;
-  for (var i = 0; i < KEYS.length; i++) {
-    var v = videos[KEYS[i]];
+  for (var i = 0; i < TRACKS.length; i++) {
+    var v = videos[TRACKS[i]];
     if (!v) continue;
     try {
       v.pause();
@@ -205,8 +205,8 @@ function ensureFrameCache(key, w, h) {
 function frame(c, w, h) {
   // Build the active list in fixed key order so the layout is stable.
   var list = [];
-  for (var i = 0; i < KEYS.length; i++) {
-    if (active[KEYS[i]]) list.push(KEYS[i]);
+  for (var i = 0; i < TRACKS.length; i++) {
+    if (active[TRACKS[i]]) list.push(TRACKS[i]);
   }
   var n = list.length;
   if (n === 0) {
@@ -328,8 +328,8 @@ async function buildScheduleAsync(pats, bpm, accentMode, w, h) {
     // existing audio renderer in exportVideo.js.
     var maxCycle = 0;
     var perTrack = {};
-    for (var ti = 0; ti < KEYS.length; ti++) {
-      var key = KEYS[ti];
+    for (var ti = 0; ti < TRACKS.length; ti++) {
+      var key = TRACKS[ti];
       var def = pat[key + 'Def'];
       if (!def) continue;
       var leaves = TR.computeLevels(def.tree).length;
@@ -340,8 +340,8 @@ async function buildScheduleAsync(pats, bpm, accentMode, w, h) {
       if (cycle > maxCycle) maxCycle = cycle;
     }
 
-    for (var ti2 = 0; ti2 < KEYS.length; ti2++) {
-      var key2 = KEYS[ti2];
+    for (var ti2 = 0; ti2 < TRACKS.length; ti2++) {
+      var key2 = TRACKS[ti2];
       var info = perTrack[key2];
       if (!info) continue;
       var flat = pat[key2];
@@ -376,12 +376,12 @@ async function buildScheduleAsync(pats, bpm, accentMode, w, h) {
   // (called by the exporter from its finally block).
   var exportVideos = {};
   var createPromises = [];
-  for (var ki = 0; ki < KEYS.length; ki++) {
+  for (var ki = 0; ki < TRACKS.length; ki++) {
     (function(key) {
       createPromises.push(createExportVideo(clipFiles[key]).then(function(v) {
         exportVideos[key] = v;
       }));
-    })(KEYS[ki]);
+    })(TRACKS[ki]);
   }
   await Promise.all(createPromises);
 
@@ -432,10 +432,10 @@ function momentAt(moments, t) {
 async function renderFrameAsync(c, w, h, t, schedule) {
   var moments = schedule.moments;
   var current = (moments && moments.length) ? momentAt(moments, t) : null;
-  // Order activeKeys by KEYS index so the strip layout is stable.
+  // Order activeKeys by TRACKS index so the strip layout is stable.
   var keys = current
     ? current.activeKeys.slice().sort(function(a, b) {
-        return KEYS.indexOf(a) - KEYS.indexOf(b);
+        return TRACKS.indexOf(a) - TRACKS.indexOf(b);
       })
     : [];
   var n = keys.length;
@@ -494,20 +494,29 @@ function showControls(show) {
   if (el) el.style.display = show ? '' : 'none';
 }
 
-// Wire up file inputs once on first DOM-ready. We only attach listeners;
-// the inputs themselves are static markup in index.html.
-var wired = false;
+// Wire / unwire file input listeners. wireInputs runs in init() and
+// unwireInputs runs in destroy() so the listeners only live while clip
+// is the active mode. inputHandlers retains (el, handler) pairs so the
+// remove call passes the exact reference attached.
+var inputHandlers = [];
 function wireInputs() {
-  if (wired) return;
-  for (var i = 0; i < KEYS.length; i++) (function(key) {
+  if (inputHandlers.length) return;  // already wired
+  for (var i = 0; i < TRACKS.length; i++) (function(key) {
     var el = document.getElementById('clip-file-' + key);
     if (!el) return;
-    el.addEventListener('change', function(e) {
+    var handler = function(e) {
       var f = e.target.files && e.target.files[0];
       setVideo(key, f || null);
-    });
-  })(KEYS[i]);
-  wired = true;
+    };
+    el.addEventListener('change', handler);
+    inputHandlers.push({ el: el, handler: handler });
+  })(TRACKS[i]);
+}
+function unwireInputs() {
+  for (var i = 0; i < inputHandlers.length; i++) {
+    inputHandlers[i].el.removeEventListener('change', inputHandlers[i].handler);
+  }
+  inputHandlers = [];
 }
 
 // ── Public viz interface ────────────────────────────────────────
@@ -538,6 +547,7 @@ return {
   destroy: function() {
     isMounted = false;
     showControls(false);
+    unwireInputs();
     reset();
   },
   // Export-side methods, dispatched through TR.activeVizMode by the
