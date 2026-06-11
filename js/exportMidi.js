@@ -239,12 +239,13 @@ TR.exportMidi = function() {
     addHitEvents(snare.events, pat.snare, snareBeats, snareLeaves, globalTick, SNARE_NOTE);
     addHitEvents(hihat.events, pat.hihat, hihatBeats, hihatLeaves, globalTick, HIHAT_NOTE);
 
-    // Crash on slot start when accent mode is 'on'. Velocity reflects
-    // the audio's 5-stage cymbal hierarchy keyed off the bank index;
-    // strongest accents land on the patterns with the most factors of 2
-    // (typically pattern 0, then 8, then 4/12, etc). When accent mode
-    // is 'off', no crash events at all.
-    if (accentMode === 'on') {
+    // Crash on slot start for any non-'off' accent mode ('on' = cymbal,
+    // 'random' = audition voices — both fire an accent per slot, and GM
+    // crash with staged velocity is the closest MIDI rendering of either).
+    // Velocity reflects the audio's 5-stage hierarchy keyed off the bank
+    // index; strongest accents land on the patterns with the most factors
+    // of 2 (typically pattern 0, then 8, then 4/12, etc).
+    if (accentMode !== 'off') {
       var dur = Math.max(1, Math.round(PPQ * 0.5));
       var crashVel = cymbalVelocity(bankIdx);
       crash.events.push({ tick: globalTick,        msg: noteOn(CHANNEL,  CRASH_NOTE, crashVel) });

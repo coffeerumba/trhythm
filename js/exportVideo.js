@@ -307,14 +307,12 @@ TR.exportVideo = async function(onProgress) {
     var buffer = muxer.target.buffer;
     var blob = new Blob([buffer], { type: 'video/webm' });
     return { blob: blob, filename: TR.timestamp() + '_trhythm.webm' };
-  } catch (e) {
-    // On cancel or error, release the encoder GPU/CPU resources.
-    // The state guard prevents the InvalidStateError that close() throws
-    // when called on an already-closed encoder.
+  } finally {
+    // Release the encoder GPU/CPU resources on every path — success
+    // included (flush() does not close). The state guard prevents the
+    // InvalidStateError close() throws on an already-closed encoder.
     if (videoEncoder && videoEncoder.state !== 'closed') videoEncoder.close();
     if (audioEncoder && audioEncoder.state !== 'closed') audioEncoder.close();
-    throw e;
-  } finally {
     // Release any per-export resources the active mode allocated
     // (e.g. clip mode's dedicated <video> elements + their object URLs).
     // `single` is `var`-hoisted, so it's `undefined` if buildSchedule

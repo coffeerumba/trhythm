@@ -60,23 +60,19 @@ TR.updatePlayBtn = function() {
         var ip = TR.state.instPlayback[i];
         ip.secPerStep = 60.0 * ip.beats / bpm / ip.count;
       }
-      // Refresh the virtual cycle so the Crash/Accent timing follows
-      if (TR.state.virtualBeats) {
+      // Refresh the virtual cycle and stretch the remaining portion of
+      // the current cycle by the tempo ratio so the boundary keeps its
+      // musical position. (Anchoring to kick's pattern wrap — the old
+      // approach — was only correct while kick ran in 周期同期; an async
+      // 拍同期 kick wraps somewhere unrelated to the virtual boundary.)
+      if (TR.state.virtualBeats && TR.state.virtualCycle) {
+        var oldCycle = TR.state.virtualCycle;
         TR.state.virtualCycle = 60.0 * TR.state.virtualBeats / bpm;
-      }
-      // Realign virtualCycleEnd to the kick's next cycle-0 boundary in the
-      // new tempo so the Crash keeps firing on the downbeat. Stretches the
-      // remaining portion of the current cycle proportionally.
-      var kickIp = null;
-      for (var j = 0; j < TR.state.instPlayback.length; j++) {
-        if (TR.state.instPlayback[j].key === 'kick') {
-          kickIp = TR.state.instPlayback[j];
-          break;
+        if (TR.state.virtualCycleEnd != null) {
+          var now = Tone.now();
+          var remaining = Math.max(0, TR.state.virtualCycleEnd - now);
+          TR.state.virtualCycleEnd = now + remaining * (TR.state.virtualCycle / oldCycle);
         }
-      }
-      if (kickIp && kickIp.count) {
-        var stepsToZero = (kickIp.count - kickIp.step) % kickIp.count;
-        TR.state.virtualCycleEnd = kickIp.nextTime + stepsToZero * kickIp.secPerStep;
       }
     }
   });
@@ -208,6 +204,10 @@ TR.startPlayback = async function() {
   }
 
   TR.state.isPlaying = true;
+  // Session counter: bumps on every (re)start so per-frame consumers
+  // (flower viz) can detect a synchronous stop+start — e.g. regenerate
+  // while playing — that never shows them isPlaying === false.
+  TR.state.playbackSession = (TR.state.playbackSession || 0) + 1;
 
   // Initial render: cycle-0 snapshots already set on every ip above.
   TR.loadPatternForPlayback(firstIdx);

@@ -273,6 +273,21 @@ var started = { kick: false, snare: false, hihat: false };
 // last cycle we registered so we don't double-fire within one cycle.
 var crashLastCycleStart = -1;
 
+// Reset all realtime animation state. Called on unmount (destroy) and at
+// every new playback session. The session check matters because a
+// regenerate-while-playing does stopPlayback()+startPlayback()
+// synchronously inside one event handler — tick() never observes
+// isPlaying === false, so without this its stale `started` latch and
+// lastPlayingStep would misfire a phantom animation on the new session's
+// first frame.
+function resetRealtimeState() {
+  animations      = { kick: {}, snare: {}, hihat: {}, crash: {} };
+  lastPlayingStep = { kick: -1, snare: -1, hihat: -1 };
+  started         = { kick: false, snare: false, hihat: false };
+  crashLastCycleStart = -1;
+}
+var lastSession = 0;
+
 // Common-prefix length of two node sequences (compared by coordinates).
 // Both sequences start at the shared root, so the result is at least 1.
 function commonPrefix(a, b) {
@@ -685,6 +700,14 @@ return {
     vizW = w;
     vizH = h;
 
+    // New playback session (stop+start may happen synchronously, see
+    // resetRealtimeState) — drop all state from the previous session.
+    var session = TR.state.playbackSession || 0;
+    if (session !== lastSession) {
+      lastSession = session;
+      resetRealtimeState();
+    }
+
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, w, h);
 
@@ -707,11 +730,7 @@ return {
       _genBtn.removeEventListener('click', randomizeOnGenerate);
       _genBtnAttached = false;
     }
-    // Clear realtime animation state so a future re-init starts fresh.
-    animations = { kick: {}, snare: {}, hihat: {}, crash: {} };
-    lastPlayingStep = { kick: -1, snare: -1, hihat: -1 };
-    started = { kick: false, snare: false, hihat: false };
-    crashLastCycleStart = -1;
+    resetRealtimeState();
   },
   // Export-side methods routed through TR.activeVizMode by the exporter.
   buildSchedule:  buildSchedule,

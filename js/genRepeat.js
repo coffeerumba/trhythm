@@ -49,8 +49,16 @@ function genRepeatProbabilities(seqSize, chunkSize, bias = 0) {
     let start = starts[i];
     let end = i + 1 < starts.length ? starts[i + 1] : seqSize;
     for (let start2 = start; start2 < end; start2 += chunkSize) {
-      let threshold = (-2 / seqSize) * start2 + (start / seqSize * 4) + bias;
-      let p = Math.max(0, Math.min(1, threshold));
+      // Clamp the structural term to 1 BEFORE adding bias, so the bias
+      // endpoints honor their documented contract for every chunk size:
+      // bias=-1 → p=0 everywhere, bias=+1 → p=1 everywhere. Without the
+      // inner clamp, levels whose head start exceeds seqSize/2 (any
+      // non-power-of-2 chunking) push the structural term above 1 and
+      // bias=-1 still leaves copy probability behind. Unchanged for
+      // bias >= 0: the structural term is always positive here, so the
+      // final clamp produced the same value.
+      let structural = Math.min(1, (4 * start - 2 * start2) / seqSize);
+      let p = Math.max(0, Math.min(1, structural + bias));
       for (let j = start2; j < Math.min(start2 + chunkSize, end); j++) probs[j] = p;
     }
   }
