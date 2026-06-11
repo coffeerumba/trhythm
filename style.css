@@ -425,6 +425,9 @@ hr.dashed-rule {
   aspect-ratio: 16 / 9;
 }
 
+/* --- Flower mode controls --- */
+.flower-controls { margin-bottom: 8px; }
+
 /* --- Clip mode controls --- */
 .clip-controls {
   display: flex;

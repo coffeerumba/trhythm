@@ -1,5 +1,9 @@
 /* ═══════════════════════════════════════════════════════════════
    VIZ FRAMEWORK — manages multiple viz modes
+
+   A mode that needs its own UI builds the DOM itself and mounts it
+   into #viz-controls (above the canvas) in init(), removing it in
+   destroy(). The framework owns only the canvas and the mode select.
    ═══════════════════════════════════════════════════════════════ */
 (function(TR) {
 var canvas = document.getElementById('viz-canvas');

@@ -527,9 +527,9 @@ function drawCenterDot() {
    and applies it identically to every track in TR.INSTRUMENTS. New
    tracks are picked up automatically. ── */
 var RANDOM_PARAMS = [
-  { id: 'depth-curve', min: 0.3, max: 3 },
-  { id: 'bend',        min: 0,   max: 1 },
-  { id: 'curve',       min: 0,   max: 1 }
+  { id: 'depth-curve', label: '間隔',   min: 0.3, max: 3 },
+  { id: 'bend',        label: 'しなり', min: 0,   max: 1 },
+  { id: 'curve',       label: '丸み',   min: 0,   max: 1 }
 ];
 // All viz tracks: regular instruments + the synthetic Crash track.
 var TRACKS = TR.INSTRUMENTS.concat(['crash']);
@@ -541,11 +541,65 @@ function randomizeOnGenerate() {
     var v = +(spec.min + Math.random() * (spec.max - spec.min)).toFixed(2);
     for (var i = 0; i < TRACKS.length; i++) setParam(TRACKS[i], spec.id, v);
   }
+  syncControls();
 }
 // The btn-generate listener is attached in init() and removed in destroy()
 // so the randomization only fires while flower is the active mode.
 var _genBtn = document.getElementById('btn-generate');
 var _genBtnAttached = false;
+
+/* ── Mode-owned controls ────────────────────────────────────────────
+   The three randomized parameters are also user-editable through
+   sliders the mode builds itself and mounts into #viz-controls while
+   active. Built once, appended on init, detached on destroy — the
+   detached element keeps its state, and a detached slider can't fire
+   events, so no listener bookkeeping is needed. One value per
+   parameter, applied to all tracks alike — the same way
+   randomizeOnGenerate writes them. ── */
+var controlsEl = null;
+var controlRefs = {};  // param id → { input, out }
+
+function buildControls() {
+  controlsEl = document.createElement('div');
+  controlsEl.className = 'flower-controls';
+  for (var p = 0; p < RANDOM_PARAMS.length; p++) (function(spec) {
+    var row = document.createElement('div');
+    row.className = 'param-row';
+    var label = document.createElement('span');
+    label.className = 'param-label';
+    label.textContent = spec.label;
+    var input = document.createElement('input');
+    input.type = 'range';
+    input.min = spec.min;
+    input.max = spec.max;
+    input.step = 0.01;
+    var out = document.createElement('span');
+    out.className = 'param-value';
+    input.addEventListener('input', function() {
+      var v = parseFloat(input.value);
+      for (var i = 0; i < TRACKS.length; i++) setParam(TRACKS[i], spec.id, v);
+      out.textContent = v.toFixed(2);
+    });
+    row.appendChild(label);
+    row.appendChild(input);
+    row.appendChild(out);
+    controlsEl.appendChild(row);
+    controlRefs[spec.id] = { input: input, out: out };
+  })(RANDOM_PARAMS[p]);
+}
+
+// Reflect the current shared values into the sliders. Both writers
+// (randomizeOnGenerate, the slider handler) apply one value to every
+// track, so reading any one track is representative.
+function syncControls() {
+  if (!controlsEl) return;
+  for (var p = 0; p < RANDOM_PARAMS.length; p++) {
+    var id = RANDOM_PARAMS[p].id;
+    var v = param(TRACKS[0], id);
+    controlRefs[id].input.value = v;
+    controlRefs[id].out.textContent = v.toFixed(2);
+  }
+}
 
 /* ── Offline-export helpers ─────────────────────────────────────────
    These let the video exporter render the flower to any canvas at any
@@ -694,6 +748,9 @@ return {
       _genBtn.addEventListener('click', randomizeOnGenerate);
       _genBtnAttached = true;
     }
+    if (!controlsEl) buildControls();
+    document.getElementById('viz-controls').appendChild(controlsEl);
+    syncControls();
   },
   resize: function(w, h) { vizW = w; vizH = h; },
   frame: function(_ctx, w, h) {
@@ -731,6 +788,7 @@ return {
       _genBtn.removeEventListener('click', randomizeOnGenerate);
       _genBtnAttached = false;
     }
+    if (controlsEl && controlsEl.parentNode) controlsEl.parentNode.removeChild(controlsEl);
     resetRealtimeState();
   },
   // Export-side methods routed through TR.activeVizMode by the exporter.

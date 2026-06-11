@@ -471,35 +471,35 @@ async function renderFrameAsync(c, w, h, t, schedule) {
   await Promise.all(tasks);
 }
 
-// ── Controls visibility ──────────────────────────────────────────
-function showControls(show) {
-  var el = document.getElementById('clip-controls');
-  if (el) el.style.display = show ? '' : 'none';
-}
+// ── Mode-owned controls ──────────────────────────────────────────
+// One file picker per track, built by the mode itself and mounted into
+// #viz-controls while clip is active. Built once, appended on init,
+// detached on destroy — the detached element keeps its state (picked
+// filenames survive mode switches, matching the module-scoped videos),
+// and a detached input can't fire events, so no listener bookkeeping
+// is needed.
+var controlsEl = null;
 
-// Wire / unwire file input listeners. wireInputs runs in init() and
-// unwireInputs runs in destroy() so the listeners only live while clip
-// is the active mode. inputHandlers retains (el, handler) pairs so the
-// remove call passes the exact reference attached.
-var inputHandlers = [];
-function wireInputs() {
-  if (inputHandlers.length) return;  // already wired
+function buildControls() {
+  controlsEl = document.createElement('div');
+  controlsEl.className = 'clip-controls';
   for (var i = 0; i < TRACKS.length; i++) (function(key) {
-    var el = document.getElementById('clip-file-' + key);
-    if (!el) return;
-    var handler = function(e) {
-      var f = e.target.files && e.target.files[0];
+    var row = document.createElement('label');
+    row.className = 'clip-file-row ' + key;
+    var tag = document.createElement('span');
+    tag.className = 'clip-file-label';
+    tag.textContent = key.charAt(0).toUpperCase();
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'video/*';
+    input.addEventListener('change', function() {
+      var f = input.files && input.files[0];
       setVideo(key, f || null);
-    };
-    el.addEventListener('change', handler);
-    inputHandlers.push({ el: el, handler: handler });
+    });
+    row.appendChild(tag);
+    row.appendChild(input);
+    controlsEl.appendChild(row);
   })(TRACKS[i]);
-}
-function unwireInputs() {
-  for (var i = 0; i < inputHandlers.length; i++) {
-    inputHandlers[i].el.removeEventListener('change', inputHandlers[i].handler);
-  }
-  inputHandlers = [];
 }
 
 // ── Public viz interface ────────────────────────────────────────
@@ -507,8 +507,8 @@ return {
   name: 'クリップ',
   init: function(_ctx, w, h) {
     isMounted = true;
-    wireInputs();
-    showControls(true);
+    if (!controlsEl) buildControls();
+    document.getElementById('viz-controls').appendChild(controlsEl);
     reset();
     // The vizResize() called right after switchVizMode would wipe any
     // immediate fillRect, so defer the black background paint to the
@@ -526,8 +526,7 @@ return {
   onHit: function(key) { onHit(key); },
   destroy: function() {
     isMounted = false;
-    showControls(false);
-    unwireInputs();
+    if (controlsEl && controlsEl.parentNode) controlsEl.parentNode.removeChild(controlsEl);
     reset();
   },
   // Export-side methods, dispatched through TR.activeVizMode by the
