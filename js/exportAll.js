@@ -16,13 +16,6 @@
 (function(TR) {
 
 var currentToken = null;
-function CancelError() {
-  var e = new Error('cancelled');
-  e.cancelled = true;
-  return e;
-}
-function checkCancel(token) { if (token && token.aborted) throw CancelError(); }
-
 TR.allInProgress = function() { return !!currentToken; };
 TR.cancelAll = function() {
   if (currentToken) currentToken.aborted = true;
@@ -66,15 +59,15 @@ TR.exportAll = async function(onProgress) {
       video = await TR.exportVideo(makeStageProgress('video'));
     }
     completeStage('video');
-    checkCancel(token);
+    TR.checkCancel(token);
 
     var audio = await TR.renderOffline(makeStageProgress('audio'));
     completeStage('audio');
-    checkCancel(token);
+    TR.checkCancel(token);
 
     var midi = TR.exportMidi();
     completeStage('midi');
-    checkCancel(token);
+    TR.checkCancel(token);
 
     // Build the parent ZIP with top-level files for video / audio / midi.
     var zip = new JSZip();
@@ -83,7 +76,7 @@ TR.exportAll = async function(onProgress) {
     if (midi)  zip.file(midi.filename,  midi.blob);
 
     var allBlob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
-    checkCancel(token);
+    TR.checkCancel(token);
 
     TR.downloadBlob(allBlob, TR.timestamp() + '_trhythm_all.zip');
   } finally {

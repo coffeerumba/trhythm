@@ -68,27 +68,18 @@ TR.updatePatternBankIndicators = function() {
 
 /* ─── Generate ─── */
 TR.generateForSlot = function(slotIndex) {
-  var kickDef = TR.getInstStructure('kick');
-  var snareDef = TR.getInstStructure('snare');
-  var hihatDef = TR.getInstStructure('hihat');
-
-  var kFlat = TR.flattenTree(generateRhythm(kickDef.tree, kickDef.beatLevel, TR.getParam('kick', 'rate'), TR.getParam('kick', 'center'), TR.getParam('kick', 'fidelity')));
-  var sFlat = TR.flattenTree(generateRhythm(snareDef.tree, snareDef.beatLevel, TR.getParam('snare', 'rate'), TR.getParam('snare', 'center'), TR.getParam('snare', 'fidelity')));
-  var hFlat = TR.flattenTree(generateRhythm(hihatDef.tree, hihatDef.beatLevel, TR.getParam('hihat', 'rate'), TR.getParam('hihat', 'center'), TR.getParam('hihat', 'fidelity')));
-
-  var kickBeats = parseInt(document.getElementById('kick-beats').value);
-  var snareBeats = parseInt(document.getElementById('snare-beats').value);
-  var hihatBeats = parseInt(document.getElementById('hihat-beats').value);
-  var defaultDef = TR.resolveStructure('default');
-
-  TR.state.patterns[slotIndex] = {
-    kick: kFlat, snare: sFlat, hihat: hFlat,
-    kickDef: kickDef, snareDef: snareDef, hihatDef: hihatDef,
-    kickBeats: kickBeats, snareBeats: snareBeats, hihatBeats: hihatBeats,
-    defaultDef: defaultDef
-  };
-
-  return { kickDef: kickDef, snareDef: snareDef, hihatDef: hihatDef };
+  var pat = {};
+  for (var i = 0; i < TR.INSTRUMENTS.length; i++) {
+    var key = TR.INSTRUMENTS[i];
+    var def = TR.getInstStructure(key);
+    pat[key] = TR.flattenTree(generateRhythm(
+      def.tree, def.beatLevel,
+      TR.getParam(key, 'rate'), TR.getParam(key, 'center'), TR.getParam(key, 'fidelity')));
+    pat[key + 'Def'] = def;
+    pat[key + 'Beats'] = parseInt(document.getElementById(key + '-beats').value);
+  }
+  pat.defaultDef = TR.resolveStructure('default');
+  TR.state.patterns[slotIndex] = pat;
 };
 
 /* ─── Helper: set slider value + display ─── */
@@ -151,9 +142,7 @@ document.getElementById('btn-generate').addEventListener('click', function() {
   for (var i = 0; i < bankBtns.length; i++) bankBtns[i].classList.toggle('active', i === 0);
 
   // Regenerate and apply repeat map
-  TR.updateRepeatMap('kick');
-  TR.updateRepeatMap('snare');
-  TR.updateRepeatMap('hihat');
+  for (var k = 0; k < TR.INSTRUMENTS.length; k++) TR.updateRepeatMap(TR.INSTRUMENTS[k]);
   TR.applyRepeatMap();
 
   TR.renderAllGrids(TR.state.patterns[0]);

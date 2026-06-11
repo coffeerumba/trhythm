@@ -181,22 +181,16 @@ TR.startPlayback = async function() {
   // tracks start at their deterministic cycle-N offset rather than (N, 0).
   for (var i = 0; i < TR.state.instPlayback.length; i++) {
     var ip = TR.state.instPlayback[i];
-    var defKey = ip.key + 'Def';
-    var def = curPat[defKey];
-    var levels = TR.computeLevels(def.tree);
-    var leaves = levels.length;
-    var beatsKey = ip.key + 'Beats';
-    var beats = curPat[beatsKey];
-    var cycle = 60.0 * beats / bpm;
+    var t = TR.trackTiming(curPat, ip.key, bpm);
     var initSnap = TR.computeTrackSnap(ip.key, firstIdx);
     ip.currentPattern = initSnap.pat;  // per-track pattern index (for audio scheduling)
     ip.step = initSnap.step;            // per-track step within its pattern
     ip.stepLinearIdx = initSnap.linear; // so cellIdx = stepLinearIdx - snapLinear starts at 0
-    ip.count = leaves;
-    ip.beats = beats;
-    ip.secPerStep = cycle / leaves;
+    ip.count = t.leaves;
+    ip.beats = t.beats;
+    ip.secPerStep = t.secPerStep;
     ip.nextTime = now;
-    ip.stepsPerCycle = virtualBeats * leaves / beats;
+    ip.stepsPerCycle = virtualBeats * t.leaves / t.beats;
     ip.cellCount = Math.floor(ip.stepsPerCycle);
     ip.snapPat = initSnap.pat;
     ip.snapStep = initSnap.step;
@@ -390,14 +384,14 @@ TR.collectPatternsForRender = function() {
   return list;
 };
 
-// Audio-only export: rendered via OfflineAudioContext, encoded to WAV,
-// triggered as a download. `onProgress` is optional; we feed it an
-// asymptotic time-based estimate during startRendering() since
-// OfflineAudioContext gives no granular progress signal — same approach
-// js/exportVideo.js uses for its audio phase. Cancellation works via
-// `currentAudioToken`: clicking DL again sets aborted=true, and we throw
-// `{cancelled:true}` after rendering finishes (we can't interrupt
-// startRendering itself), which suppresses the file write.
+// Audio-only export: rendered via the shared TR.audio.renderPatterns
+// (the same renderer the video exporter mixes from), encoded to WAV.
+// `onProgress` is optional; we feed it an asymptotic time-based estimate
+// during startRendering() since OfflineAudioContext gives no granular
+// progress signal. Cancellation works via `currentAudioToken`: clicking
+// DL again sets aborted=true, and we throw the shared cancelled error
+// after rendering finishes (we can't interrupt startRendering itself),
+// which suppresses the file write.
 var currentAudioToken = null;
 TR.audioInProgress = function() { return !!currentAudioToken; };
 TR.cancelAudio = function() { if (currentAudioToken) currentAudioToken.aborted = true; };
@@ -405,141 +399,68 @@ TR.cancelAudio = function() { if (currentAudioToken) currentAudioToken.aborted =
 TR.renderOffline = async function(onProgress) {
   var pats = TR.collectPatternsForRender();
   if (pats.length === 0) return;
+  if (currentAudioToken) throw new Error('Audio export already in progress');
 
-  currentAudioToken = { aborted: false };
-  var token = currentAudioToken;
+  var token = currentAudioToken = { aborted: false };
   var progressTicker = null;
+  var lastP = 0;
 
   try {
-  var bpm = parseInt(document.getElementById('bpm').value);
-  var sampleRate = 44100;
-  var startOffset = 0.01;
-  var tail = 0.5;
-
-  var totalDuration = startOffset;
-  var patTimings = [];
-  for (var p = 0; p < pats.length; p++) {
-    var pat = pats[p].pat;
-    var bankIdx = pats[p].bankIdx;
-    var kickDef = pat.kickDef;
-    var snareDef = pat.snareDef;
-    var hihatDef = pat.hihatDef;
-
-    var kickLeaves = TR.computeLevels(kickDef.tree).length;
-    var snareLeaves = TR.computeLevels(snareDef.tree).length;
-    var hihatLeaves = TR.computeLevels(hihatDef.tree).length;
-
-    var kickBeats = pat.kickBeats || TR.computeBeats(kickDef);
-    var snareBeats = pat.snareBeats || TR.computeBeats(snareDef);
-    var hihatBeats = pat.hihatBeats || TR.computeBeats(hihatDef);
-
-    var kickSecPerStep = 60.0 * kickBeats / bpm / kickLeaves;
-    var snareSecPerStep = 60.0 * snareBeats / bpm / snareLeaves;
-    var hihatSecPerStep = 60.0 * hihatBeats / bpm / hihatLeaves;
-
-    var cycleDuration = Math.max(
-      kickSecPerStep * kickLeaves,
-      snareSecPerStep * snareLeaves,
-      hihatSecPerStep * hihatLeaves
-    );
-
-    patTimings.push({
-      pat: pat, bankIdx: bankIdx, offset: totalDuration,
-      kickDef: kickDef, snareDef: snareDef, hihatDef: hihatDef,
-      kickSecPerStep: kickSecPerStep, snareSecPerStep: snareSecPerStep, hihatSecPerStep: hihatSecPerStep
-    });
-    totalDuration += cycleDuration;
-  }
-
-  totalDuration += tail;
-
-  // Asymptotic time-based progress estimate. OfflineAudioContext gives
-  // no granular signal, so we approximate by exponential ease-in toward
-  // a cap. The cap (and the final ease-to-100% below) make the apparent
-  // progress reach 100% at the moment the actual render completes,
-  // regardless of how accurate this estimate is on a given machine.
-  var lastP = 0;
-  if (typeof onProgress === 'function') {
-    var renderStartT = performance.now();
-    var audioTimeConst = Math.max(0.5, totalDuration * 0.05);
-    progressTicker = setInterval(function() {
-      var elapsed = (performance.now() - renderStartT) / 1000;
-      var p = 1 - Math.exp(-elapsed / audioTimeConst);
-      lastP = Math.min(0.95, p);
-      onProgress(lastP);
-    }, 200);
-  }
-
-  var offCtx = new OfflineAudioContext(2, Math.ceil(sampleRate * totalDuration), sampleRate);
-
-  var offMaster = offCtx.createGain();
-  offMaster.gain.value = 1;
-  var offLimiter = offCtx.createDynamicsCompressor();
-  offLimiter.threshold.value = 0;
-  offLimiter.knee.value = 0;
-  offLimiter.ratio.value = 6;
-  offLimiter.attack.value = 0.001;
-  offLimiter.release.value = 0.02;
-  offMaster.connect(offLimiter);
-  offLimiter.connect(offCtx.destination);
-
-  var sr = offCtx.sampleRate;
-  var nLen = sr * 2;
-  var offNoise = offCtx.createBuffer(1, nLen, sr);
-  var nData = offNoise.getChannelData(0);
-  for (var i = 0; i < nLen; i++) nData[i] = Math.random() * 2 - 1;
-
-  var accentMode = TR.getAccentMode();
-  for (var p = 0; p < patTimings.length; p++) {
-    var pt = patTimings[p];
-    var pat = pt.pat;
-
-    for (var s = 0; s < pat.kick.length; s++) {
-      if (pat.kick[s]) TR.audio.playKick(pt.offset + s * pt.kickSecPerStep, offCtx, offMaster);
-    }
-    for (var s = 0; s < pat.snare.length; s++) {
-      if (pat.snare[s]) TR.audio.playSnare(pt.offset + s * pt.snareSecPerStep, offCtx, offMaster, offNoise);
-    }
-    for (var s = 0; s < pat.hihat.length; s++) {
-      if (pat.hihat[s]) TR.audio.playHihat(pt.offset + s * pt.hihatSecPerStep, offCtx, offMaster, offNoise);
-    }
-    TR.audio.playAccent(accentMode, pt.offset, pt.bankIdx, offCtx, offMaster, offNoise);
-  }
-
-  var rendered = await offCtx.startRendering();
-  if (progressTicker) { clearInterval(progressTicker); progressTicker = null; }
-
-  // Cancellation only takes effect at this phase boundary — we can't
-  // interrupt startRendering() itself. After this point, throwing a
-  // {cancelled:true} object causes the click handler's catch to swallow
-  // it silently and skip the file write entirely.
-  if (token.aborted) throw { cancelled: true };
-
-  // Smoothly ease the displayed progress from wherever the asymptotic
-  // estimate left off (could be 30% on fast machines, 90% on slow ones)
-  // up to 100% over a short cubic ease-out. This guarantees the user
-  // visually sees the bar/text complete the journey to 100%, not just
-  // snap there. ~300ms feels like a natural finish without delaying the
-  // download perceptibly.
-  if (typeof onProgress === 'function') {
-    var fromP = lastP;
-    var easeStart = performance.now();
-    var easeDur = 300;
-    await new Promise(function(resolve) {
-      function step() {
-        var k = Math.min(1, (performance.now() - easeStart) / easeDur);
-        var eased = fromP + (1 - fromP) * (1 - Math.pow(1 - k, 3));
-        onProgress(eased);
-        if (k >= 1) resolve();
-        else requestAnimationFrame(step);
+    var result = await TR.audio.renderPatterns(pats, {
+      bpm: parseInt(document.getElementById('bpm').value),
+      accentMode: TR.getAccentMode(),
+      sampleRate: 44100,
+      startOffset: 0.01,
+      tail: 0.5,
+      onStart: function(totalDuration) {
+        // Asymptotic time-based progress estimate. OfflineAudioContext
+        // gives no granular signal, so we approximate by exponential
+        // ease-in toward a cap. The cap (and the final ease-to-100%
+        // below) make the apparent progress reach 100% at the moment
+        // the actual render completes, regardless of how accurate this
+        // estimate is on a given machine.
+        if (typeof onProgress !== 'function') return;
+        var renderStartT = performance.now();
+        var audioTimeConst = Math.max(0.5, totalDuration * 0.05);
+        progressTicker = setInterval(function() {
+          var elapsed = (performance.now() - renderStartT) / 1000;
+          lastP = Math.min(0.95, 1 - Math.exp(-elapsed / audioTimeConst));
+          onProgress(lastP);
+        }, 200);
       }
-      step();
     });
-  }
+    if (progressTicker) { clearInterval(progressTicker); progressTicker = null; }
 
-  var wavData = TR.encodeWAV(rendered);
-  var blob = new Blob([wavData], { type: 'audio/wav' });
-  return { blob: blob, filename: TR.timestamp() + '_trhythm.wav' };
+    // Cancellation only takes effect at this phase boundary — we can't
+    // interrupt startRendering() itself. The thrown error carries
+    // .cancelled, so the click handler's catch swallows it silently and
+    // the file write is skipped entirely.
+    TR.checkCancel(token);
+
+    // Smoothly ease the displayed progress from wherever the asymptotic
+    // estimate left off (could be 30% on fast machines, 90% on slow
+    // ones) up to 100% over a short cubic ease-out. This guarantees the
+    // user visually sees the bar/text complete the journey to 100%, not
+    // just snap there. ~300ms feels like a natural finish without
+    // delaying the download perceptibly.
+    if (typeof onProgress === 'function') {
+      var fromP = lastP;
+      var easeStart = performance.now();
+      var easeDur = 300;
+      await new Promise(function(resolve) {
+        function step() {
+          var k = Math.min(1, (performance.now() - easeStart) / easeDur);
+          onProgress(fromP + (1 - fromP) * (1 - Math.pow(1 - k, 3)));
+          if (k >= 1) resolve();
+          else requestAnimationFrame(step);
+        }
+        step();
+      });
+    }
+
+    var wavData = TR.encodeWAV(result.buffer);
+    var blob = new Blob([wavData], { type: 'audio/wav' });
+    return { blob: blob, filename: TR.timestamp() + '_trhythm.wav' };
   } finally {
     if (progressTicker) clearInterval(progressTicker);
     if (currentAudioToken === token) currentAudioToken = null;

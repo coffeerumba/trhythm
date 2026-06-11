@@ -46,11 +46,15 @@ function computeLevels(structure) {
   return levels;
 }
 
-function generateRhythm(structure, beatLevel, rate, center, fidelity) {
-  if (beatLevel === undefined) beatLevel = 1;
-  if (rate === undefined) rate = 0.5;
-  if (center === undefined) center = 0;
-
+/**
+ * The deterministic half of the generator (Steps 1-4a): levels, weights
+ * and the per-step hit probability — everything that doesn't involve
+ * sampling. Single source of truth shared by generateRhythm below and
+ * by the probability-preview chart (TR.rhythmDistribution in
+ * constants.js delegates here), so the preview can never drift from
+ * what the generator actually does.
+ */
+function rhythmDistribution(structure, beatLevel, rate, center) {
   // Step 1: Analyze tree — compute leaf count and levels
   var levels = computeLevels(structure);
   var N = levels.length;
@@ -76,7 +80,7 @@ function generateRhythm(structure, beatLevel, rate, center, fidelity) {
     weights[i] = maxLevel - Math.abs(levels[i] - target);
   }
 
-  // Step 4: Determine hit count (binomial sampling with rate-derived probability)
+  // Step 4a: rate → per-step hit probability
   // rate=0 → p=0, rate=0.5 → p=beatsCount/N, rate=1 → p=1
   var p;
   if (rate <= 0.5) {
@@ -85,9 +89,25 @@ function generateRhythm(structure, beatLevel, rate, center, fidelity) {
     var base = beatsCount / N;
     p = base + (rate - 0.5) * 2 * (1 - base);
   }
+
+  return { levels: levels, N: N, maxLevel: maxLevel, beatsCount: beatsCount,
+           target: target, weights: weights, p: p };
+}
+
+function generateRhythm(structure, beatLevel, rate, center, fidelity) {
+  if (beatLevel === undefined) beatLevel = 1;
+  if (rate === undefined) rate = 0.5;
+  if (center === undefined) center = 0;
+  if (fidelity === undefined) fidelity = 0.5;  // τ=1 — neutral temperature
+
+  var dist = rhythmDistribution(structure, beatLevel, rate, center);
+  var N = dist.N;
+  var weights = dist.weights;
+
+  // Step 4b: Determine hit count (binomial sampling on the per-step probability)
   var d = 0;
   for (var i = 0; i < N; i++) {
-    if (Math.random() < p) d++;
+    if (Math.random() < dist.p) d++;
   }
 
   // Step 5: Gumbel-max scoring

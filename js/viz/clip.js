@@ -324,34 +324,19 @@ async function buildScheduleAsync(pats, bpm, accentMode, w, h) {
     var pat = (entry && entry.pat) ? entry.pat : entry;
     if (!pat) continue;
 
-    // Per-track step duration; slot length = longest cycle, like the
-    // existing audio renderer in exportVideo.js.
-    var maxCycle = 0;
-    var perTrack = {};
+    // Per-track timing through the shared helper — same numbers as the
+    // audio renderer, so video and audio agree by construction.
+    var st = TR.slotTiming(pat, bpm);
     for (var ti = 0; ti < TRACKS.length; ti++) {
       var key = TRACKS[ti];
-      var def = pat[key + 'Def'];
-      if (!def) continue;
-      var leaves = TR.computeLevels(def.tree).length;
-      var trackBeats = pat[key + 'Beats'] || TR.computeBeats(def);
-      var spS = 60 * trackBeats / bpm / leaves;
-      var cycle = spS * leaves;
-      perTrack[key] = { spS: spS, leaves: leaves };
-      if (cycle > maxCycle) maxCycle = cycle;
-    }
-
-    for (var ti2 = 0; ti2 < TRACKS.length; ti2++) {
-      var key2 = TRACKS[ti2];
-      var info = perTrack[key2];
-      if (!info) continue;
-      var flat = pat[key2];
-      if (!flat) continue;
+      var t = st.tracks[key];
+      var flat = pat[key];
+      if (!t || !flat) continue;
       for (var s = 0; s < flat.length; s++) {
-        if (flat[s]) allHits.push({ time: offset + s * info.spS, key: key2 });
+        if (flat[s]) allHits.push({ time: offset + s * t.secPerStep, key: key });
       }
     }
-
-    offset += maxCycle;
+    offset += st.slotDur;
   }
 
   // Group hits within MOMENT_WINDOW into single moments (matches realtime

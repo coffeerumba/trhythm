@@ -280,39 +280,18 @@ TR.buildProbChartHTML = function(entries) {
 /* ─── Probability visualization ─── */
 TR.renderProbChart = function(inst) {
   var def = TR.getInstStructure(inst);
-  var levels = TR.computeLevels(def.tree);
   var center = TR.getParam(inst, 'center');
   var rate = TR.getParam(inst, 'rate');
-  var boundaries = TR.getGroupBoundaries(def.tree);
-  var N = levels.length;
-
-  var maxLevel = 0;
-  var beatsCount = 0;
-  for (var i = 0; i < N; i++) {
-    if (levels[i] > maxLevel) maxLevel = levels[i];
-    if (levels[i] >= def.beatLevel) beatsCount++;
-  }
-  var target;
-  if (center <= 0.5) {
-    target = maxLevel - center * 2 * (maxLevel - def.beatLevel);
-  } else {
-    target = def.beatLevel * (1 - center) * 2;
-  }
-  var weights = [];
-  for (var i = 0; i < N; i++) {
-    weights.push(maxLevel - Math.abs(levels[i] - target));
-  }
-
   var fidelity = TR.getParam(inst, 'fidelity');
+  var boundaries = TR.getGroupBoundaries(def.tree);
 
-  var p;
-  if (rate <= 0.5) {
-    p = rate * 2 * beatsCount / N;
-  } else {
-    var base = beatsCount / N;
-    p = base + (rate - 0.5) * 2 * (1 - base);
-  }
-  var expectedHits = Math.round(N * p);
+  // Same deterministic math the generator runs (Steps 1-4a) — shared so
+  // this preview can never drift from actual generation behavior.
+  var dist = TR.rhythmDistribution(def.tree, def.beatLevel, rate, center);
+  var levels = dist.levels;
+  var N = dist.N;
+  var weights = dist.weights;
+  var expectedHits = Math.round(N * dist.p);
 
   var ranked = [];
   for (var i = 0; i < N; i++) ranked.push(i);
@@ -890,27 +869,22 @@ TR.getRepeatMapIndexes = function(key) {
 
 /* ─── Apply repeat map to saved patterns ─── */
 TR.applyRepeatMap = function() {
-  var kickIdx = TR.getRepeatMapIndexes('kick');
-  var snareIdx = TR.getRepeatMapIndexes('snare');
-  var hihatIdx = TR.getRepeatMapIndexes('hihat');
+  var idx = {};
+  for (var k = 0; k < TR.INSTRUMENTS.length; k++) {
+    idx[TR.INSTRUMENTS[k]] = TR.getRepeatMapIndexes(TR.INSTRUMENTS[k]);
+  }
   var pats = TR.state.patterns;
 
   for (var i = 0; i < TR.PATTERN_COUNT; i++) {
     if (!pats[i]) continue;
-    if (kickIdx[i] !== i && pats[kickIdx[i]]) {
-      pats[i].kick = pats[kickIdx[i]].kick.slice();
-      pats[i].kickDef = pats[kickIdx[i]].kickDef;
-      pats[i].kickBeats = pats[kickIdx[i]].kickBeats;
-    }
-    if (snareIdx[i] !== i && pats[snareIdx[i]]) {
-      pats[i].snare = pats[snareIdx[i]].snare.slice();
-      pats[i].snareDef = pats[snareIdx[i]].snareDef;
-      pats[i].snareBeats = pats[snareIdx[i]].snareBeats;
-    }
-    if (hihatIdx[i] !== i && pats[hihatIdx[i]]) {
-      pats[i].hihat = pats[hihatIdx[i]].hihat.slice();
-      pats[i].hihatDef = pats[hihatIdx[i]].hihatDef;
-      pats[i].hihatBeats = pats[hihatIdx[i]].hihatBeats;
+    for (var k = 0; k < TR.INSTRUMENTS.length; k++) {
+      var key = TR.INSTRUMENTS[k];
+      var src = idx[key][i];
+      if (src !== i && pats[src]) {
+        pats[i][key] = pats[src][key].slice();
+        pats[i][key + 'Def'] = pats[src][key + 'Def'];
+        pats[i][key + 'Beats'] = pats[src][key + 'Beats'];
+      }
     }
   }
 

@@ -44,16 +44,10 @@ var PPQ        = 480;
    so the accent hierarchy carries over to a piano roll while staying
    audible at the weakest stage on most GM drum kits. ── */
 var NUM_CY_STAGES = 5;
-function cymbalStage(bankIdx) {
-  var n = (bankIdx === 0) ? TR.PATTERN_COUNT : bankIdx;
-  var v2 = 0;
-  while (n > 0 && n % 2 === 0) { n /= 2; v2++; }
-  return Math.min(v2, NUM_CY_STAGES - 1);
-}
 function cymbalVelocity(bankIdx) {
   // stage 0 → 40 (weakest, still audible), stage 4 → 100 (strongest).
   // 5 stages × 15-step → 40, 55, 70, 85, 100.
-  return 40 + cymbalStage(bankIdx) * 15;
+  return 40 + TR.cymbalStage(bankIdx, NUM_CY_STAGES - 1) * 15;
 }
 
 /* ── Binary helpers ────────────────────────────────────────────── */
@@ -226,18 +220,15 @@ TR.exportMidi = function() {
     var pat = pats[p].pat;
     var bankIdx = pats[p].bankIdx;
 
-    var kickLeaves  = TR.computeLevels(pat.kickDef.tree).length;
-    var snareLeaves = TR.computeLevels(pat.snareDef.tree).length;
-    var hihatLeaves = TR.computeLevels(pat.hihatDef.tree).length;
-    var kickBeats   = pat.kickBeats  || TR.computeBeats(pat.kickDef);
-    var snareBeats  = pat.snareBeats || TR.computeBeats(pat.snareDef);
-    var hihatBeats  = pat.hihatBeats || TR.computeBeats(pat.hihatDef);
+    var tk = TR.trackTiming(pat, 'kick');
+    var ts = TR.trackTiming(pat, 'snare');
+    var th = TR.trackTiming(pat, 'hihat');
 
-    var slotTicks = Math.max(kickBeats, snareBeats, hihatBeats) * PPQ;
+    var slotTicks = Math.max(tk.beats, ts.beats, th.beats) * PPQ;
 
-    addHitEvents(kick.events,  pat.kick,  kickBeats,  kickLeaves,  globalTick, KICK_NOTE);
-    addHitEvents(snare.events, pat.snare, snareBeats, snareLeaves, globalTick, SNARE_NOTE);
-    addHitEvents(hihat.events, pat.hihat, hihatBeats, hihatLeaves, globalTick, HIHAT_NOTE);
+    addHitEvents(kick.events,  pat.kick,  tk.beats, tk.leaves, globalTick, KICK_NOTE);
+    addHitEvents(snare.events, pat.snare, ts.beats, ts.leaves, globalTick, SNARE_NOTE);
+    addHitEvents(hihat.events, pat.hihat, th.beats, th.leaves, globalTick, HIHAT_NOTE);
 
     // Crash on slot start for any non-'off' accent mode ('on' = cymbal,
     // 'random' = audition voices — both fire an accent per slot, and GM

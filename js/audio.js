@@ -149,11 +149,90 @@ TR.audio.playCymbal = function(time, stage, _ctx, _master, _noiseBuf) {
 TR.audio.playAccent = function(mode, time, patternIdx, _ctx, _master, _noiseBuf) {
   if (mode !== 'on') return;  // 'off' or unknown → silent
   var NUM_CY_STAGES = 5;  // matches cutoffs/gains/decays length in playCymbal
-  var n = patternIdx === 0 ? TR.PATTERN_COUNT : patternIdx;
-  var v2 = 0;
-  while (n > 0 && n % 2 === 0) { n /= 2; v2++; }
-  var stage = Math.min(v2, NUM_CY_STAGES - 1);
-  TR.audio.playCymbal(time, stage, _ctx, _master, _noiseBuf);
+  TR.audio.playCymbal(time, TR.cymbalStage(patternIdx, NUM_CY_STAGES - 1), _ctx, _master, _noiseBuf);
+};
+
+/* ─── Offline rendering (shared by the WAV and video exporters) ─────
+ * Renders the supplied patterns ({ pat, bankIdx } entries from
+ * TR.collectPatternsForRender) into an AudioBuffer. Timing comes from
+ * TR.slotTiming — the same helper the viz schedule builders use — so
+ * the audio loop length and the video loop length agree by
+ * construction.
+ *
+ * opts:
+ *   bpm          required
+ *   accentMode   'off' | 'on' | 'random'
+ *   sampleRate   default 44100
+ *   iterations   default 1; the video exporter renders 2 back-to-back
+ *                loops and keeps only the second for a seamless seam
+ *   startOffset  lead-in silence in seconds (default 0)
+ *   tail         decay room after the last loop in seconds (default 0)
+ *   onStart      optional callback(totalDuration) fired just before
+ *                startRendering — used to start progress estimators
+ *
+ * Returns { buffer, loopDuration } (loopDuration excludes offset/tail).
+ */
+TR.audio.renderPatterns = async function(pats, opts) {
+  var bpm = opts.bpm;
+  var sampleRate = opts.sampleRate || 44100;
+  var iterations = opts.iterations || 1;
+  var startOffset = opts.startOffset || 0;
+  var tail = opts.tail || 0;
+
+  // Per-slot timing, all through the shared helper.
+  var slots = [];
+  var loopDur = 0;
+  for (var p = 0; p < pats.length; p++) {
+    var entry = pats[p];
+    var pat = entry.pat || entry;
+    var bankIdx = (entry.bankIdx != null) ? entry.bankIdx : p;
+    var st = TR.slotTiming(pat, bpm);
+    slots.push({ pat: pat, bankIdx: bankIdx, offset: loopDur, timing: st.tracks });
+    loopDur += st.slotDur;
+  }
+
+  var totalDur = startOffset + iterations * loopDur + tail;
+  var offCtx = new OfflineAudioContext(2, Math.ceil(sampleRate * totalDur), sampleRate);
+
+  // Master bus: same gain + limiter shape as the realtime init above.
+  var master = offCtx.createGain();
+  master.gain.value = 1;
+  var limiter = offCtx.createDynamicsCompressor();
+  limiter.threshold.value = 0;
+  limiter.knee.value = 0;
+  limiter.ratio.value = 6;
+  limiter.attack.value = 0.001;
+  limiter.release.value = 0.02;
+  master.connect(limiter);
+  limiter.connect(offCtx.destination);
+
+  var nLen = sampleRate * 2;
+  var noise = offCtx.createBuffer(1, nLen, sampleRate);
+  var nData = noise.getChannelData(0);
+  for (var i = 0; i < nLen; i++) nData[i] = Math.random() * 2 - 1;
+
+  var play = { kick: TR.audio.playKick, snare: TR.audio.playSnare, hihat: TR.audio.playHihat };
+  for (var iter = 0; iter < iterations; iter++) {
+    var iterOff = startOffset + iter * loopDur;
+    for (var s = 0; s < slots.length; s++) {
+      var sl = slots[s];
+      var base = iterOff + sl.offset;
+      for (var ti = 0; ti < TR.INSTRUMENTS.length; ti++) {
+        var key = TR.INSTRUMENTS[ti];
+        var t = sl.timing[key];
+        var flat = sl.pat[key];
+        if (!t || !flat) continue;
+        for (var st2 = 0; st2 < flat.length; st2++) {
+          if (flat[st2]) play[key](base + st2 * t.secPerStep, offCtx, master, noise);
+        }
+      }
+      TR.audio.playAccent(opts.accentMode, base, sl.bankIdx, offCtx, master, noise);
+    }
+  }
+
+  if (opts.onStart) opts.onStart(totalDur);
+  var rendered = await offCtx.startRendering();
+  return { buffer: rendered, loopDuration: loopDur };
 };
 
 /* ─── Audition voices live in js/audition.js (self-contained module) ─── */

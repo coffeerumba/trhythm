@@ -150,6 +150,7 @@ TR.flattenTree = function(node) {
 
 // Defined in genRhythm.js (loaded before this file) — single source of truth.
 TR.computeLevels = computeLevels;
+TR.rhythmDistribution = rhythmDistribution;
 
 TR.countLeaves = function(node) {
   if (!Array.isArray(node)) return node;
@@ -175,6 +176,63 @@ TR.computeBeats = function(def) {
     if (levels[i] >= def.beatLevel) beats++;
   }
   return beats;
+};
+
+/* ═══ Per-track timing (single source of truth) ═══
+   Every consumer of "how long is one step of this track at this BPM" —
+   realtime playback, WAV render, video render, MIDI export, and both
+   viz schedule builders — derives it from here, so their loop/slot
+   durations agree by construction. */
+TR.trackTiming = function(pat, key, bpm) {
+  var def = pat[key + 'Def'];
+  var leaves = TR.computeLevels(def.tree).length;
+  var beats = pat[key + 'Beats'] || TR.computeBeats(def);
+  var t = { def: def, leaves: leaves, beats: beats };
+  if (bpm) {
+    t.secPerStep = 60.0 * beats / bpm / leaves;
+    t.cycle = t.secPerStep * leaves;
+  }
+  return t;
+};
+
+/* All tracks of one pattern slot + the slot duration (longest cycle).
+   Tracks whose def is missing are skipped. */
+TR.slotTiming = function(pat, bpm) {
+  var tracks = {};
+  var slotDur = 0;
+  for (var i = 0; i < TR.INSTRUMENTS.length; i++) {
+    var key = TR.INSTRUMENTS[i];
+    if (!pat[key + 'Def']) continue;
+    var t = TR.trackTiming(pat, key, bpm);
+    tracks[key] = t;
+    if (t.cycle > slotDur) slotDur = t.cycle;
+  }
+  return { tracks: tracks, slotDur: slotDur };
+};
+
+/* ═══ Accent stage (single source of truth) ═══
+   2-adic valuation of a pattern-bank index → accent stage. Index 0 is
+   treated as PATTERN_COUNT so the bank start gets the strongest cue.
+   Shared by the cymbal voice, the audition random mode, and the MIDI
+   crash-velocity mapping. */
+TR.cymbalStage = function(bankIdx, maxStage) {
+  var n = (bankIdx === 0) ? TR.PATTERN_COUNT : bankIdx;
+  var v2 = 0;
+  while (n > 0 && n % 2 === 0) { n /= 2; v2++; }
+  return Math.min(v2, maxStage);
+};
+
+/* ═══ Cancellation (shared by all export pipelines) ═══
+   Each pipeline keeps its own token ({ aborted: false }); these
+   standardize the "cancelled" signal so every catch can test
+   err.cancelled the same way. */
+TR.cancelError = function() {
+  var e = new Error('cancelled');
+  e.cancelled = true;
+  return e;
+};
+TR.checkCancel = function(token) {
+  if (token && token.aborted) throw TR.cancelError();
 };
 
 /* ═══ Download helpers (shared by all exporters) ═══ */

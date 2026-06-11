@@ -566,24 +566,18 @@ function buildSchedule(pats, bpm, accentMode, w, h) {
     var pat = entry.pat || entry;  // accept either { pat, bankIdx } or pat directly
     if (!pat) continue;
 
-    // Per-track step durations + leaves count (matches existing renderOffline).
+    // Per-track timing through the shared helper (same numbers as the
+    // audio renderer), plus this mode's per-track geometry.
+    var st = TR.slotTiming(pat, bpm);
     var trackInfo = {};
-    var maxCycle = 0;
-    for (var ti = 0; ti < TR.INSTRUMENTS.length; ti++) {
-      var key = TR.INSTRUMENTS[ti];
-      var def = pat[key + 'Def'];
-      if (!def) continue;
-      var trackBeats  = pat[key + 'Beats'] || TR.computeBeats(def);
-      var trackLeaves = TR.computeLevels(def.tree).length;
-      var secPerStep  = 60.0 * trackBeats / bpm / trackLeaves;
-      var cycle       = secPerStep * trackLeaves;
+    for (var key in st.tracks) {
+      var t = st.tracks[key];
       trackInfo[key] = {
-        secPerStep: secPerStep, leaves: trackLeaves, cycle: cycle, def: def,
-        leavesGeom: buildLeavesFor(key, def, w, h)
+        secPerStep: t.secPerStep, cycle: t.cycle,
+        leavesGeom: buildLeavesFor(key, t.def, w, h)
       };
-      if (cycle > maxCycle) maxCycle = cycle;
     }
-    var slotDur = maxCycle;
+    var slotDur = st.slotDur;
     var crashLeavesGeom = buildLeavesFor('crash', pat.defaultDef, w, h);
 
     // One firing per hit step per regular track.

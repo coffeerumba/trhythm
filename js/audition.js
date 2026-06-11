@@ -692,13 +692,8 @@ if (genBtn) genBtn.addEventListener('click', shuffleRandomSlots);
 var origPlayAccent = TR.audio.playAccent;
 TR.audio.playAccent = function(mode, time, patternIdx, _ctx, _master, _noiseBuf) {
   if (mode === 'random') {
-    // 2-adic valuation of pattern index (pattern 0 → PATTERN_COUNT so it gets
-    // the highest stage). Matches the シンバル mode's stage selection rule.
-    var n = patternIdx === 0 ? TR.PATTERN_COUNT : patternIdx;
-    var v2 = 0;
-    while (n > 0 && n % 2 === 0) { n /= 2; v2++; }
-    var stage = Math.min(v2, randomSlots.length - 1);
-    var voice = randomSlots[stage];
+    // Same staged selection rule as the シンバル mode (TR.cymbalStage).
+    var voice = randomSlots[TR.cymbalStage(patternIdx, randomSlots.length - 1)];
     if (!voice) return;
     var ctx = _ctx || Tone.getContext().rawContext;
     var master = _master || TR.state.masterGain;
